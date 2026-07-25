@@ -1,36 +1,58 @@
-# Noctweb Lab
+# Noctweb Lab for macOS
 
-Noctweb Lab is the first runnable development surface for Noctweave Net sites.
-It is intentionally local-first and uses an incompatible `lab-v0` object
-profile with deterministic mock consensus.
+Noctweb Lab is the native macOS development environment for building, signing,
+publishing, resolving, and testing Noctweb sites. It is a SwiftUI application,
+not a website, progressive web app, browser wrapper, Electron bundle, or
+WebView shell.
 
-The current slice can:
+The Lab currently implements the explicitly incompatible `lab-v0` profile. It
+is a local protocol simulator and product-development surface; it does not
+claim production consensus or wire-format compatibility.
 
-- manage a persistent local workspace with publisher, browser, network, and
-  inspector surfaces;
-- author, preview, validate, and publish a bounded static site;
-- create and retain a publication-scoped publisher identity in a local
-  IndexedDB-backed key vault;
-- sign every lab head and verify its publisher identity before rendering;
-- store exact canonical bytes on two simulated hosts;
-- finalize a mock publisher head;
-- resolve directly or through one simulated passthrough hop;
-- verify SHA-256 object IDs before rendering;
-- fall back across host locators;
-- run healthy, failover, passthrough, and outage scenarios;
-- expose the standard, passthrough, and host relay boundaries without
-  pretending every role participates in public retrieval;
-- preserve draft and revision history in device-local storage;
-- export a local diagnostic report;
-- install as a standalone progressive web app;
-- render HTML and CSS inside a scriptless, originless iframe sandbox.
+## What is native
 
-Its Ed25519 publisher key and signed head are real lab checks, but their suite
-and encoding are not stable protocol commitments. It is not a production
-browser, consensus implementation, audited key manager, or stable wire format.
+- The entire product interface is built with SwiftUI.
+- Site previews are rendered from validated structured site fields using
+  native SwiftUI views. HTML, JavaScript, and Markdown are never executed.
+- Each publication receives its own Ed25519 publisher key. Private key
+  material is stored in the macOS Keychain and marked non-synchronizable.
+- Workspace drafts, topology, revisions, and test runs are stored locally in
+  Application Support.
+- Standard, passthrough, and host relay roles are represented independently.
+- Integrity, publisher authority, and mock-consensus finality are reported as
+  separate trust evidence.
+
+There is no OpenAI hosting configuration or hosted Lab endpoint in this
+package.
+
+## Run from source
 
 ```sh
-npm install
-npm run dev
-npm test
+swift run --package-path apps/noctweb-lab NoctwebLab
 ```
+
+## Build and test
+
+```sh
+swift build --package-path apps/noctweb-lab
+swift test --package-path apps/noctweb-lab
+```
+
+## Package the application
+
+```sh
+apps/noctweb-lab/scripts/package-app.sh
+open "apps/noctweb-lab/dist/Noctweb Lab.app"
+```
+
+The packaging script creates and verifies an ad-hoc signed application bundle.
+Set `NOCTWEB_CODESIGN_IDENTITY` to a Developer ID certificate name when a
+distribution-signed build is required.
+
+## Security boundary
+
+A publisher identity belongs to one publication, never to an application
+account or person. If the recorded private key for an existing publication is
+missing, publishing fails closed; the Lab does not silently replace that
+identity. Relays receive public signed commitments and content bytes only.
+They never receive the private publisher key.

@@ -1,4 +1,4 @@
-# ADR 0003: Use a dedicated Noctweb runtime and shared Lab
+# ADR 0003: Use dedicated native Noctweb applications
 
 - Status: Accepted
 - Date: 2026-07-25
@@ -18,11 +18,13 @@ consensus profiles exist.
 
 The user-facing product is **Noctweb**.
 
-- **Noctweb Browser** is the authoritative runtime and browser experience. Its
-  first desktop implementation may wrap a system WebView; it is not a browser
-  engine fork.
-- **Noctweb Lab** is the shared publisher, browser, inspector, deterministic
-  testnet, and fault-injection surface.
+- **Noctweb Browser** is the future authoritative runtime and browsing
+  experience. It is a dedicated native application, not a hosted website or a
+  browser extension.
+- **Noctweb Lab** is the native macOS publisher, structured-content runtime,
+  inspector, deterministic testnet, and fault-injection product. Its interface
+  and preview renderer use SwiftUI. It is not a web application, PWA, Electron
+  shell, hosted service, or WebView wrapper.
 - A conventional browser extension may later recognize links, preview bounded
   public content, and hand navigation to Noctweb Browser. It never becomes the
   publisher-key, capability, consensus, or execution authority.
@@ -35,6 +37,10 @@ publication still requires its own local publisher identity and signed head;
 the lab signature suite and head encoding remain temporary. Stable protocol
 formats replace `lab-v0` rather than inherit compatibility from it.
 
+The Lab persists private publisher keys only in the macOS Keychain and renders
+the exact verified structured snapshot directly with native controls. It does
+not parse or execute HTML, JavaScript, or Markdown.
+
 ## Consequences
 
 - Runtime and test tooling share the same verification path.
@@ -44,3 +50,5 @@ formats replace `lab-v0` rather than inherit compatibility from it.
 - Active content remains disabled until origin isolation, permissions,
   capability APIs, resource limits, and lifecycle rules are specified and
   tested.
+- The Lab is distributed as a signed `.app` bundle and has no public deployment
+  URL.

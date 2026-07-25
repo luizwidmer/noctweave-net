@@ -7,7 +7,7 @@ verification, permissions, decryption, and rendering.
 
 This repository is an architecture seed, not a compatible protocol release.
 The first milestone is to freeze a small, testable boundary before choosing a
-consensus implementation or shipping a browser runtime.
+consensus implementation or shipping the production Noctweb runtime.
 
 ## Core model
 
@@ -83,7 +83,7 @@ docs/
   noctweave-integration.md Exact relay roles, modules, and deployment boundary
   adr/                     Architecture decisions
 apps/
-  noctweb-lab/             Runnable lab-v0 browser and deterministic testnet
+  noctweb-lab/             Native macOS publisher, runtime, inspector, and testnet
 spec/
   README.md                Candidate protocol surfaces and versioning rules
 ROADMAP.md                 Implementation sequence and acceptance gates
@@ -103,6 +103,8 @@ SECURITY.md                Threat model summary and reporting policy
    compatibility bridges rather than identity or capability authorities.
 8. Every publication has a publication-scoped cryptographic publisher identity;
    it is never inferred from a host, relay, account, or private relationship.
+9. Noctweb Lab is a native macOS application. It has no hosted web application,
+   OpenAI Sites dependency, PWA shell, Electron runtime, or WebView renderer.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -118,8 +120,10 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
 ## Status
 
-The Noctweave relay integration is provisional and implemented. Noctweb Lab
-provides a runnable, explicitly incompatible `lab-v0` static-site test
-environment. The stable object graph, consensus profile, production runtime,
-and cross-language conformance suite remain pre-protocol. No security audit or
-production readiness is claimed.
+The Noctweave relay integration is provisional and implemented. Noctweb Lab is
+a runnable native macOS application for the explicitly incompatible `lab-v0`
+static-site profile. It publishes with publication-scoped Keychain identities,
+simulates all three relay roles, resolves through direct or passthrough paths,
+and renders verified structured content with SwiftUI. The stable object graph,
+consensus profile, production runtime, and cross-language conformance suite
+remain pre-protocol. No security audit or production readiness is claimed.

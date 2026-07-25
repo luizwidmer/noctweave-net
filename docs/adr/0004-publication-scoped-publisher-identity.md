@@ -36,10 +36,18 @@ The publisher private key remains client-side. Host, passthrough, and standard
 relays never receive it. Consensus sees only the bounded public commitment
 defined by its profile.
 
-Noctweb Lab implements this invariant with a locally generated Ed25519 key held
-in an IndexedDB-backed non-extractable `CryptoKey` vault and a signed `lab-v0`
-head. Ed25519 and the lab head encoding are temporary test mechanisms, not a
-stable suite or wire-format promise.
+Noctweb Lab implements this invariant with one locally generated Ed25519 key
+per publication. Its raw private representation is protected at rest by a
+non-synchronizable macOS Data Protection Keychain item scoped to the signed
+application. The key is not Secure Enclave-backed and is not described as
+non-extractable. A missing or malformed key for an established publication
+blocks publishing instead of silently minting a replacement.
+
+The publisher identifier is the full SHA-256 digest of a domain-separated
+public-key commitment. The signed `lab-v0` head uses a strict versioned binary
+transcript rather than relying on ordinary JSON serialization. Ed25519 and the
+lab head encoding are temporary test mechanisms, not a stable suite or
+wire-format promise.
 
 ## Consequences
 
