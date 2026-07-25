@@ -4,28 +4,41 @@ struct InspectorView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(
-                "Inspector",
-                subtitle: "Review publication state and each independent trust claim."
-            ) {
-                if let site = model.selectedSite {
-                    StatusPill(
-                        title: site.objectID == nil ? "No finalized object" : "Object available",
-                        systemImage: site.objectID == nil ? "circle.dashed" : "checkmark.shield",
-                        color: site.objectID == nil ? .secondary : .green
-                    )
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                PageHeader(
+                    "Inspector",
+                    subtitle: "Review publication state and each independent trust claim."
+                ) {
+                    if let site = model.selectedSite {
+                        StatusPill(
+                            title: site.objectID == nil ? "No finalized object" : "Object available",
+                            systemImage: site.objectID == nil ? "circle.dashed" : "checkmark.shield",
+                            color: site.objectID == nil ? .secondary : .green
+                        )
+                    }
                 }
-            }
-            .padding(24)
+                .padding(24)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
+                Divider()
 
-            HSplitView {
-                evidenceList
-                    .frame(minWidth: 280, idealWidth: 330, maxWidth: 390)
-                inspectorDetail
-                    .frame(minWidth: 650)
+                if proxy.size.width >= 900 {
+                    HSplitView {
+                        evidenceList
+                            .frame(minWidth: 270, idealWidth: 320, maxWidth: 390)
+                        inspectorDetail
+                            .frame(minWidth: 460)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        evidenceList
+                            .frame(height: 190)
+                        Divider()
+                        inspectorDetail
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
         }
     }
@@ -98,27 +111,26 @@ struct InspectorView: View {
 
     private func publicationObject(_ site: SiteProject) -> some View {
         SectionCard("Finalized object", systemImage: "cube") {
-            Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 12) {
-                GridRow {
-                    fieldLabel("Address")
-                    selectableValue(site.address)
-                }
-                GridRow {
-                    fieldLabel("Object identifier")
-                    selectableValue(site.objectID ?? "Not finalized")
-                }
-                GridRow {
-                    fieldLabel("Revision")
-                    selectableValue(site.revision == 0 ? "Unpublished" : "\(site.revision)")
-                }
-                GridRow {
-                    fieldLabel("Profile")
-                    selectableValue("Native static capsule")
-                }
-                GridRow {
-                    fieldLabel("Rendered by")
-                    selectableValue("SwiftUI")
-                }
+            LazyVGrid(
+                columns: [
+                    GridItem(.adaptive(minimum: 210), spacing: 18)
+                ],
+                alignment: .leading,
+                spacing: 16
+            ) {
+                inspectorField("Address", value: site.address)
+                inspectorField(
+                    "Object identifier",
+                    value: site.objectID ?? "Not finalized"
+                )
+                inspectorField(
+                    "Revision",
+                    value: site.revision == 0
+                        ? "Unpublished"
+                        : "\(site.revision)"
+                )
+                inspectorField("Profile", value: "Native static capsule")
+                inspectorField("Rendered by", value: "SwiftUI")
             }
         }
     }
@@ -140,18 +152,19 @@ struct InspectorView: View {
         }
     }
 
-    private func fieldLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .frame(width: 130, alignment: .leading)
-    }
-
-    private func selectableValue(_ value: String) -> some View {
-        Text(value)
-            .font(.system(.callout, design: .monospaced))
-            .textSelection(.enabled)
-            .lineLimit(2)
-            .truncationMode(.middle)
+    private func inspectorField(
+        _ title: String,
+        value: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }

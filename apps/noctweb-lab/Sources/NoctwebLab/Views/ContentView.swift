@@ -24,7 +24,7 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Noctweb Lab")
-            .navigationSplitViewColumnWidth(min: 210, ideal: 235, max: 280)
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 250)
             .safeAreaInset(edge: .bottom) {
                 Button {
                     model.selection = .settings
@@ -57,30 +57,37 @@ struct ContentView: View {
             }
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Picker("Workspace", selection: workspaceSelection) {
+                    Menu {
                         ForEach(model.workspaces) { workspace in
-                            Text(workspace.name)
-                                .tag(Optional(workspace.id))
+                            Button {
+                                model.selectWorkspace(workspace.id)
+                            } label: {
+                                if model.activeWorkspaceID == workspace.id {
+                                    Label(workspace.name, systemImage: "checkmark")
+                                } else {
+                                    Text(workspace.name)
+                                }
+                            }
                         }
+                    } label: {
+                        Label(
+                            model.activeWorkspace?.name ?? "Workspace",
+                            systemImage: "square.stack.3d.up"
+                        )
                     }
-                    .frame(width: 190)
+                    .help("Switch workspace")
 
                     Button {
                         model.createWorkspace()
                     } label: {
-                        Label("New Workspace", systemImage: "plus")
+                        Image(systemName: "plus")
                     }
+                    .accessibilityLabel("New Workspace")
                     .help("Create a local workspace")
                 }
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .tint(Color(hex: "#4F8F77"))
-    }
-
-    private var workspaceSelection: Binding<UUID?> {
-        Binding(
-            get: { model.activeWorkspaceID },
-            set: { model.selectWorkspace($0) }
-        )
     }
 }

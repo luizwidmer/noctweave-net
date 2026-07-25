@@ -21,20 +21,25 @@ struct OverviewView: View {
 
                 metrics
 
-                HStack(alignment: .top, spacing: 18) {
+                LazyVGrid(columns: summaryColumns, alignment: .leading, spacing: 18) {
                     publicationSummary
                     networkSummary
-                }
-
-                HStack(alignment: .top, spacing: 18) {
                     trustSummary
                     recentRuns
                 }
             }
-            .padding(28)
+            .padding(24)
             .frame(maxWidth: 1_280, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var metricColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 190, maximum: 300), spacing: 14, alignment: .top)]
+    }
+
+    private var summaryColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 360), spacing: 18, alignment: .top)]
     }
 
     private var metrics: some View {
@@ -43,37 +48,35 @@ struct OverviewView: View {
         let published = workspace?.sites.filter { $0.lastPublishedAt != nil }.count ?? 0
         let passingRuns = workspace?.runs.filter { $0.result == .passed }.count ?? 0
 
-        return Grid(horizontalSpacing: 14, verticalSpacing: 14) {
-            GridRow {
-                MetricCard(
-                    title: "Sites",
-                    value: "\(workspace?.sites.count ?? 0)",
-                    detail: "\(published) published",
-                    systemImage: "rectangle.stack",
-                    tint: .accentColor
-                )
-                MetricCard(
-                    title: "Network",
-                    value: "\(online)/\(workspace?.relays.count ?? 0)",
-                    detail: "Relays online",
-                    systemImage: "point.3.connected.trianglepath.dotted",
-                    tint: online == workspace?.relays.count ? .green : .orange
-                )
-                MetricCard(
-                    title: "Test runs",
-                    value: "\(passingRuns)",
-                    detail: "Passing deterministic scenarios",
-                    systemImage: "checkmark.circle",
-                    tint: .blue
-                )
-                MetricCard(
-                    title: "Profile",
-                    value: "Native",
-                    detail: "SwiftUI static site runtime",
-                    systemImage: "swift",
-                    tint: .orange
-                )
-            }
+        return LazyVGrid(columns: metricColumns, alignment: .leading, spacing: 14) {
+            MetricCard(
+                title: "Sites",
+                value: "\(workspace?.sites.count ?? 0)",
+                detail: "\(published) published",
+                systemImage: "rectangle.stack",
+                tint: .accentColor
+            )
+            MetricCard(
+                title: "Network",
+                value: "\(online)/\(workspace?.relays.count ?? 0)",
+                detail: "Relays online",
+                systemImage: "point.3.connected.trianglepath.dotted",
+                tint: online == workspace?.relays.count ? .green : .orange
+            )
+            MetricCard(
+                title: "Test runs",
+                value: "\(passingRuns)",
+                detail: "Passing deterministic scenarios",
+                systemImage: "checkmark.circle",
+                tint: .blue
+            )
+            MetricCard(
+                title: "Profile",
+                value: "Native",
+                detail: "SwiftUI static site runtime",
+                systemImage: "swift",
+                tint: .orange
+            )
         }
     }
 
@@ -87,7 +90,10 @@ struct OverviewView: View {
                         Text(site.address)
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
+                    .layoutPriority(1)
                     Spacer()
                     StatusPill(
                         title: site.lastPublishedAt == nil ? "Draft" : "Revision \(site.revision)",
@@ -136,7 +142,7 @@ struct OverviewView: View {
             }
             .buttonStyle(.link)
         }
-        .frame(width: 330)
+        .frame(maxWidth: .infinity)
     }
 
     private var trustSummary: some View {
@@ -185,6 +191,6 @@ struct OverviewView: View {
             }
             .buttonStyle(.link)
         }
-        .frame(width: 390)
+        .frame(maxWidth: .infinity)
     }
 }

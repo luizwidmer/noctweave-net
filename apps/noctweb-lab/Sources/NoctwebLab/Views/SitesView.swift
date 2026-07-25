@@ -1,24 +1,53 @@
 import SwiftUI
 
+private enum SiteWorkspacePane: String, CaseIterable, Identifiable {
+    case editor
+    case preview
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .editor: "Editor"
+        case .preview: "Preview"
+        }
+    }
+}
+
 struct SitesView: View {
     @EnvironmentObject private var model: AppModel
+    @State private var compactPane: SiteWorkspacePane = .editor
 
     var body: some View {
-        HSplitView {
-            siteList
-                .frame(minWidth: 220, idealWidth: 250, maxWidth: 300)
-
-            if let site = model.selectedSite {
-                siteWorkspace(site)
-                    .frame(minWidth: 720)
+        GeometryReader { proxy in
+            if proxy.size.width >= siteLibraryBreakpoint {
+                HStack(spacing: 0) {
+                    siteList
+                        .frame(width: 240)
+                    Divider()
+                    selectedWorkspace(width: proxy.size.width - 241)
+                }
             } else {
-                ContentUnavailableView(
-                    "No Site Selected",
-                    systemImage: "rectangle.stack.badge.plus",
-                    description: Text("Create a site in this workspace to begin.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    compactSiteSelector
+                    Divider()
+                    selectedWorkspace(width: proxy.size.width)
+                }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func selectedWorkspace(width: CGFloat) -> some View {
+        if let site = model.selectedSite {
+            siteWorkspace(site, width: width)
+        } else {
+            ContentUnavailableView(
+                "No Site Selected",
+                systemImage: "rectangle.stack.badge.plus",
+                description: Text("Create a site in this workspace to begin.")
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -63,28 +92,39 @@ struct SitesView: View {
         .background(.regularMaterial)
     }
 
-    private func siteWorkspace(_ site: SiteProject) -> some View {
+    private var compactSiteSelector: some View {
+        HStack(spacing: 12) {
+            Picker("Site", selection: siteSelection) {
+                if model.selectedSiteID == nil {
+                    Text("Select a site")
+                        .tag(UUID?.none)
+                }
+                ForEach(model.activeWorkspace?.sites ?? []) { site in
+                    Text(site.title)
+                        .tag(Optional(site.id))
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: 360, alignment: .leading)
+
+            Spacer(minLength: 8)
+
+            Button {
+                model.createSite()
+            } label: {
+                Label("New Site", systemImage: "plus")
+            }
+            .help("Create a site")
+        }
+        .padding(.horizontal, 16)
+        .frame(minHeight: 52)
+        .background(.regularMaterial)
+    }
+
+    private func siteWorkspace(_ site: SiteProject, width: CGFloat) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
-                PageHeader(
-                    site.title,
-                    subtitle: "Edit the publication, review its native preview, then publish a verified revision."
-                ) {
-                    if model.publicationOutcome == .running {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Button {
-                        model.publishSelectedSite()
-                    } label: {
-                        Label(
-                            model.publicationOutcome == .running ? "Publishing…" : "Publish Revision",
-                            systemImage: "paperplane.fill"
-                        )
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.publicationOutcome == .running)
-                }
+                publicationHeader(site, compact: width < headerBreakpoint)
 
                 PublicationPipeline(
                     activeStage: model.publicationStage,
@@ -98,18 +138,99 @@ struct SitesView: View {
                     Text(model.publicationMessage)
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(24)
+            .padding(width < headerBreakpoint ? 16 : 24)
 
             Divider()
 
-            HSplitView {
-                editor(site)
-                    .frame(minWidth: 330, idealWidth: 410)
-                preview(site)
-                    .frame(minWidth: 420)
+            if width >= editorPreviewBreakpoint {
+                HStack(spacing: 0) {
+                    editor(site)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Divider()
+                    preview(site)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                compactWorkspace(site)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 14) {
+                headerCopy(site, compact: true)
+                publishControls
+            }
+        } else {
+            HStack(alignment: .top, spacing: 20) {
+                headerCopy(site, compact: false)
+                Spacer(minLength: 20)
+                publishControls
+            }
+        }
+    }
+
+    private func headerCopy(_ site: SiteProject, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(site.title)
+                .font(compact ? .title.weight(.semibold) : .largeTitle.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Edit the publication, review its native preview, then publish a verified revision.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var publishControls: some View {
+        HStack(spacing: 10) {
+            if model.publicationOutcome == .running {
+                ProgressView()
+                    .controlSize(.small)
+            }
+            Button {
+                model.publishSelectedSite()
+            } label: {
+                Label(
+                    model.publicationOutcome == .running ? "Publishing…" : "Publish Revision",
+                    systemImage: "paperplane.fill"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(model.publicationOutcome == .running)
+        }
+    }
+
+    private func compactWorkspace(_ site: SiteProject) -> some View {
+        VStack(spacing: 0) {
+            Picker("Workspace pane", selection: $compactPane) {
+                ForEach(SiteWorkspacePane.allCases) { pane in
+                    Text(pane.title)
+                        .tag(pane)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 320)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            Group {
+                switch compactPane {
+                case .editor:
+                    editor(site)
+                case .preview:
+                    preview(site)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -238,4 +359,8 @@ struct SitesView: View {
         "#AD7748",
         "#A65D69"
     ]
+
+    private let siteLibraryBreakpoint: CGFloat = 1_080
+    private let editorPreviewBreakpoint: CGFloat = 840
+    private let headerBreakpoint: CGFloat = 760
 }

@@ -16,16 +16,29 @@ struct PageHeader<Actions: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.largeTitle.weight(.semibold))
-                Text(subtitle)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                heading
+                Spacer(minLength: 20)
+                actions
             }
-            Spacer(minLength: 24)
-            actions
+
+            VStack(alignment: .leading, spacing: 14) {
+                heading
+                actions
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.largeTitle.weight(.semibold))
+            Text(subtitle)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -135,6 +148,14 @@ struct PublicationPipeline: View {
     let outcome: PublicationOutcome
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            stageRow
+                .fixedSize(horizontal: true, vertical: false)
+            compactProgress
+        }
+    }
+
+    private var stageRow: some View {
         HStack(spacing: 0) {
             ForEach(PublicationStage.allCases) { stage in
                 HStack(spacing: 0) {
@@ -157,12 +178,32 @@ struct PublicationPipeline: View {
                     if stage != PublicationStage.allCases.last {
                         Rectangle()
                             .fill(stage.rawValue < activeStage.rawValue ? Color.accentColor : Color.secondary.opacity(0.25))
-                            .frame(height: 1)
+                            .frame(width: 34, height: 1)
                             .padding(.bottom, 21)
-                    }
                 }
             }
         }
+    }
+    }
+
+    private var compactProgress: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label(activeStage.title, systemImage: activeStage.systemImage)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(outcome == .failed ? .red : Color.accentColor)
+                Spacer(minLength: 8)
+                Text("\(activeStage.rawValue + 1) of \(PublicationStage.allCases.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(
+                value: Double(activeStage.rawValue + 1),
+                total: Double(PublicationStage.allCases.count)
+            )
+            .tint(outcome == .failed ? .red : Color.accentColor)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func foreground(for stage: PublicationStage) -> Color {
@@ -197,13 +238,16 @@ struct EvidenceRow: View {
                 .background(evidence.state.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 7))
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack {
-                    Text(evidence.kind.title)
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(evidence.state.title)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(evidence.state.color)
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        evidenceHeading
+                        Spacer()
+                        evidenceState
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        evidenceHeading
+                        evidenceState
+                    }
                 }
                 Text(evidence.summary)
                     .font(.caption)
@@ -217,26 +261,40 @@ struct EvidenceRow: View {
             }
         }
     }
+
+    private var evidenceHeading: some View {
+        Text(evidence.kind.title)
+            .font(.subheadline.weight(.semibold))
+    }
+
+    private var evidenceState: some View {
+        Text(evidence.state.title)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(evidence.state.color)
+    }
 }
 
 struct RelayPathView: View {
     let relays: [LabRelayNode]
 
     var body: some View {
-        HStack(spacing: 8) {
-            Label("Runtime", systemImage: "laptopcomputer")
-                .font(.caption.weight(.medium))
-            ForEach(Array(relays.enumerated()), id: \.element.id) { _, relay in
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                Label(relay.role.shortTitle, systemImage: relay.role.systemImage)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Label("Runtime", systemImage: "laptopcomputer")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(relay.role.tint)
+                ForEach(Array(relays.enumerated()), id: \.element.id) { _, relay in
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Label(relay.role.shortTitle, systemImage: relay.role.systemImage)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(relay.role.tint)
+                }
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .background(Color.secondary.opacity(0.09), in: Capsule())
     }
 }
@@ -287,7 +345,7 @@ struct RenderedSiteView: View {
                 .padding(.bottom, 28)
 
                 Text(title)
-                    .font(.system(size: 48, weight: .medium, design: .serif))
+                    .font(.system(size: 42, weight: .medium, design: .serif))
                     .tracking(-1.2)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -306,18 +364,24 @@ struct RenderedSiteView: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack {
-                    Label("Static native profile", systemImage: "swift")
-                    Spacer()
-                    Text("Revision \(revision)")
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        Label("Static native profile", systemImage: "swift")
+                        Spacer()
+                        Text("Revision \(revision)")
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Label("Static native profile", systemImage: "swift")
+                        Text("Revision \(revision)")
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .padding(.top, 42)
             }
             .frame(maxWidth: 720, alignment: .leading)
-            .padding(.horizontal, 52)
-            .padding(.vertical, 56)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 40)
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(

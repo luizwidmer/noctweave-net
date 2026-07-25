@@ -21,48 +21,64 @@ struct NetworkView: View {
                 topology
                 relayOperations
             }
-            .padding(28)
+            .padding(24)
             .frame(maxWidth: 1_220, alignment: .leading)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private var roleColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 220, maximum: 360), spacing: 14, alignment: .top)]
+    }
+
+    private var topologyColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 140, maximum: 210), spacing: 12, alignment: .top)]
+    }
+
+    private var relayCardColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 300), spacing: 12, alignment: .top)]
+    }
+
     private var roleSummary: some View {
-        Grid(horizontalSpacing: 14) {
-            GridRow {
-                ForEach(LabRelayRole.allCases) { role in
-                    let nodes = relays(for: role)
-                    MetricCard(
-                        title: role.title,
-                        value: "\(nodes.filter(\.isOnline).count)/\(nodes.count)",
-                        detail: roleDescription(role),
-                        systemImage: role.systemImage,
-                        tint: role.tint
-                    )
-                }
+        LazyVGrid(columns: roleColumns, alignment: .leading, spacing: 14) {
+            ForEach(LabRelayRole.allCases) { role in
+                let nodes = relays(for: role)
+                MetricCard(
+                    title: role.title,
+                    value: "\(nodes.filter(\.isOnline).count)/\(nodes.count)",
+                    detail: roleDescription(role),
+                    systemImage: role.systemImage,
+                    tint: role.tint
+                )
             }
         }
     }
 
     private var topology: some View {
         SectionCard("Active retrieval topology", systemImage: "point.3.connected.trianglepath.dotted") {
-            HStack(spacing: 12) {
-                topologyEndpoint("Runtime", systemImage: "laptopcomputer", color: .accentColor)
-
-                topologyConnector("coordinates")
-                topologyRole(.standard)
-
-                topologyConnector("may forward")
-                topologyRole(.passthrough)
-
-                topologyConnector("retrieves")
-                topologyRole(.host)
-
-                topologyConnector("renders")
-                topologyEndpoint("Native view", systemImage: "swift", color: .orange)
+            LazyVGrid(columns: topologyColumns, alignment: .leading, spacing: 12) {
+                topologyStep(
+                    order: 1,
+                    title: "Runtime",
+                    relationship: "Coordinates",
+                    systemImage: "laptopcomputer",
+                    color: .accentColor,
+                    state: "Local",
+                    stateColor: .secondary
+                )
+                topologyRoleStep(order: 2, role: .standard, relationship: "May forward")
+                topologyRoleStep(order: 3, role: .passthrough, relationship: "Retrieves")
+                topologyRoleStep(order: 4, role: .host, relationship: "Renders")
+                topologyStep(
+                    order: 5,
+                    title: "Native view",
+                    relationship: "Verified output",
+                    systemImage: "swift",
+                    color: .orange,
+                    state: "Local",
+                    stateColor: .secondary
+                )
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
 
             Divider()
 
@@ -74,51 +90,94 @@ struct NetworkView: View {
 
     private var relayOperations: some View {
         SectionCard("Relay operations", systemImage: "server.rack") {
-            VStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                relayTable
+                    .frame(minWidth: 720)
+                relayCards
+            }
+        }
+    }
+
+    private var relayTable: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Relay")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Role")
+                    .frame(width: 140, alignment: .leading)
+                Text("Endpoint")
+                    .frame(width: 220, alignment: .leading)
+                Text("Latency")
+                    .frame(width: 78, alignment: .trailing)
+                Text("Status")
+                    .frame(width: 72, alignment: .trailing)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+
+            Divider()
+
+            ForEach(model.activeWorkspace?.relays ?? []) { relay in
                 HStack {
-                    Text("Relay")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text("Role")
-                        .frame(width: 150, alignment: .leading)
-                    Text("Endpoint")
-                        .frame(width: 240, alignment: .leading)
-                    Text("Latency")
-                        .frame(width: 80, alignment: .trailing)
-                    Text("Status")
-                        .frame(width: 90, alignment: .trailing)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(relay.name)
+                            .font(.subheadline.weight(.medium))
+                        Text(relay.region)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    RelayRoleBadge(role: relay.role)
+                        .frame(width: 140, alignment: .leading)
+
+                    Text(relay.endpoint)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(width: 220, alignment: .leading)
+
+                    Text("\(relay.latencyMilliseconds) ms")
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 78, alignment: .trailing)
+
+                    Toggle(
+                        relay.isOnline ? "Online" : "Offline",
+                        isOn: relayBinding(relay)
+                    )
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .help(relay.isOnline ? "Take \(relay.name) offline" : "Bring \(relay.name) online")
+                    .frame(width: 72, alignment: .trailing)
                 }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
                 .padding(.horizontal, 10)
-                .padding(.bottom, 8)
+                .padding(.vertical, 11)
 
-                Divider()
+                if relay.id != model.activeWorkspace?.relays.last?.id {
+                    Divider()
+                }
+            }
+        }
+    }
 
-                ForEach(model.activeWorkspace?.relays ?? []) { relay in
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
+    private var relayCards: some View {
+        LazyVGrid(columns: relayCardColumns, alignment: .leading, spacing: 12) {
+            ForEach(model.activeWorkspace?.relays ?? []) { relay in
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(relay.name)
-                                .font(.subheadline.weight(.medium))
+                                .font(.subheadline.weight(.semibold))
                             Text(relay.region)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        RelayRoleBadge(role: relay.role)
-                            .frame(width: 150, alignment: .leading)
-
-                        Text(relay.endpoint)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .frame(width: 240, alignment: .leading)
-
-                        Text("\(relay.latencyMilliseconds) ms")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 80, alignment: .trailing)
+                        Spacer(minLength: 8)
 
                         Toggle(
                             relay.isOnline ? "Online" : "Offline",
@@ -127,14 +186,31 @@ struct NetworkView: View {
                         .toggleStyle(.switch)
                         .labelsHidden()
                         .help(relay.isOnline ? "Take \(relay.name) offline" : "Bring \(relay.name) online")
-                        .frame(width: 90, alignment: .trailing)
                     }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 11)
 
-                    if relay.id != model.activeWorkspace?.relays.last?.id {
-                        Divider()
+                    HStack(spacing: 10) {
+                        RelayRoleBadge(role: relay.role)
+                        Spacer(minLength: 8)
+                        Label("\(relay.latencyMilliseconds) ms", systemImage: "speedometer")
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
                     }
+
+                    Text(relay.endpoint)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    Color(nsColor: .controlBackgroundColor).opacity(0.72),
+                    in: RoundedRectangle(cornerRadius: 10)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
                 }
             }
         }
@@ -162,46 +238,64 @@ struct NetworkView: View {
         }
     }
 
-    private func topologyEndpoint(_ title: String, systemImage: String, color: Color) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(color)
-                .frame(width: 46, height: 46)
-                .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-            Text(title)
-                .font(.caption.weight(.medium))
-        }
-    }
-
-    private func topologyRole(_ role: LabRelayRole) -> some View {
+    private func topologyRoleStep(
+        order: Int,
+        role: LabRelayRole,
+        relationship: String
+    ) -> some View {
         let online = relays(for: role).contains(where: \.isOnline)
-        return VStack(spacing: 8) {
-            Image(systemName: role.systemImage)
-                .font(.title2)
-                .foregroundStyle(online ? role.tint : .secondary)
-                .frame(width: 46, height: 46)
-                .background(
-                    (online ? role.tint : Color.secondary).opacity(0.1),
-                    in: RoundedRectangle(cornerRadius: 10)
-                )
-            Text(role.shortTitle)
-                .font(.caption.weight(.medium))
-            Text(online ? "Online" : "Offline")
-                .font(.caption2)
-                .foregroundStyle(online ? .green : .red)
-        }
+        return topologyStep(
+            order: order,
+            title: role.shortTitle,
+            relationship: relationship,
+            systemImage: role.systemImage,
+            color: online ? role.tint : .secondary,
+            state: online ? "Online" : "Offline",
+            stateColor: online ? .green : .red
+        )
     }
 
-    private func topologyConnector(_ title: String) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: "arrow.right")
-                .foregroundStyle(.tertiary)
+    private func topologyStep(
+        order: Int,
+        title: String,
+        relationship: String,
+        systemImage: String,
+        color: Color,
+        state: String,
+        stateColor: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text("\(order)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Color.secondary.opacity(0.1), in: Circle())
+                Spacer()
+                Image(systemName: systemImage)
+                    .font(.headline)
+                    .foregroundStyle(color)
+            }
+
             Text(title)
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .font(.subheadline.weight(.semibold))
+            Text(relationship)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(state)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(stateColor)
         }
-        .frame(maxWidth: .infinity)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 122, alignment: .topLeading)
+        .background(
+            Color(nsColor: .controlBackgroundColor).opacity(0.72),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+        }
     }
 
     private func relayBinding(_ relay: LabRelayNode) -> Binding<Bool> {

@@ -5,29 +5,42 @@ struct TestRunsView: View {
     @State private var selectedRunID: UUID?
 
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader(
-                "Test Runs",
-                subtitle: "Execute deterministic failure scenarios and retain reviewable assertions."
-            ) {
-                Button {
-                    model.runSelectedScenario()
-                    selectedRunID = model.activeWorkspace?.runs.first?.id
-                } label: {
-                    Label("Run Scenario", systemImage: "play.fill")
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                PageHeader(
+                    "Test Runs",
+                    subtitle: "Execute deterministic failure scenarios and retain reviewable assertions."
+                ) {
+                    Button {
+                        model.runSelectedScenario()
+                        selectedRunID = model.activeWorkspace?.runs.first?.id
+                    } label: {
+                        Label("Run Scenario", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.selectedScenario == nil)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.selectedScenario == nil)
-            }
-            .padding(24)
+                .padding(24)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
+                Divider()
 
-            HSplitView {
-                scenarioLibrary
-                    .frame(minWidth: 290, idealWidth: 340, maxWidth: 390)
-                runWorkspace
-                    .frame(minWidth: 650)
+                if proxy.size.width >= 900 {
+                    HSplitView {
+                        scenarioLibrary
+                            .frame(minWidth: 280, idealWidth: 330, maxWidth: 390)
+                        runWorkspace
+                            .frame(minWidth: 460)
+                    }
+                } else {
+                    VStack(spacing: 0) {
+                        scenarioLibrary
+                            .frame(height: 210)
+                        Divider()
+                        runWorkspace
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
             }
         }
     }
@@ -71,17 +84,18 @@ struct TestRunsView: View {
                     }
                 }
 
-                HStack {
-                    Text("Run History")
-                        .font(.title2.weight(.semibold))
-                    Spacer()
-                    if !(model.activeWorkspace?.runs.isEmpty ?? true) {
-                        Button("Clear History", role: .destructive) {
-                            model.clearRunHistory()
-                            selectedRunID = nil
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        runHistoryTitle
+                        Spacer()
+                        clearHistoryButton
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        runHistoryTitle
+                        clearHistoryButton
                         }
                     }
-                }
 
                 if let runs = model.activeWorkspace?.runs, !runs.isEmpty {
                     ForEach(runs) { run in
@@ -110,20 +124,16 @@ struct TestRunsView: View {
                             }
                             .padding(.top, 14)
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: run.result == .passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                    .foregroundStyle(run.result == .passed ? .green : .red)
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(run.scenarioName)
-                                        .font(.headline)
-                                    Text(run.startedAt.formatted(date: .abbreviated, time: .standard))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                            ViewThatFits(in: .horizontal) {
+                                HStack(spacing: 12) {
+                                    runSummary(run)
+                                    Spacer()
+                                    runDuration(run)
                                 }
-                                Spacer()
-                                Text("\(run.durationMilliseconds) ms")
-                                    .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 8) {
+                                    runSummary(run)
+                                    runDuration(run)
+                                }
                             }
                         }
                         .padding(16)
@@ -139,11 +149,46 @@ struct TestRunsView: View {
                         systemImage: "checklist",
                         description: Text("Choose a scenario and run it to create a deterministic evidence trail.")
                     )
-                    .frame(height: 260)
+                    .frame(minHeight: 220)
                 }
             }
-            .padding(24)
+            .padding(20)
             .frame(maxWidth: 900, alignment: .leading)
         }
+    }
+
+    private var runHistoryTitle: some View {
+        Text("Run History")
+            .font(.title2.weight(.semibold))
+    }
+
+    @ViewBuilder
+    private var clearHistoryButton: some View {
+        if !(model.activeWorkspace?.runs.isEmpty ?? true) {
+            Button("Clear History", role: .destructive) {
+                model.clearRunHistory()
+                selectedRunID = nil
+            }
+        }
+    }
+
+    private func runSummary(_ run: ScenarioRun) -> some View {
+        HStack(spacing: 12) {
+                                Image(systemName: run.result == .passed ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(run.result == .passed ? .green : .red)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(run.scenarioName)
+                                        .font(.headline)
+                                    Text(run.startedAt.formatted(date: .abbreviated, time: .standard))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+        }
+    }
+
+    private func runDuration(_ run: ScenarioRun) -> some View {
+        Text("\(run.durationMilliseconds) ms")
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(.secondary)
     }
 }

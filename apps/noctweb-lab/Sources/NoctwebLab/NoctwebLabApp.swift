@@ -8,7 +8,7 @@ struct NoctwebLabApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
-                .frame(minWidth: 1_080, minHeight: 700)
+                .frame(minWidth: 900, minHeight: 650)
         }
         .defaultSize(width: 1_360, height: 860)
         .commands {
