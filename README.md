@@ -82,6 +82,8 @@ docs/
   consensus-boundary.md    What consensus may and may not coordinate
   noctweave-integration.md Exact relay roles, modules, and deployment boundary
   adr/                     Architecture decisions
+apps/
+  noctweb-lab/             Runnable lab-v0 browser and deterministic testnet
 spec/
   README.md                Candidate protocol surfaces and versioning rules
 ROADMAP.md                 Implementation sequence and acceptance gates
@@ -97,6 +99,8 @@ SECURITY.md                Threat model summary and reporting policy
 4. Relay federation modules are outside the Noctweave Net topology.
 5. Coordination is consumed through an abstract consensus boundary.
 6. Clients remain the verification and execution boundary.
+7. Noctweb Browser is the authoritative runtime; browser extensions are
+   compatibility bridges rather than identity or capability authorities.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -112,7 +116,8 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
 ## Status
 
-The Noctweave relay integration is provisional and implemented. The Noctweave
-Net object graph, consensus profile, runtime, and cross-language conformance
-suite remain pre-protocol. No security audit or production readiness is
-claimed.
+The Noctweave relay integration is provisional and implemented. Noctweb Lab
+provides a runnable, explicitly incompatible `lab-v0` static-site test
+environment. The stable object graph, consensus profile, production runtime,
+and cross-language conformance suite remain pre-protocol. No security audit or
+production readiness is claimed.

@@ -18,6 +18,13 @@ Exit gate: architecture review accepts the trust boundaries and non-goals.
 
 Exit gate: deterministic cross-language vectors and bounded-decoder tests pass.
 
+### Noctweb Lab track
+
+Noctweb Lab begins during Phase 1 with an explicitly incompatible `lab-v0`
+profile, mock consensus, two simulated hosts, a passthrough path, and a
+scriptless renderer. It is the continuous test surface for every later phase;
+temporary lab objects never become protocol compatibility promises.
+
 ## Phase 2: Standard relay adapter
 
 - Pin supported Noctweave module versions.
