@@ -1,6 +1,6 @@
-# Capsule Net
+# Noctweave Net
 
-Capsule Net is a cryptographically addressed web built above the public
+Noctweave Net is a cryptographically addressed web built behind the public
 Noctweave transport layer. It treats existing network infrastructure as
 replaceable delivery and storage while clients retain authority over identity,
 verification, permissions, decryption, and rendering.
@@ -11,7 +11,7 @@ consensus implementation or shipping a browser runtime.
 
 ## Core model
 
-A Capsule Net publication is a signed, versioned object graph:
+A Noctweave Net publication is a signed, versioned object graph:
 
 ```text
 publisher key
@@ -35,7 +35,7 @@ changing a capsule object's identity.
 
 ## Relay topology
 
-Capsule Net has exactly three relay roles:
+Noctweave Net has exactly three relay roles:
 
 | Role | Durable payload storage | Function |
 | --- | --- | --- |
@@ -49,10 +49,14 @@ and logs. Co-location must not blur trust boundaries.
 
 See [relay topology](docs/relay-topology.md).
 
+The transport integration is implemented by Noctweave's provisional
+`nw.net-passthrough@1` and `nw.net-host@1` modules. See the
+[Noctweave integration contract](docs/noctweave-integration.md).
+
 ## Consensus boundary
 
 Consensus replaces relay federation, discovery coordination, and shared
-publication ordering for Capsule Net. It finalizes only bounded public
+publication ordering for Noctweave Net. It finalizes only bounded public
 commitments such as publisher heads, host locators, protocol epochs, and
 revocations defined by the eventual consensus profile.
 
@@ -76,6 +80,7 @@ docs/
   architecture.md          System model and publish/resolve flows
   relay-topology.md        The three relay roles and their invariants
   consensus-boundary.md    What consensus may and may not coordinate
+  noctweave-integration.md Exact relay roles, modules, and deployment boundary
   adr/                     Architecture decisions
 spec/
   README.md                Candidate protocol surfaces and versioning rules
@@ -85,11 +90,11 @@ SECURITY.md                Threat model summary and reporting policy
 
 ## Current decisions
 
-1. Capsule Net is a separate protocol repository, not a Noctweave fork.
-2. Noctweave supplies encrypted transport primitives, not Capsule Net identity
+1. Noctweave Net is a separate protocol repository, not a Noctweave fork.
+2. Noctweave supplies encrypted transport primitives, not Noctweave Net identity
    or consensus.
 3. Relay roles are limited to standard, passthrough, and host.
-4. Relay federation modules are outside the Capsule Net topology.
+4. Relay federation modules are outside the Noctweave Net topology.
 5. Coordination is consumed through an abstract consensus boundary.
 6. Clients remain the verification and execution boundary.
 
@@ -101,11 +106,13 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 - global search;
 - traffic-analysis resistance or guaranteed anonymity;
 - arbitrary server-side capsule execution;
-- browser compatibility without a Capsule Net runtime;
+- browser compatibility without a Noctweave Net runtime;
 - migration compatibility with pre-release object formats;
 - a global account, device, or recovery system.
 
 ## Status
 
-Pre-protocol architecture scope. No wire compatibility, security audit, or
-production readiness is claimed.
+The Noctweave relay integration is provisional and implemented. The Noctweave
+Net object graph, consensus profile, runtime, and cross-language conformance
+suite remain pre-protocol. No security audit or production readiness is
+claimed.

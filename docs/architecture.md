@@ -1,9 +1,9 @@
-# Capsule Net Architecture
+# Noctweave Net Architecture
 
 ## 1. Layering
 
 ```text
-Capsule applications and local runtime
+Noctweave Net applications and local runtime
             │
 Signed object graph and capability semantics
             │
@@ -14,7 +14,7 @@ finalized public state      Noctweave transport boundary
                  standard / passthrough / host relays
 ```
 
-Capsule Net owns object semantics, publisher continuity, capability links,
+Noctweave Net owns object semantics, publisher continuity, capability links,
 resolution, and local rendering. Noctweave owns the reusable transport
 primitives and their cryptographic and operational boundaries. The selected
 consensus profile owns only finalized public coordination state.
@@ -74,7 +74,7 @@ endpoint; it does not replace capsule verification.
 ## 5. Private interaction
 
 Private messages, invitations, collaborative updates, and capability delivery
-use standard Noctweave opaque routes. Capsule Net must not introduce a global
+use standard Noctweave opaque routes. Noctweave Net must not introduce a global
 mailbox keyed by publisher identity.
 
 Public publication continuity and private relationship continuity are separate
@@ -96,7 +96,7 @@ as a Noctweave relationship or group key.
 
 ## 7. Privacy claim
 
-Capsule Net aims for semantic opacity to infrastructure carrying encrypted
+Noctweave Net aims for semantic opacity to infrastructure carrying encrypted
 private traffic. It does not claim endpoint invisibility or global anonymity.
 Relays and network observers can still learn some combination of endpoint
 addresses, timing, sizes, request frequency, host selection, and topology.

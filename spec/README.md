@@ -1,6 +1,6 @@
 # Protocol Workbench
 
-No Capsule Net wire format is stable yet. This directory will hold normative
+Noctweave Net has no stable object format yet. This directory will hold normative
 schemas, canonical encodings, and interoperability vectors once the following
 surfaces are agreed.
 
@@ -18,29 +18,27 @@ surfaces are agreed.
 ### Noctweave transport profile
 
 Standard relays should reuse supported Noctweave modules directly, especially
-opaque routes and bounded encrypted blobs. Capsule Net must specify which
+opaque routes and bounded encrypted blobs. Noctweave Net must specify which
 Noctweave module versions are compatible; it must not duplicate their wire
 formats under new names.
 
 ### Passthrough module
 
-A future versioned module will describe a single bounded opaque request and
-response forwarded to a client-selected public endpoint. Its schema must make
-destination policy, redirect behavior, request correlation, response bounds,
-timeouts, and failure classes exact.
+The provisional `nw.net-passthrough@1` module carries one `forward` request.
+The relay accepts a bounded opaque body for one operator-allow-listed public
+HTTPS Noctweave endpoint and returns the bounded opaque response. Redirects are
+disabled and recursive passthrough is not selected by the relay.
 
 It is not a general-purpose proxy API.
 
 ### Host module
 
-A future versioned module will minimally support:
+The provisional `nw.net-host@1` module supports:
 
-- store immutable object;
-- fetch immutable object;
-- check object presence;
-- remove or release an authorized storage commitment;
-- obtain a bounded signed hosting receipt;
-- report exact host limits and capabilities.
+- `put`: store an immutable SHA-256-addressed object;
+- `get`: fetch exact bytes and a signed hosting receipt;
+- `has`: check current bounded retention;
+- `release`: remove a commitment with its object-scoped capability.
 
 Publisher-head finality is not a host method. It belongs behind the consensus
 adapter.
@@ -53,7 +51,7 @@ vectors.
 
 ## Compatibility rule
 
-No document may claim Capsule Net interoperability until:
+No document may claim Noctweave Net interoperability until:
 
 1. canonical bytes are defined;
 2. strict decoders reject unknown and out-of-bounds fields as specified;

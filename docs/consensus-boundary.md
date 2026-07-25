@@ -1,6 +1,6 @@
 # Consensus Boundary
 
-Capsule Net delegates shared coordination to a consensus system but does not
+Noctweave Net delegates shared coordination to a consensus system but does not
 select or implement that system in the first milestone.
 
 ## Adapter contract

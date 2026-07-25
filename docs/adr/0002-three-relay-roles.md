@@ -1,4 +1,4 @@
-# ADR 0002: Limit Capsule Net to three relay roles
+# ADR 0002: Limit Noctweave Net to three relay roles
 
 - Status: Accepted
 - Date: 2026-07-25
@@ -11,14 +11,14 @@ attack surface.
 
 ## Decision
 
-Capsule Net defines exactly three relay roles:
+Noctweave Net defines exactly three relay roles:
 
 1. `standard`: Noctweave opaque-route transport;
 2. `passthrough`: non-durable bounded forwarding to an explicit next hop;
 3. `host`: durable content-addressed capsule storage and retrieval.
 
 Shared coordination comes from a separately selected consensus profile. Relay
-federation and coordinator roles are not part of the Capsule Net topology.
+federation and coordinator roles are not part of the Noctweave Net topology.
 
 ## Consequences
 

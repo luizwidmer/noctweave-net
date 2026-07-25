@@ -21,7 +21,7 @@ Exit gate: deterministic cross-language vectors and bounded-decoder tests pass.
 ## Phase 2: Standard relay adapter
 
 - Pin supported Noctweave module versions.
-- Carry private Capsule Net events over opaque routes.
+- Carry private Noctweave Net events over opaque routes.
 - Store larger encrypted private objects only through the bounded blob surface.
 - Add retry, cursor, restart, and capability-leak tests.
 

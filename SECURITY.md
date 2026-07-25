@@ -1,6 +1,6 @@
 # Security
 
-Capsule Net is pre-protocol and unaudited. Do not use it for production
+Noctweave Net is pre-protocol and unaudited. Do not use it for production
 confidentiality, identity, or code execution.
 
 ## Security boundaries
@@ -17,7 +17,7 @@ confidentiality, identity, or code execution.
 
 Depending on the path, operators and network observers may see endpoint
 addresses, timing, traffic sizes, request frequency, host selection, storage
-tenancy, retention, and topology. Capsule Net does not currently provide cover
+tenancy, retention, and topology. Noctweave Net does not currently provide cover
 traffic, a mix network, or a global anonymity claim.
 
 ## Mandatory implementation properties

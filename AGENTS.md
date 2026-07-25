@@ -1,14 +1,14 @@
-# Capsule Net Agent Guide
+# Noctweave Net Agent Guide
 
 ## Project state
 
-Capsule Net is pre-protocol. Preserve the architectural boundaries in
+Noctweave Net is pre-protocol. Preserve the architectural boundaries in
 `docs/` and record intentional changes as ADRs before treating them as wire
 compatibility.
 
 ## Dependency boundary
 
-Capsule Net is an application protocol above Noctweave's public transport
+Noctweave Net is an application protocol above Noctweave's public transport
 surface. Integrate only through:
 
 - `NoctweaveCore`;

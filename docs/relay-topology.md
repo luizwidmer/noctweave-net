@@ -1,17 +1,19 @@
 # Relay Topology
 
-Capsule Net recognizes exactly three relay roles. Additional behavior belongs
+Noctweave Net recognizes exactly three relay roles. Additional behavior belongs
 in a client, host service, or consensus adapter—not in a fourth relay type.
 
 ## Standard relay
 
 A standard relay is the existing Noctweave opaque transport role.
 
+Its current private-delivery dependency is `nw.opaque-route@2`.
+
 It may:
 
 - create, renew, tear down, append to, synchronize, and commit bounded opaque
   routes using the supported Noctweave surface;
-- carry encrypted Capsule Net control or collaboration events;
+- carry encrypted Noctweave Net control or collaboration events;
 - store encrypted blobs when the operator enables the bounded blob module;
 - expose exact health and capability information.
 
@@ -20,17 +22,19 @@ It must not:
 - resolve publisher identities;
 - index capsule semantics;
 - forward traffic to other relays as federation;
-- vote in Capsule Net consensus merely by operating a relay;
+- vote in Noctweave Net consensus merely by operating a relay;
 - decrypt private payloads or log ciphertext bodies and bearer capabilities.
 
 Standard relays remain direct client submission endpoints. Existing
-Noctweave federation is not part of the Capsule Net topology.
+Noctweave federation is not part of the Noctweave Net topology.
 
 ## Passthrough relay
 
 A passthrough relay forwards one bounded opaque exchange to one explicit next
 hop chosen by the client. Its purpose is path indirection and transport
 compatibility, not discovery, routing intelligence, or durable delivery.
+
+Its current wire surface is `nw.net-passthrough@1 forward`.
 
 It may:
 
@@ -68,6 +72,9 @@ require a separate threat model and are out of scope.
 A host relay stores and serves content-addressed capsule objects. A person may
 self-host one, and a provider may operate it as a hosting service.
 
+Its current wire surface is `nw.net-host@1` with `put`, `get`, `has`, and
+`release`.
+
 It may:
 
 - accept bounded objects whose bytes match their declared object IDs;
@@ -92,7 +99,7 @@ It must not:
 - rewrite, render, or execute hosted capsule code;
 - finalize publisher heads;
 - possess private capsule keys by protocol requirement;
-- turn hosting credentials into a global Capsule Net account.
+- turn hosting credentials into a global Noctweave Net account.
 
 ## Co-located roles
 
