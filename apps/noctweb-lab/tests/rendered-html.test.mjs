@@ -28,11 +28,16 @@ test("server-renders the Noctweb Lab shell", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Noctweb Lab — Test the quiet web<\/title>/i);
+  assert.match(
+    html,
+    /<title>Noctweb Lab — Noctweave development workspace<\/title>/i,
+  );
   assert.match(html, /NOCTWEB/);
-  assert.match(html, /PUBLISHER STUDIO/);
-  assert.match(html, /TESTNET TOPOLOGY/);
-  assert.match(html, /FAULT DECK/);
-  assert.match(html, /VERIFICATION TRACE/);
+  assert.match(html, /Workspace overview/);
+  assert.match(html, /Noctweb Browser/);
+  assert.match(html, /Publish/);
+  assert.match(html, /Network/);
+  assert.match(html, /Inspector/);
+  assert.match(html, /Local simulation/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton/i);
 });

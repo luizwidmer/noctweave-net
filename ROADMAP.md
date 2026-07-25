@@ -4,6 +4,8 @@
 
 - Review the three relay roles and consensus boundary.
 - Choose terminology for publisher IDs, heads, objects, and capabilities.
+- Preserve the accepted invariant that every publication has a distinct
+  cryptographic publisher identity; choose its stable suite and rotation rules.
 - Decide whether public mutable naming is in the first protocol profile.
 - Record accepted changes as ADRs.
 

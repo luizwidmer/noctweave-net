@@ -30,8 +30,10 @@ The user-facing product is **Noctweb**.
   handling remains a separate compatibility decision.
 
 The first Lab profile is named `lab-v0`. It is explicitly incompatible,
-static-only, scriptless, and backed by deterministic mock consensus. Stable
-protocol formats replace it rather than inherit compatibility from it.
+static-only, scriptless, and backed by deterministic mock consensus. Every lab
+publication still requires its own local publisher identity and signed head;
+the lab signature suite and head encoding remain temporary. Stable protocol
+formats replace `lab-v0` rather than inherit compatibility from it.
 
 ## Consequences
 

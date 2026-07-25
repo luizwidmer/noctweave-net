@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
@@ -13,9 +13,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "Noctweb Lab — Test the quiet web";
+const title = "Noctweb Lab — Noctweave development workspace";
 const description =
-  "Publish, resolve, verify, and fault-test Noctweb sites on a deterministic local testnet.";
+  "Build, publish, resolve, inspect, and fault-test Noctweb sites in a deterministic local workspace.";
+
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#0a0f0d",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -47,6 +52,16 @@ export async function generateMetadata(): Promise<Metadata> {
       title,
       description,
       images: [socialImage],
+    },
+    applicationName: "Noctweb Lab",
+    appleWebApp: {
+      capable: true,
+      title: "Noctweb Lab",
+      statusBarStyle: "black-translucent",
+    },
+    icons: {
+      icon: [{ url: `${origin}/app-icon.png`, type: "image/png" }],
+      apple: [{ url: `${origin}/app-icon.png`, type: "image/png" }],
     },
   };
 }

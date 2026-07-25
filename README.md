@@ -101,6 +101,8 @@ SECURITY.md                Threat model summary and reporting policy
 6. Clients remain the verification and execution boundary.
 7. Noctweb Browser is the authoritative runtime; browser extensions are
    compatibility bridges rather than identity or capability authorities.
+8. Every publication has a publication-scoped cryptographic publisher identity;
+   it is never inferred from a host, relay, account, or private relationship.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 

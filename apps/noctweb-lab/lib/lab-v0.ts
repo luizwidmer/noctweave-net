@@ -2,6 +2,41 @@ export const LAB_PROFILE = "lab-v0";
 export const LAB_ADDRESS = "noct://quiet-garden/";
 export const MAX_FIELD_BYTES = 4_096;
 
+export const LAB_CONSENSUS_PROFILE = {
+  name: "Deterministic mock",
+  profile: "mock-consensus@lab-v0",
+  epoch: "lab-v0",
+  evidence: "Session sequence",
+  validity: "Current local session",
+} as const;
+
+export const LAB_RELAY_ROLES = [
+  {
+    id: "standard",
+    name: "Standard relay",
+    module: "nw.opaque-route@2",
+    storage: "Bounded opaque routes",
+    purpose: "Private invitations, collaboration, and control events.",
+    boundary: "Never resolves publishers, indexes capsules, or joins consensus.",
+  },
+  {
+    id: "passthrough",
+    name: "Passthrough relay",
+    module: "nw.net-passthrough@1",
+    storage: "No durable payloads",
+    purpose: "One bounded forward to a client-selected public next hop.",
+    boundary: "One hop, no discovery, no redirects, and no anonymity claim.",
+  },
+  {
+    id: "host",
+    name: "Host relay",
+    module: "nw.net-host@1",
+    storage: "Content-addressed objects",
+    purpose: "Exact-byte capsule storage for self-hosters and providers.",
+    boundary: "Serving bytes grants no publisher or finality authority.",
+  },
+] as const;
+
 export type LabSite = {
   title: string;
   subtitle: string;
@@ -22,11 +57,23 @@ export type LabHost = {
   objects: Record<string, string>;
 };
 
+export type LabPublisherIdentity = {
+  algorithm: "Ed25519-lab";
+  publisherID: string;
+  publicKeyBytes: string;
+  publicKey: CryptoKey;
+  privateKey: CryptoKey;
+};
+
 export type LabHead = {
   address: string;
   objectID: string;
   revision: number;
   finalizedAt: string;
+  publisherID: string;
+  publisherPublicKey: string;
+  signature: string;
+  signatureAlgorithm: "Ed25519-lab";
 };
 
 export type ResolutionTrace = {
@@ -42,16 +89,34 @@ export type LabResolution =
       objectID: string;
       site: LabSite;
       html: string;
+      path: string[];
       trace: ResolutionTrace[];
     }
   | {
       status: "unavailable" | "rejected";
       route: "direct" | "passthrough";
       objectID: string | null;
+      path: string[];
       trace: ResolutionTrace[];
     };
 
 const encoder = new TextEncoder();
+
+function bytesToBase64URL(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64URLToBytes(value: string): Uint8Array {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
 
 function isSafeString(value: unknown): value is string {
   return (
@@ -117,6 +182,87 @@ export async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+export async function createPublisherIdentity(): Promise<LabPublisherIdentity> {
+  const generated = (await crypto.subtle.generateKey(
+    { name: "Ed25519" },
+    true,
+    ["sign", "verify"],
+  )) as CryptoKeyPair;
+  const publicBytes = new Uint8Array(
+    await crypto.subtle.exportKey("raw", generated.publicKey),
+  );
+  const privateBytes = new Uint8Array(
+    await crypto.subtle.exportKey("pkcs8", generated.privateKey),
+  );
+  const publicKey = await crypto.subtle.importKey(
+    "raw",
+    publicBytes,
+    { name: "Ed25519" },
+    true,
+    ["verify"],
+  );
+  const privateKey = await crypto.subtle.importKey(
+    "pkcs8",
+    privateBytes,
+    { name: "Ed25519" },
+    false,
+    ["sign"],
+  );
+  privateBytes.fill(0);
+  const publicKeyBytes = bytesToBase64URL(publicBytes);
+
+  return {
+    algorithm: "Ed25519-lab",
+    publisherID: await sha256Hex(
+      `noctweb-publisher:${LAB_PROFILE}:${publicKeyBytes}`,
+    ),
+    publicKeyBytes,
+    publicKey,
+    privateKey,
+  };
+}
+
+function headSigningPayload(
+  head: Omit<LabHead, "signature">,
+): string {
+  return JSON.stringify({
+    profile: LAB_PROFILE,
+    address: head.address,
+    objectID: head.objectID,
+    publisherID: head.publisherID,
+    publisherPublicKey: head.publisherPublicKey,
+    revision: head.revision,
+    finalizedAt: head.finalizedAt,
+    signatureAlgorithm: head.signatureAlgorithm,
+  });
+}
+
+export async function verifyPublisherHead(head: LabHead): Promise<boolean> {
+  try {
+    const expectedPublisherID = await sha256Hex(
+      `noctweb-publisher:${LAB_PROFILE}:${head.publisherPublicKey}`,
+    );
+    if (expectedPublisherID !== head.publisherID) return false;
+
+    const publicKey = await crypto.subtle.importKey(
+      "raw",
+      base64URLToBytes(head.publisherPublicKey),
+      { name: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    const { signature, ...unsignedHead } = head;
+    return crypto.subtle.verify(
+      { name: "Ed25519" },
+      publicKey,
+      base64URLToBytes(signature),
+      encoder.encode(headSigningPayload(unsignedHead)),
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function escapeHTML(value: string): string {
@@ -214,6 +360,7 @@ export async function publishSite(
   site: LabSite,
   revision: number,
   hosts: LabHost[],
+  identity: LabPublisherIdentity,
   now = new Date(),
 ): Promise<{ canonical: string; head: LabHead; hosts: LabHost[] }> {
   if (!Number.isSafeInteger(revision) || revision < 1) {
@@ -222,6 +369,14 @@ export async function publishSite(
 
   const canonical = canonicalizeSite(site);
   const objectID = await sha256Hex(canonical);
+  if (
+    identity.algorithm !== "Ed25519-lab" ||
+    !identity.publisherID ||
+    !identity.publicKeyBytes ||
+    !identity.privateKey
+  ) {
+    throw new Error("A valid publication-scoped publisher identity is required.");
+  }
   const nextHosts = hosts.map((host) =>
     host.online
       ? {
@@ -232,15 +387,29 @@ export async function publishSite(
       : host,
   );
 
+  const unsignedHead: Omit<LabHead, "signature"> = {
+    address: LAB_ADDRESS,
+    objectID,
+    revision,
+    finalizedAt: now.toISOString(),
+    publisherID: identity.publisherID,
+    publisherPublicKey: identity.publicKeyBytes,
+    signatureAlgorithm: identity.algorithm,
+  };
+  const signature = bytesToBase64URL(
+    new Uint8Array(
+      await crypto.subtle.sign(
+        { name: "Ed25519" },
+        identity.privateKey,
+        encoder.encode(headSigningPayload(unsignedHead)),
+      ),
+    ),
+  );
+
   return {
     canonical,
     hosts: nextHosts,
-    head: {
-      address: LAB_ADDRESS,
-      objectID,
-      revision,
-      finalizedAt: now.toISOString(),
-    },
+    head: { ...unsignedHead, signature },
   };
 }
 
@@ -250,13 +419,17 @@ export async function resolveSite(
   hosts: LabHost[],
   route: "direct" | "passthrough",
 ): Promise<LabResolution> {
+  const routePrefix =
+    route === "passthrough"
+      ? ["Noctweb Browser", "Passthrough relay"]
+      : ["Noctweb Browser"];
   const trace: ResolutionTrace[] = [
     {
       kind: "info",
       message:
         route === "passthrough"
-          ? "Route selected: one bounded passthrough hop"
-          : "Route selected: direct host retrieval",
+          ? "Simulated route selected: one bounded passthrough hop."
+          : "Simulated route selected: direct host retrieval.",
     },
   ];
 
@@ -265,12 +438,41 @@ export async function resolveSite(
       kind: "failure",
       message: "Mock consensus has no finalized head for this address.",
     });
-    return { status: "unavailable", route, objectID: head?.objectID ?? null, trace };
+    return {
+      status: "unavailable",
+      route,
+      objectID: head?.objectID ?? null,
+      path: routePrefix,
+      trace,
+    };
   }
 
   trace.push({
     kind: "success",
     message: `Consensus finalized revision ${head.revision}.`,
+  });
+
+  if (!(await verifyPublisherHead(head))) {
+    trace.push({
+      kind: "failure",
+      message: "Publisher identity or signed head verification failed.",
+    });
+    return {
+      status: "rejected",
+      route,
+      objectID: head.objectID,
+      path: routePrefix,
+      trace,
+    };
+  }
+
+  trace.push({
+    kind: "success",
+    message: `Publisher identity ${head.publisherID.slice(0, 12)}… verified.`,
+  });
+  trace.push({
+    kind: "success",
+    message: "Publisher head signature accepted for this publication.",
   });
 
   let sawRejectedObject = false;
@@ -334,6 +536,7 @@ export async function resolveSite(
       objectID: head.objectID,
       site,
       html: renderStaticSite(site),
+      path: [...routePrefix, host.name],
       trace,
     };
   }
@@ -348,6 +551,7 @@ export async function resolveSite(
     status: sawRejectedObject ? "rejected" : "unavailable",
     route,
     objectID: head.objectID,
+    path: routePrefix,
     trace,
   };
 }
@@ -356,7 +560,7 @@ export function createHosts(): LabHost[] {
   return [
     {
       id: "host-a",
-      name: "Host A",
+      name: "Bahia Origin",
       location: "Bahia · self-hosted",
       online: true,
       corrupt: false,
@@ -364,7 +568,7 @@ export function createHosts(): LabHost[] {
     },
     {
       id: "host-b",
-      name: "Host B",
+      name: "Lisbon Mirror",
       location: "Lisbon · mirror",
       online: true,
       corrupt: false,

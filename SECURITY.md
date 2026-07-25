@@ -7,6 +7,9 @@ confidentiality, identity, or code execution.
 
 - Clients create keys, encrypt private data, verify objects, and enforce
   capabilities.
+- Every publication has its own publisher identity and every mutable head must
+  verify under that authority. Publisher keys are not global accounts and must
+  not be reused as Noctweave relationship or group keys.
 - Standard relays provide bounded Noctweave transport, not identity.
 - Passthrough relays provide path indirection, not anonymity.
 - Host relays provide storage and retrieval, not publication authority.
@@ -23,6 +26,7 @@ traffic, a mix network, or a global anonymity claim.
 ## Mandatory implementation properties
 
 - canonical and domain-separated hashes and signatures;
+- publisher-identity derivation and signed-head verification before rendering;
 - strict bounded decoding;
 - client-side encryption for private content;
 - no plaintext, token, capability, or ciphertext-body logging;
