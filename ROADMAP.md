@@ -107,6 +107,13 @@ non-final or invalid alternatives.
 - Keep publisher keys, capability authority, and verification in the native
   runtime; an extension is never the authoritative client.
 
+Implementation status: the native macOS MVP now provides the strict browser
+core, deterministic signed fixture profile, `noct://` and `.noctlink`
+registration, tabs, bookmarks, history, trust display, routing-policy
+evaluation, and a publication-scoped network-isolated WebKit renderer.
+Production `ConsensusAdapter`, host/passthrough retrieval, profile import,
+permissions, and verified offline cache remain open.
+
 Exit gate: an OS-opened `noct://` link resolves the same finalized publisher on
 two independent clients, rejects ambiguous or forged trust-domain evidence,
 and survives host replacement without changing publisher or object identity.

@@ -209,6 +209,7 @@ docs/
   adr/                     Architecture decisions
 apps/
   noctweb-lab/             Native macOS publisher, runtime, inspector, and testnet
+  noctweb-browser/         Native visitor browser, verifier, and isolated renderer
 spec/
   README.md                Candidate protocol surfaces and versioning rules
 ROADMAP.md                 Implementation sequence and acceptance gates
@@ -269,11 +270,26 @@ and reports a verified upload receipt as **Hosted**. Its displayed `noct://`
 names remain provisional, and it does not claim consensus finality, naming
 authority, continued availability, or an in-relay React build service.
 
-The production Noctweb Browser is specified but not yet implemented. The next
-runtime milestone is a native macOS Browser that registers `noct://`, reuses an
-extracted verified runtime core, and resolves through explicit network
-profiles. The current relay viewer remains a Hosted-preview bridge until that
-runtime and a production consensus profile exist.
+The first native Noctweb Browser MVP is implemented under
+`apps/noctweb-browser/`. It registers `noct://` and `.noctlink`, resolves inside
+an explicit local profile, verifies a deterministic signed fixture through the
+runtime core, applies the routing-authority hierarchy, keeps local tabs,
+bookmarks, and history, exposes verification evidence, and renders verified
+HTML, CSS, JavaScript, and browser-ready framework bundles in a
+publication-scoped non-persistent WebKit process. It bundles no Chromium and is
+not a hosted application.
+
+The visitor can select `open`, `direct`, or `passthrough` per tab; that choice
+is evaluated only after federation, host-operator, and signed publisher policy.
+Query- or fragment-bearing addresses stay out of local history and bookmarks
+until the capability URL grammar is frozen.
+
+The built-in profile is deliberately labeled **Development fixture**, never
+**Finalized**. Production consensus resolution, authenticated host and
+passthrough retrieval adapters, network-profile import, permissions, and
+verified offline cache remain. The current relay viewer remains a
+Hosted-preview bridge until those production adapters and a selected consensus
+profile exist.
 
 This repository also documents the relay integration contract; Noctweb Lab
 currently exercises matching deterministic in-process adapters rather than

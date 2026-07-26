@@ -79,6 +79,8 @@ conflict and requires an explicit choice. It never silently resolves the same
 
 Bookmarks, history, and open tabs retain both the canonical URL and the routing
 trust-domain identifier. The address bar always exposes the active profile.
+The Browser also exposes the visitor's per-tab `open`, `direct`, or
+`passthrough` preference; it cannot weaken a higher policy layer.
 
 ## Portable access descriptors
 
@@ -95,6 +97,12 @@ override consensus finality, a publisher signature, federation policy, host
 operator policy, or object verification. Importing a previously unknown
 network profile requires explicit user confirmation and a visible trust-domain
 fingerprint.
+
+The deterministic Browser profile deliberately ignores bootstrap hints.
+Production network adapters must re-resolve and reject unsafe public endpoint
+targets, require an explicit local-profile opt-in for loopback or private
+targets, and enforce an expected publisher pin before downloading publication
+objects.
 
 The exact descriptor encoding and any signing profile remain provisional until
 the object and consensus suites freeze.
@@ -142,6 +150,9 @@ publisher identity. A hosting receipt may produce **Hosted preview**, never
 
 History, bookmarks, permissions, and capability secrets stay local. Capability
 URLs are excluded from ordinary history and telemetry by default.
+Until capability syntax is frozen, the native MVP treats every query- or
+fragment-bearing address as potentially capability-bearing and excludes it
+from bookmarks and history.
 
 ## Conventional-browser bridge
 
@@ -195,6 +206,13 @@ display it in an explicitly unfinalized mode.
    cache.
 7. Assess the optional extension only after native handoff and fail-closed
    verification are complete.
+
+The native MVP now completes the application shell, OS registration, strict
+URL and descriptor decoding, deterministic-profile navigation, local tabs,
+bookmarks and history, visible fixture verification, routing-policy evaluation,
+and the publication-scoped renderer. It intentionally does not claim the
+production portions of steps 4–6: profile import, consensus finality,
+host/passthrough retrieval, permissions, and verified offline cache remain.
 
 ## Acceptance gates
 
