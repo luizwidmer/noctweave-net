@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-26
 - Amends: ADR 0003, ADR 0004, and ADR 0006
+- Amended by: ADR 0009
 
 ## Context
 
@@ -91,6 +92,12 @@ Lab remains the native macOS test and authoring application described by ADR
 0003. Noctweb Publisher does not turn either native application into a hosted
 web app.
 
+The Publisher's `/noctweb/?object=<object-id>` HTTPS viewer is the temporary
+cross-user **Hosted preview** path. It verifies the receipt, exact object bytes,
+and publisher signature before sandboxed rendering, but it does not resolve the
+displayed provisional `noct://` name. ADR 0009 defines the native Browser as the
+authoritative finalized access path.
+
 ## Consequences
 
 - A self-hoster can expose a basic authoring page from the same process that
@@ -104,5 +111,7 @@ web app.
   remain outside the relay.
 - Product UI and documentation must distinguish **Hosted** from any future
   finalized publication or name state.
+- A relay HTTPS preview remains relay-dependent and is never the canonical
+  Noctweb site origin.
 - Backup, rotation, recovery, consensus submission, finalized naming, and
   production sandbox conformance remain later protocol work.

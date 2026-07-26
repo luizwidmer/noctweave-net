@@ -77,7 +77,32 @@ digest and publication-scoped publisher signature before loading active
 content into a sandbox with no ambient Publisher-origin credentials or relay
 authority.
 
-## 3. Data model
+## 3. End-user access
+
+The authoritative visitor runtime is the native Noctweb Browser. The operating
+system hands it `noct://` URLs; an optional extension may recognize and hand
+links off but never resolves, stores authority, or executes a site.
+
+Each named resolution uses an explicit local `NoctwebNetworkProfile` that binds
+the request to one routing trust domain, consensus profile, verification
+material, bounded bootstrap set, supported epoch, and visitor route preference.
+Unknown suffixes stop for profile import. Conflicting finalized claims require
+an explicit choice and visible trust-domain fingerprint. Tabs, bookmarks, and
+history retain the trust-domain identifier with the URL.
+
+A bounded `.noctlink` descriptor may carry the canonical URL, trust-domain
+identifier, optional expected publisher, and bootstrap hints. It is untrusted
+input and cannot replace finality, publisher, object, or route verification.
+
+Before rendering, the Browser executes the resolve flow below and assigns a
+publication-scoped internal origin. Its chrome distinguishes Finalized, Hosted
+preview, Stale, Offline verified cache, and Blocked. The current relay HTTPS
+viewer is only the Hosted-preview compatibility path; no central gateway is
+required.
+
+See [Noctweb end-user access](noctweb-access.md).
+
+## 4. Data model
 
 The first protocol revision must define canonical encodings and bounds for:
 
@@ -107,7 +132,7 @@ The exact canonical format, signature suite, encryption suite, and digest
 suite remain open until test vectors are added. Provisional documents must not
 claim wire compatibility.
 
-## 4. Relay-scoped Noctweb namespace
+## 5. Relay-scoped Noctweb namespace
 
 The canonical base URL for a named site is:
 
@@ -139,7 +164,7 @@ Until a consensus naming profile exists, Noctweb Publisher displays
 operator-configured suffix nor a receipt-key-derived fallback establishes
 global uniqueness, allocation, finality, or portable resolution.
 
-## 5. Publish flow
+## 6. Publish flow
 
 1. The local runtime constructs a bounded canonical object graph.
 2. Private portions are encrypted locally.
@@ -164,7 +189,7 @@ For the current Noctweb Publisher surface, the implemented flow stops after the
 browser verifies the hosting receipt and reports **Hosted**. Consensus
 submission and finalized naming remain later profile work.
 
-## 6. Resolve flow
+## 7. Resolve flow
 
 1. For a named URL, the runtime canonicalizes the address and asks its
    `ConsensusAdapter` for the finalized publisher binding.
@@ -205,7 +230,7 @@ legacy read-only. Production host-operator advertisements and federation
 policy must be authenticated. The Lab's versions are deterministic local
 adapters rather than production authentication.
 
-## 7. Private interaction
+## 8. Private interaction
 
 Private messages, invitations, collaborative updates, and capability delivery
 use standard Noctweave opaque routes. Noctweave Net must not introduce a global
@@ -215,7 +240,7 @@ Public publication continuity and private relationship continuity are separate
 authorities. A consensus-visible publisher key must never be silently reused
 as a Noctweave relationship or group key.
 
-## 8. Failure model
+## 9. Failure model
 
 - Missing host object: retry another finalized locator or surface unavailable.
 - Hash or signature mismatch: reject the object and quarantine bounded
@@ -240,7 +265,7 @@ as a Noctweave relationship or group key.
 - Unverified active bundle: reject it before creating or navigating the content
   sandbox.
 
-## 9. Privacy claim
+## 10. Privacy claim
 
 Noctweave Net aims for semantic opacity to infrastructure carrying encrypted
 private traffic. It does not claim endpoint invisibility or global anonymity.

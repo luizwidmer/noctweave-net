@@ -86,6 +86,23 @@ The transport integration is implemented by Noctweave's provisional
 `nw.net-passthrough@1` and `nw.net-host@1` modules. See the
 [Noctweave integration contract](docs/noctweave-integration.md).
 
+## Accessing Noctweb
+
+The authoritative visitor product is the native **Noctweb Browser**. It
+registers `noct://` with the operating system, resolves inside an explicit local
+network profile, verifies finalized publisher and object state, applies the
+routing authority hierarchy, and renders under a publication-scoped sandbox.
+It is not a hosted website or browser extension.
+
+An optional extension may recognize or hand links to the native Browser, but it
+never owns keys, capabilities, consensus verification, permissions, or
+execution. Before production consensus-backed resolution exists, the relay
+HTTPS viewer remains a clearly labeled **Hosted preview** compatibility path.
+There is no mandatory central gateway.
+
+See [Noctweb end-user access](docs/noctweb-access.md) and
+[ADR 0009](docs/adr/0009-native-noctweb-browser-access.md).
+
 ## Noctweb Publisher
 
 **Noctweb Publisher** is the initial public authoring surface. It is a simple
@@ -225,6 +242,9 @@ SECURITY.md                Threat model summary and reporting policy
     opted-in host capability. Its publication keys stay browser-local, relays
     sign only hosting receipts, and hosted active content is verified before
     sandboxed rendering.
+13. End users access finalized sites through the native Noctweb Browser and an
+    explicit local network profile. The OS handles `noct://`; extensions only
+    hand links off, and relay HTTPS viewers remain Hosted previews.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -248,6 +268,12 @@ dedicated host relay. It keeps one signing key per publication in the browser
 and reports a verified upload receipt as **Hosted**. Its displayed `noct://`
 names remain provisional, and it does not claim consensus finality, naming
 authority, continued availability, or an in-relay React build service.
+
+The production Noctweb Browser is specified but not yet implemented. The next
+runtime milestone is a native macOS Browser that registers `noct://`, reuses an
+extracted verified runtime core, and resolves through explicit network
+profiles. The current relay viewer remains a Hosted-preview bridge until that
+runtime and a production consensus profile exist.
 
 This repository also documents the relay integration contract; Noctweb Lab
 currently exercises matching deterministic in-process adapters rather than

@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
-- Amended by: ADR 0008
+- Amended by: ADR 0008 and ADR 0009
 
 ## Context
 
@@ -29,11 +29,14 @@ The user-facing product is **Noctweb**.
 - **Noctweb Publisher** is the distinct basic relay-hosted browser authoring
   surface accepted by ADR 0008. It does not replace Noctweb Browser as the
   authoritative runtime or turn Noctweb Lab into a hosted application.
-- A conventional browser extension may later recognize links, preview bounded
-  public content, and hand navigation to Noctweb Browser. It never becomes the
-  publisher-key, capability, consensus, or execution authority.
+- A conventional browser extension may later recognize links and hand
+  navigation to Noctweb Browser. It never resolves or renders Noctweb content
+  and never becomes the publisher-key, capability, consensus, permission, or
+  execution authority.
 - Internal Noctweb addresses may use `noct://` while portable external-link
-  handling remains a separate compatibility decision.
+  handling follows ADR 0009: the operating system launches the native Browser,
+  an optional extension performs handoff only, and bounded `.noctlink`
+  descriptors carry explicit trust-domain context without becoming authority.
 
 The original Lab profile was named `noctweb-lab-v1`. The relay-scoped address
 work in ADR 0006 superseded it with `noctweb-lab-v2`, which is still explicitly

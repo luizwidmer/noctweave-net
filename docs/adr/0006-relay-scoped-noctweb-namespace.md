@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
-- Amended by: ADR 0008
+- Amended by: ADR 0008 and ADR 0009
 
 ## Context
 
@@ -23,6 +23,13 @@ The canonical public base URL for a named Noctweb site is:
 ```text
 noct://<site>.<relay-suffix>/
 ```
+
+The URL is portable only together with an explicit routing trust-domain
+context. Under ADR 0009, Noctweb Browser resolves it through an installed
+`NoctwebNetworkProfile` that proves the finalized suffix claim. Unknown claims
+remain unresolved and conflicting claims require an explicit user choice.
+Bookmarks, history, tabs, and bounded `.noctlink` descriptors retain the
+trust-domain identifier without changing the canonical namespace record.
 
 Each relay suffix belongs to one namespace relay. A namespace relay is an
 ordinary `host` relay with a namespace capability; this decision does not add a
@@ -82,6 +89,8 @@ rewriting their address would invalidate their object and head commitments.
   without a naming auction or operator choice.
 - Current Publisher names remain explicitly provisional until consensus naming
   can establish the allocation and resolution claims above.
+- The same textual URL cannot silently move between routing trust domains in
+  Noctweb Browser.
 - Compromise of a namespace relay or suffix credential cannot forge a valid
   publisher update, though it can affect namespace operations allowed by the
   consensus profile.

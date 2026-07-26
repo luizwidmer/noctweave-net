@@ -27,6 +27,14 @@ Every response must identify the consensus profile, network or trust domain,
 finality evidence, protocol epoch, and bounded validity window needed for
 independent verification.
 
+Noctweb Browser consumes this adapter only through an explicit local
+`NoctwebNetworkProfile`. The profile supplies the routing trust-domain and
+consensus verification context; it does not grant authority to its bootstrap
+endpoints. Unknown suffix claims remain unresolved, while conflicting finalized
+claims require an explicit user selection and visible trust-domain
+fingerprint. A default profile must never silently change the meaning of a
+textual `noct://` URL.
+
 ## Consensus may finalize
 
 - publisher head ordering and continuity commitments;
@@ -84,6 +92,12 @@ publication-scoped publisher identifier. It does not authorize the suffix
 operator to sign publisher heads and does not require the namespace relay to
 serve current content. Consensus resolves independently finalized host
 locators after resolving the name.
+
+Bookmarks, history, open tabs, and portable `.noctlink` descriptors retain the
+routing trust-domain identifier together with the canonical URL. The descriptor
+is a bounded launch hint; every included endpoint, publisher expectation, and
+profile hint remains untrusted until this adapter and the publisher/object
+verification pipeline validate it.
 
 Noctweb Publisher currently has no consensus naming profile. Its
 operator-configured or host-receipt-key-derived suffix and every displayed

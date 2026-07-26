@@ -90,6 +90,26 @@ Each supported profile must define finalized head and locator records, finality
 proof verification, selected federation-policy records, epochs, reorganization
 behavior, bounds, and deterministic vectors.
 
+### End-user access profile
+
+Noctweb Browser is the authoritative native runtime. A supported access profile
+must define:
+
+- operating-system handling for the `noct` scheme;
+- the bounded `NoctwebNetworkProfile` fields that bind resolution to one
+  routing trust domain and consensus verifier;
+- deterministic unknown and conflicting suffix-claim behavior;
+- `.noctlink` bounds, encoding, optional publisher expectation, and bootstrap
+  hint handling;
+- navigation path, query, fragment, and relative-link normalization;
+- publication-scoped origin and permission semantics;
+- Finalized, Hosted preview, Stale, Offline verified cache, and Blocked state
+  transitions; and
+- privacy rules for history, capability links, and local caches.
+
+An extension may hand links to the native runtime but cannot implement this
+profile. A relay HTTPS viewer implements Hosted preview only.
+
 ### Relay-scoped namespace profile
 
 The canonical named-site base URL is

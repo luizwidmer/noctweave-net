@@ -93,10 +93,20 @@ non-final or invalid alternatives.
 
 - Resolve graphs, verify content, decrypt capabilities, and render locally.
 - Define a sandbox and permissions for active content.
-- Extend the dedicated native runtime and assess an optional link-handoff
-  browser extension without weakening origin or key boundaries.
+- Extract `NoctwebRuntimeCore` from the Lab's resolver, verification, routing,
+  address, and isolated-renderer boundaries.
+- Ship the native macOS Noctweb Browser with address-bar navigation, tabs,
+  local bookmarks and history, network-profile selection, trust state, and
+  operating-system registration for `noct://` and `.noctlink`.
+- Resolve names only inside explicit local network profiles; unknown or
+  conflicting trust-domain claims fail closed before rendering.
+- Distinguish Finalized, Hosted preview, Stale, Offline verified cache, and
+  Blocked in browser chrome.
+- Assess an optional link-handoff browser extension only after native URL
+  handling works, without weakening origin or key boundaries.
 - Keep publisher keys, capability authority, and verification in the native
   runtime; an extension is never the authoritative client.
 
-Exit gate: a capsule site moves between hosts without changing publisher or
-object identity.
+Exit gate: an OS-opened `noct://` link resolves the same finalized publisher on
+two independent clients, rejects ambiguous or forged trust-domain evidence,
+and survives host replacement without changing publisher or object identity.
