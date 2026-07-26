@@ -120,6 +120,10 @@ struct InspectorView: View {
             ) {
                 inspectorField("Address", value: site.address)
                 inspectorField(
+                    "Relay namespace",
+                    value: site.relayNamespaceID ?? "Legacy v1 address"
+                )
+                inspectorField(
                     "Object identifier",
                     value: site.objectID ?? "Not finalized"
                 )

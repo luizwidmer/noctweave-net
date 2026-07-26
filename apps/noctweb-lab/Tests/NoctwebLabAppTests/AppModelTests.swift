@@ -83,7 +83,7 @@ final class AppModelTests: XCTestCase {
             model.operationError?.contains("publication") == true
         )
 
-        for _ in 0..<100 where model.publicationInFlight {
+        for _ in 0..<1_000 where model.publicationInFlight {
             await Task.yield()
         }
         XCTAssertFalse(model.publicationInFlight)
@@ -120,7 +120,7 @@ final class AppModelTests: XCTestCase {
         }
 
         model.publishSelectedSite()
-        for _ in 0..<100 where model.publicationInFlight {
+        for _ in 0..<1_000 where model.publicationInFlight {
             await Task.yield()
         }
 
@@ -301,6 +301,132 @@ final class AppModelTests: XCTestCase {
         XCTAssertNotNil(model.selectedSite?.publisherID)
     }
 
+    func testStarterUsesRelayScopedNoctwebAddress() throws {
+        let workspace = Workspace.starter()
+        let site = try XCTUnwrap(workspace.sites.first)
+        let parsed = try NoctwebAddress.parse(site.address)
+        let namespace = try XCTUnwrap(
+            workspace.relays.first {
+                $0.relayNamespaceID == site.relayNamespaceID
+            }
+        )
+
+        XCTAssertEqual(parsed.relaySuffix, namespace.namespaceSuffix)
+        XCTAssertEqual(parsed.siteLabel, "quiet-garden")
+        XCTAssertTrue(
+            RelayNamespace.isValidID(
+                try XCTUnwrap(site.relayNamespaceID)
+            )
+        )
+    }
+
+    func testLegacyUnpublishedDraftMigratesToPrimaryRelayNamespace() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        workspace.sites[0].address = "noct://legacy-garden/"
+        workspace.sites[0].relayNamespaceID = nil
+        workspace.sites[0].publishedEnvelope = nil
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+        let site = try XCTUnwrap(model.selectedSite)
+        let parsed = try NoctwebAddress.parse(site.address)
+
+        XCTAssertEqual(parsed.siteLabel, "legacy-garden")
+        XCTAssertEqual(parsed.relaySuffix, "lisbon")
+        XCTAssertNotNil(site.relayNamespaceID)
+    }
+
+    func testPublishedLegacyAddressIsNotSilentlyRewritten() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        workspace.sites[0].address = "noct://legacy-garden/"
+        workspace.sites[0].relayNamespaceID = nil
+        workspace.sites[0].publishedEnvelope = Data([0x01])
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+
+        XCTAssertEqual(
+            model.selectedSite?.address,
+            "noct://legacy-garden/"
+        )
+        XCTAssertNil(model.selectedSite?.relayNamespaceID)
+    }
+
+    func testSignedDottedV1AddressDoesNotGainV2NamespaceState() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        let site = try XCTUnwrap(workspace.sites.first)
+        let publication = try makeLegacyPublication(
+            site: site,
+            address: "noct://legacy-site.lisbon/"
+        )
+        workspace.sites[0].address = publication.object.address
+        workspace.sites[0].relayNamespaceID = nil
+        workspace.sites[0].publishedEnvelope = try CanonicalJSON.encode(
+            publication
+        )
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+        let alternateNamespaceID = try XCTUnwrap(
+            model.availableRelayNamespaces
+                .first { $0.namespaceSuffix?.hasPrefix("r-") == true }?
+                .relayNamespaceID
+        )
+
+        XCTAssertEqual(
+            model.selectedSite?.address,
+            "noct://legacy-site.lisbon/"
+        )
+        XCTAssertNil(model.selectedSite?.relayNamespaceID)
+
+        model.selectRelayNamespace(alternateNamespaceID)
+
+        XCTAssertEqual(
+            model.selectedSite?.address,
+            "noct://legacy-site.lisbon/"
+        )
+        XCTAssertNil(model.selectedSite?.relayNamespaceID)
+    }
+
+    func testSelectingAnotherRelayNamespaceRewritesOnlyDraftAddress() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+        let alternate = try XCTUnwrap(
+            model.availableRelayNamespaces.first {
+                $0.namespaceSuffix?.hasPrefix("r-") == true
+            }
+        )
+        let namespaceID = try XCTUnwrap(alternate.relayNamespaceID)
+
+        model.selectRelayNamespace(namespaceID)
+
+        let site = try XCTUnwrap(model.selectedSite)
+        XCTAssertEqual(site.relayNamespaceID, namespaceID)
+        XCTAssertEqual(
+            try NoctwebAddress.parse(site.address).relaySuffix,
+            alternate.namespaceSuffix
+        )
+    }
+
     func testImportPreservesReactStyleProductionBuildFiles() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
@@ -450,6 +576,71 @@ final class AppModelTests: XCTestCase {
             engine: try NoctwebLabEngine(
                 identityStore: store
             )
+        )
+    }
+
+    private func makeLegacyPublication(
+        site: SiteProject,
+        address: String
+    ) throws -> PublishedCapsule {
+        let publicationID = site.id.uuidString.lowercased()
+        let identity = try PublicationSigningIdentity(
+            publicationID: publicationID,
+            rawPrivateKey: Data(repeating: 7, count: 32)
+        )
+        let bundle = try WebsiteBundle(
+            entryPath: "index.html",
+            files: [
+                WebsiteFile(
+                    path: "index.html",
+                    mediaType: "text/html",
+                    bytes: Data("<!doctype html><title>Legacy</title>".utf8)
+                )
+            ]
+        ).canonicalized()
+        let object = CapsuleObject(
+            protocolVersion: CapsuleObject.legacyProtocolVersion,
+            publicationID: publicationID,
+            address: address,
+            publisherID: identity.publisherID,
+            revision: 1,
+            previousObjectID: nil,
+            title: site.title,
+            subtitle: site.subtitle,
+            body: site.body,
+            accentHex: site.accentHex,
+            bundle: bundle
+        )
+        let encodedObject = try CanonicalJSON.encode(object)
+        let objectID = NoctwebDigest.objectID(for: encodedObject)
+        let claims = PublisherHeadClaims(
+            protocolVersion: CapsuleObject.legacyProtocolVersion,
+            publicationID: publicationID,
+            address: address,
+            publisherID: identity.publisherID,
+            publisherPublicKey: identity.publicKey,
+            objectID: objectID,
+            revision: 1,
+            previousHeadID: nil,
+            issuedAtMilliseconds: 1_700_000_000_000
+        )
+        let head = PublisherHead(
+            claims: claims,
+            signature: try identity.sign(headClaims: claims)
+        )
+        let headID = try NoctwebDigest.headID(for: head)
+        let finality = try MockConsensusFinalizer().finalize(
+            headID: headID,
+            confirmations: ["standard-lisbon", "standard-tokyo"],
+            round: 1
+        )
+        return PublishedCapsule(
+            object: object,
+            encodedObject: encodedObject,
+            head: head,
+            headID: headID,
+            hostRelayIDs: ["host-lisbon"],
+            finality: finality
         )
     }
 

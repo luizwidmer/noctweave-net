@@ -131,7 +131,10 @@ struct RuntimeView: View {
 
     private var addressControls: some View {
         HStack(spacing: 8) {
-            TextField("noct://publication/", text: $model.runtimeAddress)
+            TextField(
+                "noct://publication.relay-suffix/",
+                text: $model.runtimeAddress
+            )
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onSubmit {

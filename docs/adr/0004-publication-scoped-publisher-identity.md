@@ -44,10 +44,12 @@ not described as non-extractable. A missing or malformed key for an established
 publication blocks publishing instead of silently minting a replacement.
 
 The publisher identifier is the full SHA-256 digest of a domain-separated
-public-key commitment. The signed `noctweb-lab-v1` head uses a strict versioned
-binary transcript rather than relying on ordinary JSON serialization. Ed25519
-and the lab head encoding are temporary test mechanisms, not a stable suite or
-wire-format promise.
+public-key commitment. The signed `noctweb-lab-v2` head uses a strict versioned
+binary transcript rather than relying on ordinary JSON serialization and also
+commits the full relay namespace identity from ADR 0006. That namespace
+commitment does not replace the publisher signature. Ed25519 and the lab head
+encoding are temporary test mechanisms, not a stable suite or wire-format
+promise. Signed `noctweb-lab-v1` publications remain legacy read-only inputs.
 
 Deleting a local site or workspace does not implicitly delete its publisher
 key. Key destruction is a separate explicit operation because it permanently

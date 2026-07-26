@@ -49,6 +49,21 @@ Each supported profile must define finalized head and locator records, finality
 proof verification, epochs, reorganization behavior, bounds, and deterministic
 vectors.
 
+### Relay-scoped namespace profile
+
+The canonical named-site base URL is
+`noct://<site>.<relay-suffix>/`. A namespace relay is a host relay with either
+a consensus-allocated custom suffix or the profile's deterministic
+`r-<hash>` fallback derived from a dedicated namespace public key. The profile
+must define canonical label syntax,
+normalization, fallback derivation, allocation authorization, record bounds,
+and conflict behavior.
+
+Consensus enforces global suffix uniqueness and unique site labels within each
+suffix. Name records bind to publication-scoped publisher identifiers, not to
+hosting accounts or current content locations. Current content hosts remain
+replaceable through finalized locator records.
+
 ## Compatibility rule
 
 No document may claim Noctweave Net interoperability until:

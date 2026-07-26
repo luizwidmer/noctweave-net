@@ -82,7 +82,7 @@ struct NetworkView: View {
 
             Divider()
 
-            Text("Standard relays coordinate opaque network operations. Passthrough relays provide bounded forwarding. Host relays retain immutable site objects. Consensus finality remains separate from all three relay roles.")
+            Text("Standard relays coordinate opaque network operations. Passthrough relays provide bounded forwarding. Host relays retain immutable site objects and may advertise a Noctweb namespace. Consensus—not the host—finalizes names and publisher heads.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -127,6 +127,11 @@ struct NetworkView: View {
                         Text(relay.region)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if let suffix = relay.namespaceSuffix {
+                            Text(".\(suffix)")
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -194,6 +199,24 @@ struct NetworkView: View {
                         Label("\(relay.latencyMilliseconds) ms", systemImage: "speedometer")
                             .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.secondary)
+                    }
+
+                    if let suffix = relay.namespaceSuffix {
+                        HStack(spacing: 8) {
+                            Label(
+                                ".\(suffix)",
+                                systemImage: "link.badge.plus"
+                            )
+                            .font(.system(.caption, design: .monospaced))
+                            Spacer()
+                            Text(
+                                suffix.hasPrefix("r-")
+                                    ? "Automatic"
+                                    : "Operator suffix"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
                     }
 
                     Text(relay.endpoint)

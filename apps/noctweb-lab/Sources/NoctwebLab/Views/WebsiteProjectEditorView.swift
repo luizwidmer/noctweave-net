@@ -457,11 +457,33 @@ struct WebsiteProjectEditorView: View {
                 ScrollView {
                     Form {
                         Section("Publication") {
+                            Picker(
+                                "Relay namespace",
+                                selection: relayNamespaceBinding
+                            ) {
+                                ForEach(model.availableRelayNamespaces) { relay in
+                                    Text(
+                                        ".\(relay.namespaceSuffix ?? "unavailable") — \(relay.name)"
+                                    )
+                                    .tag(relay.relayNamespaceID ?? "")
+                                }
+                            }
+                            .disabled(site.publishedEnvelope != nil)
+
                             TextField(
                                 "Noctweb address",
                                 text: siteStringBinding(\.address)
                             )
                             .font(.system(.body, design: .monospaced))
+                            .disabled(site.publishedEnvelope != nil)
+
+                            Text(
+                                site.publishedEnvelope != nil
+                                    ? "This relay-scoped name is finalized. Publish revisions without changing it."
+                                    : "Names use noct://site.relay-suffix/. The relay scopes registration; the publisher key controls updates."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                             LabeledContent("Publisher") {
                                 Text(site.publisherID?.shortIdentifier ?? "Preparing…")
@@ -924,6 +946,13 @@ struct WebsiteProjectEditorView: View {
                 model.updateSelectedSite { $0[keyPath: keyPath] = value }
                 refreshPreview(debounced: true)
             }
+        )
+    }
+
+    private var relayNamespaceBinding: Binding<String> {
+        Binding(
+            get: { model.selectedSite?.relayNamespaceID ?? "" },
+            set: { model.selectRelayNamespace($0) }
         )
     }
 

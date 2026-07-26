@@ -44,10 +44,19 @@ public actor NoctwebLabEngine {
 
     public func restore(_ publication: PublishedCapsule) async throws {
         try verifyStoredPublication(publication)
-        publicationsByAddress[publication.object.address] = publication
-        for hostRelayID in publication.hostRelayIDs {
-            try await network.restore(publication, onHost: hostRelayID)
+        try await validateNamespaceBinding(
+            address: publication.object.address,
+            relayNamespaceID: publication.object.relayNamespaceID,
+            protocolVersion: publication.object.protocolVersion
+        )
+        if let current = publicationsByAddress[publication.object.address] {
+            try validateRestoreSuccessor(publication, after: current)
         }
+        try await network.restore(
+            publication,
+            onHosts: publication.hostRelayIDs
+        )
+        publicationsByAddress[publication.object.address] = publication
         round = max(round, publication.finality.round)
     }
 
@@ -69,6 +78,11 @@ public actor NoctwebLabEngine {
         at date: Date = Date()
     ) async throws -> PublishedCapsule {
         try PublicationValidation.validateDraft(draft)
+        try await validateNamespaceBinding(
+            address: draft.address,
+            relayNamespaceID: draft.relayNamespaceID,
+            protocolVersion: CapsuleObject.currentProtocolVersion
+        )
         let bundle = try PublicationValidation.canonicalBundle(for: draft)
 
         let previous = publicationsByAddress[draft.address]
@@ -103,6 +117,7 @@ public actor NoctwebLabEngine {
         let object = CapsuleObject(
             publicationID: draft.publicationID,
             address: draft.address,
+            relayNamespaceID: draft.relayNamespaceID,
             publisherID: identity.publisherID,
             revision: revision,
             previousObjectID: previous?.head.claims.objectID,
@@ -118,6 +133,7 @@ public actor NoctwebLabEngine {
         let claims = PublisherHeadClaims(
             publicationID: draft.publicationID,
             address: draft.address,
+            relayNamespaceID: draft.relayNamespaceID,
             publisherID: identity.publisherID,
             publisherPublicKey: identity.publicKey,
             objectID: objectID,
@@ -214,6 +230,11 @@ public actor NoctwebLabEngine {
         guard let accepted = publicationsByAddress[address] else {
             throw NoctwebLabError.publicationNotFound(address)
         }
+        if accepted.object.protocolVersion == CapsuleObject.currentProtocolVersion {
+            _ = try NoctwebAddress.parse(address)
+        } else {
+            try PublicationValidation.validateLegacyAddress(address)
+        }
         guard let hosted = try await network.fetch(
             address: address,
             route: route
@@ -262,6 +283,8 @@ public actor NoctwebLabEngine {
                 hosted.head.claims.protocolVersion,
             canonicalObject.address == address,
             canonicalObject.publicationID == hosted.head.claims.publicationID,
+            canonicalObject.relayNamespaceID ==
+                hosted.head.claims.relayNamespaceID,
             canonicalObject.publisherID == hosted.head.claims.publisherID,
             canonicalObject.revision == hosted.head.claims.revision
         else {
@@ -351,6 +374,8 @@ public actor NoctwebLabEngine {
                 publication.head.claims.publicationID,
             publication.object.address ==
                 publication.head.claims.address,
+            publication.object.relayNamespaceID ==
+                publication.head.claims.relayNamespaceID,
             publication.object.publisherID ==
                 publication.head.claims.publisherID,
             publication.object.revision ==
@@ -376,6 +401,67 @@ public actor NoctwebLabEngine {
         else {
             throw NoctwebLabError.invalidFinality(
                 "restored publication evidence is invalid"
+            )
+        }
+    }
+
+    private func validateNamespaceBinding(
+        address: String,
+        relayNamespaceID: String?,
+        protocolVersion: String
+    ) async throws {
+        guard protocolVersion == CapsuleObject.currentProtocolVersion else {
+            return
+        }
+        let parsed = try NoctwebAddress.parse(address)
+        guard let relayNamespaceID else {
+            throw NoctwebLabError.canonicalEncoding(
+                "a relay namespace identity is required"
+            )
+        }
+        let topology = try await network.topology()
+        let matches = try topology.nodes
+            .filter { $0.role == .host }
+            .compactMap { try $0.relayNamespace() }
+            .contains {
+                $0.id == relayNamespaceID &&
+                    $0.suffix == parsed.relaySuffix
+            }
+        guard matches else {
+            throw NoctwebLabError.invalidRelayTopology(
+                "address suffix .\(parsed.relaySuffix) is not bound to relay namespace \(relayNamespaceID)"
+            )
+        }
+    }
+
+    private func validateRestoreSuccessor(
+        _ publication: PublishedCapsule,
+        after current: PublishedCapsule
+    ) throws {
+        guard current.headID != publication.headID else { return }
+        guard
+            current.object.publicationID == publication.object.publicationID,
+            current.object.publisherID == publication.object.publisherID,
+            current.object.relayNamespaceID ==
+                publication.object.relayNamespaceID
+        else {
+            throw NoctwebLabError.publisherMismatch(
+                expected: current.object.publisherID,
+                actual: publication.object.publisherID
+            )
+        }
+        guard current.object.revision < publication.object.revision else {
+            throw NoctwebLabError.invalidFinality(
+                "restored publication revision is stale or conflicting"
+            )
+        }
+        guard
+            publication.head.claims.previousHeadID == current.headID,
+            publication.object.previousObjectID ==
+                current.head.claims.objectID
+        else {
+            throw NoctwebLabError.invalidFinality(
+                "restored publication does not continue the accepted head"
             )
         }
     }

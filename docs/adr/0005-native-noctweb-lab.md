@@ -24,7 +24,7 @@ Noctweb Lab is a native macOS SwiftUI application distributed as a signed
 - The native Design/Code/Preview editor works with ordinary website files.
   Visual blocks generate normal HTML, CSS, and JavaScript; Code mode and folder
   import accept agent-authored projects and self-contained production builds.
-- The `noctweb-lab-v1` runtime accepts only bounded canonical website bundles
+- The `noctweb-lab-v2` runtime accepts only bounded canonical website bundles
   after publisher and object verification. It renders those files with WebKit
   under a publication-scoped custom origin, a non-persistent store, no native
   message bridge, and no website access to external network resources.

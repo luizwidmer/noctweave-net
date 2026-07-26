@@ -31,14 +31,17 @@ The user-facing product is **Noctweb**.
 - Internal Noctweb addresses may use `noct://` while portable external-link
   handling remains a separate compatibility decision.
 
-The current Lab profile is named `noctweb-lab-v1`. It is explicitly
-incompatible and backed by deterministic mock consensus. Its signed object
+The original Lab profile was named `noctweb-lab-v1`. The relay-scoped address
+work in ADR 0006 superseded it with `noctweb-lab-v2`, which is still explicitly
+experimental and backed by deterministic mock consensus. Its signed object
 contains a bounded canonical bundle of ordinary website files. This supports
 Lab-generated HTML, CSS, and JavaScript as well as self-contained production
 builds from client-side frameworks such as React and Vite. Every lab
 publication still requires its own local publisher identity and signed head;
 the lab signature suite and head encoding remain temporary. Stable protocol
-formats replace `noctweb-lab-v1` rather than inherit compatibility from it.
+formats may replace the Lab profiles rather than inherit compatibility from
+them. The native app preserves signed v1 publications without silently
+rewriting their committed addresses; only unpublished v1 drafts migrate.
 
 The Lab persists private publisher keys only in the macOS Keychain and renders
 only an exact publisher-authenticated website bundle. The website runs in

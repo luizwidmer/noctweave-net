@@ -6,7 +6,8 @@
 - Choose terminology for publisher IDs, heads, objects, and capabilities.
 - Preserve the accepted invariant that every publication has a distinct
   cryptographic publisher identity; choose its stable suite and rotation rules.
-- Decide whether public mutable naming is in the first protocol profile.
+- Specify the accepted relay-scoped namespace, including canonical labels,
+  suffix allocation, finalized records, and deterministic vectors.
 - Record accepted changes as ADRs.
 
 Exit gate: architecture review accepts the trust boundaries and non-goals.
@@ -23,14 +24,15 @@ Exit gate: deterministic cross-language vectors and bounded-decoder tests pass.
 ### Noctweb Lab track
 
 Noctweb Lab begins during Phase 1 with the explicitly incompatible
-`noctweb-lab-v1` website-bundle profile. It is a native macOS SwiftUI
-application with a Design/Code/Preview editor, mock consensus, independently
-modeled standard, passthrough, and host relays, direct and passthrough
-retrieval, and publication-scoped Keychain identity. Ordinary static and
-client-side website files run only after verification in an isolated,
-publication-scoped WebKit canvas. The Lab is the continuous test surface for
-every later phase; temporary lab objects never become protocol compatibility
-promises. The Lab itself must not be deployed as a website or PWA.
+`noctweb-lab-v2` website-bundle and relay-scoped namespace profile. It is a
+native macOS SwiftUI application with a Design/Code/Preview editor, mock
+consensus, independently modeled standard, passthrough, and host relays,
+canonical `noct://` name allocation, direct and passthrough retrieval, and
+publication-scoped Keychain identity. Ordinary static and client-side website
+files run only after verification in an isolated, publication-scoped WebKit
+canvas. The Lab is the continuous test surface for every later phase; temporary
+lab objects never become protocol compatibility promises. The Lab itself must
+not be deployed as a website or PWA.
 
 ## Phase 2: Standard relay adapter
 

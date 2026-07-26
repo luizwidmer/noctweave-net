@@ -81,14 +81,45 @@ enum PublisherSignatureDomain {
             )
         }
         var transcript = BinaryTranscript()
-        try transcript.append(
-            Data("org.noctweave.noctweb/signed-head/v1".utf8),
-            maximum: 64
-        )
+        let isCurrentProfile: Bool
+        switch claims.protocolVersion {
+        case CapsuleObject.currentProtocolVersion:
+            isCurrentProfile = true
+            guard
+                let relayNamespaceID = claims.relayNamespaceID,
+                RelayNamespace.isValidID(relayNamespaceID)
+            else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v2 heads require a relay namespace identity"
+                )
+            }
+            try transcript.append(
+                Data("org.noctweave.noctweb/signed-head/v2".utf8),
+                maximum: 64
+            )
+        case CapsuleObject.legacyProtocolVersion:
+            isCurrentProfile = false
+            guard claims.relayNamespaceID == nil else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "legacy noctweb-lab-v1 heads cannot claim a relay namespace"
+                )
+            }
+            try transcript.append(
+                Data("org.noctweave.noctweb/signed-head/v1".utf8),
+                maximum: 64
+            )
+        default:
+            throw NoctwebLabError.canonicalEncoding(
+                "unsupported publisher-head profile \(claims.protocolVersion)"
+            )
+        }
         transcript.data.append(1) // Ed25519 in the temporary lab-v0 registry.
         try transcript.append(claims.protocolVersion, maximum: 64)
         try transcript.append(claims.publicationID, maximum: 64)
         try transcript.append(claims.address, maximum: 2_048)
+        if isCurrentProfile {
+            try transcript.append(claims.relayNamespaceID!, maximum: 80)
+        }
         try transcript.append(claims.publisherID, maximum: 128)
         try transcript.append(claims.publisherPublicKey, maximum: 32)
         try transcript.append(claims.objectID, maximum: 128)

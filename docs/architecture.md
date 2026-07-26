@@ -32,6 +32,8 @@ The first protocol revision must define canonical encodings and bounds for:
 - `HostLocator`: a signed, expiring statement that an object may be fetched
   from a host relay;
 - `HostingReceipt`: a bounded host-signed acknowledgement of accepted storage.
+- `NamespaceRecord`: a consensus-finalized binding from one canonical
+  relay-scoped Noctweb name to a publication-scoped publisher identifier.
 
 Private capsule payloads and confidential link material are encrypted before
 they reach any relay. Public capsule objects may remain readable so they can be
@@ -42,7 +44,31 @@ The exact canonical format, signature suite, encryption suite, and digest
 suite remain open until test vectors are added. Provisional documents must not
 claim wire compatibility.
 
-## 3. Publish flow
+## 3. Relay-scoped Noctweb namespace
+
+The canonical base URL for a named site is:
+
+```text
+noct://<site>.<relay-suffix>/
+```
+
+A namespace relay is a host relay that owns one consensus-allocated suffix.
+The operator may request a custom suffix; otherwise the active profile derives
+a deterministic `r-<hash>` fallback from a dedicated namespace public key. The
+profile must define the exact normalization, digest input, encoding, and
+collision handling before interoperability is claimed.
+
+Site labels are allocated within a suffix. Consensus enforces global suffix
+uniqueness and uniqueness of each `(<site>, <relay-suffix>)` pair; the same
+site label may be allocated under another suffix.
+
+The finalized name record binds the URL to a publication-scoped publisher
+identifier. It does not transfer cryptographic authority to the namespace
+relay. The namespace relay is the name's host relay but is not required to be
+the current content host: object retrieval follows the publication's
+independently finalized host locators.
+
+## 4. Publish flow
 
 1. The local runtime constructs a bounded canonical object graph.
 2. Private portions are encrypted locally.
@@ -51,27 +77,33 @@ claim wire compatibility.
    passthrough relay.
 5. The client verifies hosting receipts and submits only the bounded public
    head and locator commitments required by the consensus profile.
-6. After finality, resolvers may treat the new head as current.
+6. For a named publication, an authorized suffix allocation submits the
+   canonical site-label binding to the publisher identifier.
+7. After finality, resolvers may treat the name binding and new head as
+   current.
 
 Uploading an object does not publish it. A hosting receipt does not establish
 publisher authority, consensus finality, or permanent availability.
 
-## 4. Resolve flow
+## 5. Resolve flow
 
-1. The runtime asks its `ConsensusAdapter` for the finalized publisher head
-   and permitted public locators.
-2. It chooses a host and retrieval path locally.
-3. It fetches the root and referenced objects directly or through a
+1. For a named URL, the runtime canonicalizes the address and asks its
+   `ConsensusAdapter` for the finalized publisher binding.
+2. It resolves the finalized publisher head and permitted public locators.
+3. It chooses a current content host and retrieval path locally; this need not
+   be the namespace relay.
+4. It fetches the root and referenced objects directly or through a
    passthrough relay.
-4. It verifies object IDs, signatures, version links, bounds, and policy.
-5. It decrypts authorized private portions locally.
-6. It renders or executes only within the runtime's sandbox and permission
+5. It verifies the namespace finality evidence, publisher signature, object
+   IDs, version links, bounds, and policy.
+6. It decrypts authorized private portions locally.
+7. It renders or executes only within the runtime's sandbox and permission
    model.
 
 A relay response is untrusted input. HTTPS protects the connection to an
 endpoint; it does not replace capsule verification.
 
-## 5. Private interaction
+## 6. Private interaction
 
 Private messages, invitations, collaborative updates, and capability delivery
 use standard Noctweave opaque routes. Noctweave Net must not introduce a global
@@ -81,7 +113,7 @@ Public publication continuity and private relationship continuity are separate
 authorities. A consensus-visible publisher key must never be silently reused
 as a Noctweave relationship or group key.
 
-## 6. Failure model
+## 7. Failure model
 
 - Missing host object: retry another finalized locator or surface unavailable.
 - Hash or signature mismatch: reject the object and quarantine bounded
@@ -93,8 +125,11 @@ as a Noctweave relationship or group key.
 - Host equivocation: object IDs make immutable-byte equivocation detectable;
   mutable publication authority still depends on finalized head ordering.
 - Stale locator: treat it as a retrieval failure, not an identity change.
+- Unavailable namespace relay: retain the finalized name-to-publisher binding
+  and try current content locators; do not treat relay reachability as
+  publisher authority.
 
-## 7. Privacy claim
+## 8. Privacy claim
 
 Noctweave Net aims for semantic opacity to infrastructure carrying encrypted
 private traffic. It does not claim endpoint invisibility or global anonymity.

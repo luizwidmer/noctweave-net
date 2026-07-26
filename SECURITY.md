@@ -16,6 +16,21 @@ confidentiality, identity, or code execution.
 - Consensus finalizes bounded public coordination state, not content safety or
   availability.
 
+## Namespace boundary
+
+A canonical `noct://<site>.<relay-suffix>/` name is a consensus-finalized
+public lookup key, not proof of publisher identity or content authenticity.
+Clients must verify that the resolved head is signed by the publisher authority
+bound to the name, then verify every fetched object. A namespace relay is an
+ordinary host relay; controlling its suffix, hosting account, or endpoint does
+not authorize a publication update.
+
+The namespace relay need not serve the publication's current bytes. Host
+selection follows independently finalized locator state, and every host
+response remains untrusted. Consensus must reject duplicate global suffixes and
+duplicate site labels within one suffix. The same site label under different
+suffixes is intentionally a different name.
+
 ## Known metadata
 
 Depending on the path, operators and network observers may see endpoint
@@ -48,6 +63,8 @@ after restart when interrupted.
 ## Mandatory implementation properties
 
 - canonical and domain-separated hashes and signatures;
+- canonical name parsing, deterministic fallback-suffix derivation, and
+  consensus-proof verification;
 - publisher-identity derivation and signed-head verification before rendering;
 - strict bounded decoding;
 - client-side encryption for private content;

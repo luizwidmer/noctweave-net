@@ -13,6 +13,9 @@ submitPublisherHead(proposal)
 resolveFinalizedHead(publisherID)
 submitHostLocators(update)
 resolveFinalizedLocators(objectID)
+claimRelaySuffix(claim)
+registerNoctwebName(record)
+resolveFinalizedNoctwebName(site, relaySuffix)
 currentProtocolEpoch()
 ```
 
@@ -26,6 +29,9 @@ independent verification.
 
 - publisher head ordering and continuity commitments;
 - bounded public host locator sets;
+- globally unique relay-suffix allocations, including custom suffixes and the
+  deterministic `r-<hash>` fallback defined by the active profile;
+- unique site-label bindings within each suffix;
 - protocol epochs and supported mandatory suite identifiers;
 - explicit public revocations defined by a future profile;
 - governance state required to interpret those records.
@@ -55,6 +61,12 @@ profile?" It does not answer:
 Publisher signatures, object hashes, runtime policy, and local capability
 checks remain mandatory after consensus verification.
 
+A finalized `noct://<site>.<relay-suffix>/` record selects a
+publication-scoped publisher identifier. It does not authorize the suffix
+operator to sign publisher heads and does not require the namespace relay to
+serve current content. Consensus resolves independently finalized host
+locators after resolving the name.
+
 ## Availability
 
 Consensus records locators, not replicas. A host receipt is evidence of a
@@ -72,6 +84,10 @@ Before a consensus profile can be called supported, it must specify:
 - light-client or equivalent verification;
 - validator or membership transition rules;
 - maximum record sizes and locator counts;
+- canonical site and suffix syntax, normalization, allocation, transfer,
+  expiry, revocation, and conflict behavior;
+- exact deterministic fallback-suffix derivation, encoding, length, and
+  collision handling;
 - replay, expiry, and clock assumptions;
 - denial-of-service costs and admission policy;
 - privacy leakage of queries and submissions;

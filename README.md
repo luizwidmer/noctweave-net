@@ -24,7 +24,7 @@ publisher key
 
 - Immutable objects are addressed by a digest of canonical bytes.
 - A publisher key signs proposed publication heads.
-- Consensus finalizes shared public head and locator state.
+- Consensus finalizes shared public head, locator, and namespace state.
 - Host relays store and serve capsule bytes.
 - Standard relays carry private Noctweave traffic.
 - Passthrough relays forward bounded opaque exchanges to an explicit next hop.
@@ -32,6 +32,27 @@ publisher key
 
 Location is replaceable. A host or passthrough relay can disappear without
 changing a capsule object's identity.
+
+## Noctweb namespace
+
+The canonical public base URL for a named site is:
+
+```text
+noct://<site>.<relay-suffix>/
+```
+
+The suffix belongs to a namespace relay, which is an ordinary host relay.
+Operators may request a globally unique custom suffix. When they do not, the
+active profile derives a deterministic `r-<hash>` suffix from the relay's
+stable identity. Site-label allocation is scoped to one suffix, so the same
+label may exist under different suffixes without conflict.
+
+Consensus finalizes global suffix allocation and each unique
+`(<site>, <relay-suffix>)` mapping. The mapping identifies a
+publication-scoped publisher authority; it does not make the suffix operator
+the publisher. The namespace relay is also not required to be a publication's
+current content host. Readers use finalized host locators and still verify the
+publisher head and exact object bytes.
 
 ## Relay topology
 
@@ -57,8 +78,8 @@ The transport integration is implemented by Noctweave's provisional
 
 Consensus replaces relay federation, discovery coordination, and shared
 publication ordering for Noctweave Net. It finalizes only bounded public
-commitments such as publisher heads, host locators, protocol epochs, and
-revocations defined by the eventual consensus profile.
+commitments such as namespace allocations, publisher heads, host locators,
+protocol epochs, and revocations defined by the eventual consensus profile.
 
 Consensus does not:
 
@@ -107,6 +128,9 @@ SECURITY.md                Threat model summary and reporting policy
    OpenAI Sites dependency, PWA shell, Electron runtime, or remote-origin app
    shell. Its verified website canvas uses an isolated WebKit runtime only after
    the Lab has resolved and authenticated a signed website bundle.
+10. Canonical named sites use `noct://<site>.<relay-suffix>/`. Namespace relays
+    are host relays, consensus owns global allocation, and publisher signatures
+    remain the publication authority.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -117,7 +141,7 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 - traffic-analysis resistance or guaranteed anonymity;
 - arbitrary server-side capsule execution;
 - browser compatibility without a Noctweave Net runtime;
-- migration compatibility with pre-release object formats;
+- automatic migration compatibility with arbitrary pre-release object formats;
 - a global account, device, or recovery system.
 
 ## Status
@@ -127,11 +151,12 @@ Noctweave. This repository documents their integration contract; Noctweb Lab
 currently exercises matching deterministic in-process adapters rather than
 connecting to operator relay endpoints. The Lab is a runnable native macOS
 application for the explicitly incompatible
-`noctweb-lab-v1` website-bundle profile. It edits ordinary HTML, CSS,
-JavaScript, and asset files; imports production builds from tools such as React
-and Vite; publishes with publication-scoped Keychain identities; simulates all
-three relay roles; and resolves through direct or passthrough paths. Verified
-client-side sites run in a publication-scoped, network-isolated WebKit canvas
+`noctweb-lab-v2` website-bundle and relay-scoped namespace profile. It edits
+ordinary HTML, CSS, JavaScript, and asset files; imports production builds from
+tools such as React and Vite; publishes with publication-scoped Keychain
+identities; simulates all three relay roles; allocates canonical `noct://`
+names; and resolves through direct or passthrough paths. Verified client-side
+sites run in a publication-scoped, network-isolated WebKit canvas
 inside the App Sandbox. Project, workspace, source-file, visual-block, and
 publisher-key deletion all require explicit destructive confirmation.
 The stable object graph, consensus profile, production runtime, and

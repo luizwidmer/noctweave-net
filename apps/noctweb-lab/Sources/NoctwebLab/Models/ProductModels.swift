@@ -155,6 +155,8 @@ struct LabRelayNode: Identifiable, Codable, Hashable {
     var isOnline: Bool
     var latencyMilliseconds: Int
     var retainedObjects: Int
+    var relayNamespaceID: String? = nil
+    var namespaceSuffix: String? = nil
 }
 
 enum TrustEvidenceKind: String, CaseIterable, Codable, Identifiable {
@@ -345,6 +347,7 @@ struct SiteSourceFile: Identifiable, Codable, Hashable {
 struct SiteProject: Identifiable, Codable, Hashable {
     let id: UUID
     var address: String
+    var relayNamespaceID: String? = nil
     var title: String
     var subtitle: String
     var body: String
@@ -402,6 +405,7 @@ enum RuntimeResult: Equatable {
 struct ResolvedSiteSnapshot: Equatable {
     let sourceSiteID: UUID
     let address: String
+    let relayNamespaceID: String?
     let title: String
     let subtitle: String
     let body: String
@@ -453,14 +457,22 @@ struct Workspace: Identifiable, Codable, Hashable {
 
 extension Workspace {
     static func starter() -> Workspace {
-        Workspace(
+        let topology = RelayTopology.labDefault
+        let primaryNamespace = try! topology.nodes
+            .first { $0.id == "host-lisbon" }!
+            .relayNamespace()!
+        return Workspace(
             id: UUID(),
             name: "Local development",
             createdAt: Date(),
             sites: [
                 SiteProject(
                     id: UUID(),
-                    address: "noct://quiet-garden/",
+                    address: try! NoctwebAddress(
+                        siteLabel: "quiet-garden",
+                        relaySuffix: primaryNamespace.suffix
+                    ).canonicalString,
+                    relayNamespaceID: primaryNamespace.id,
                     title: "A garden with no address",
                     subtitle: "Field notes from a site that belongs to its publisher, not its host.",
                     body: """
@@ -505,8 +517,9 @@ extension Workspace {
                     ]
                 )
             ],
-            relays: RelayTopology.labDefault.nodes.map { node in
-                LabRelayNode(
+            relays: topology.nodes.map { node in
+                let namespace = try? node.relayNamespace()
+                return LabRelayNode(
                     id: node.id,
                     name: node.name,
                     role: LabRelayRole(rawValue: node.role.rawValue)!,
@@ -518,7 +531,9 @@ extension Workspace {
                     isOnline: node.isOnline,
                     latencyMilliseconds: node.role == .standard ? 18 :
                         (node.role == .passthrough ? 41 : 32),
-                    retainedObjects: 0
+                    retainedObjects: 0,
+                    relayNamespaceID: namespace?.id,
+                    namespaceSuffix: namespace?.suffix
                 )
             },
             runs: []

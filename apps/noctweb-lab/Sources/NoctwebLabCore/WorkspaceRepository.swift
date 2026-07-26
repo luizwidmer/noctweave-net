@@ -57,6 +57,7 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
         else {
             throw NoctwebLabError.workspaceSchema(snapshot.schemaVersion)
         }
+        _ = try RelayTopology(nodes: snapshot.relays)
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),

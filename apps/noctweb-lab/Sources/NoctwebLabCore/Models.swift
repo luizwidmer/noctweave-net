@@ -29,6 +29,8 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
     public let role: RelayRole
     public var endpoint: URL
     public var isOnline: Bool
+    public var namespacePublicKey: Data?
+    public var namespaceSuffix: String?
 
     public var module: RelayModule {
         role.module
@@ -39,24 +41,99 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
         name: String,
         role: RelayRole,
         endpoint: URL,
-        isOnline: Bool = true
+        isOnline: Bool = true,
+        namespacePublicKey: Data? = nil,
+        namespaceSuffix: String? = nil
     ) {
         self.id = id
         self.name = name
         self.role = role
         self.endpoint = endpoint
         self.isOnline = isOnline
+        self.namespacePublicKey = namespacePublicKey
+        self.namespaceSuffix = namespaceSuffix
+    }
+
+    public func relayNamespace() throws -> RelayNamespace? {
+        guard role == .host else { return nil }
+        guard let namespacePublicKey else {
+            throw NoctwebLabError.invalidRelayTopology(
+                "host relay \(id) is missing its namespace public key"
+            )
+        }
+        return try RelayNamespace(
+            publicKey: namespacePublicKey,
+            operatorSuffix: namespaceSuffix
+        )
     }
 }
 
 public struct RelayTopology: Codable, Equatable, Sendable {
     public var nodes: [RelayNode]
 
+    private enum CodingKeys: String, CodingKey {
+        case nodes
+    }
+
     public init(nodes: [RelayNode]) throws {
         guard Set(nodes.map(\.id)).count == nodes.count else {
             throw NoctwebLabError.invalidRelayTopology("relay IDs must be unique")
         }
+
+        var namespaceIDs = Set<String>()
+        var namespaceSuffixes = Set<String>()
+        for node in nodes {
+            if node.role != .host {
+                guard
+                    node.namespacePublicKey == nil,
+                    node.namespaceSuffix == nil
+                else {
+                    throw NoctwebLabError.invalidRelayTopology(
+                        "only host relays may advertise a Noctweb namespace"
+                    )
+                }
+                continue
+            }
+
+            guard let namespace = try node.relayNamespace() else {
+                throw NoctwebLabError.invalidRelayTopology(
+                    "host relay \(node.id) has no namespace"
+                )
+            }
+            guard namespaceIDs.insert(namespace.id).inserted else {
+                throw NoctwebLabError.invalidRelayTopology(
+                    "relay namespace identities must be unique"
+                )
+            }
+            guard namespaceSuffixes.insert(namespace.suffix).inserted else {
+                throw NoctwebLabError.invalidRelayTopology(
+                    "relay namespace suffixes must be unique"
+                )
+            }
+        }
         self.nodes = nodes
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedNodes = try container.decode(
+            [RelayNode].self,
+            forKey: .nodes
+        )
+        do {
+            try self.init(nodes: decodedNodes)
+        } catch {
+            throw DecodingError.dataCorruptedError(
+                forKey: .nodes,
+                in: container,
+                debugDescription: error.localizedDescription
+            )
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(nodes, forKey: .nodes)
     }
 
     public func nodes(with role: RelayRole) -> [RelayNode] {
@@ -67,6 +144,7 @@ public struct RelayTopology: Codable, Equatable, Sendable {
 public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
     public var publicationID: String
     public var address: String
+    public var relayNamespaceID: String?
     public var title: String
     public var subtitle: String
     public var body: String
@@ -76,6 +154,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
     public init(
         publicationID: String,
         address: String,
+        relayNamespaceID: String? = nil,
         title: String,
         subtitle: String,
         body: String,
@@ -84,6 +163,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
     ) {
         self.publicationID = publicationID
         self.address = address
+        self.relayNamespaceID = relayNamespaceID
         self.title = title
         self.subtitle = subtitle
         self.body = body
@@ -93,11 +173,13 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
 }
 
 public struct CapsuleObject: Codable, Equatable, Sendable {
-    public static let currentProtocolVersion = "noctweb-lab-v1"
+    public static let currentProtocolVersion = "noctweb-lab-v2"
+    public static let legacyProtocolVersion = "noctweb-lab-v1"
 
     public let protocolVersion: String
     public let publicationID: String
     public let address: String
+    public let relayNamespaceID: String?
     public let publisherID: String
     public let revision: UInt64
     public let previousObjectID: String?
@@ -111,6 +193,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         protocolVersion: String = CapsuleObject.currentProtocolVersion,
         publicationID: String,
         address: String,
+        relayNamespaceID: String? = nil,
         publisherID: String,
         revision: UInt64,
         previousObjectID: String?,
@@ -123,6 +206,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         self.protocolVersion = protocolVersion
         self.publicationID = publicationID
         self.address = address
+        self.relayNamespaceID = relayNamespaceID
         self.publisherID = publisherID
         self.revision = revision
         self.previousObjectID = previousObjectID
@@ -138,6 +222,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
     public let protocolVersion: String
     public let publicationID: String
     public let address: String
+    public let relayNamespaceID: String?
     public let publisherID: String
     public let publisherPublicKey: Data
     public let objectID: String
@@ -149,6 +234,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
         protocolVersion: String = CapsuleObject.currentProtocolVersion,
         publicationID: String,
         address: String,
+        relayNamespaceID: String? = nil,
         publisherID: String,
         publisherPublicKey: Data,
         objectID: String,
@@ -159,6 +245,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
         self.protocolVersion = protocolVersion
         self.publicationID = publicationID
         self.address = address
+        self.relayNamespaceID = relayNamespaceID
         self.publisherID = publisherID
         self.publisherPublicKey = publisherPublicKey
         self.objectID = objectID
@@ -324,13 +411,20 @@ public extension RelayTopology {
                 id: "host-lisbon",
                 name: "Lisbon Host",
                 role: .host,
-                endpoint: URL(string: "https://lisbon.host.noctweave.invalid")!
+                endpoint: URL(string: "https://lisbon.host.noctweave.invalid")!,
+                namespacePublicKey: RelayNamespace.deterministicLabPublicKey(
+                    seed: "host-lisbon"
+                ),
+                namespaceSuffix: "lisbon"
             ),
             RelayNode(
                 id: "host-salvador",
                 name: "Salvador Host",
                 role: .host,
-                endpoint: URL(string: "https://salvador.host.noctweave.invalid")!
+                endpoint: URL(string: "https://salvador.host.noctweave.invalid")!,
+                namespacePublicKey: RelayNamespace.deterministicLabPublicKey(
+                    seed: "host-salvador"
+                )
             ),
         ])
     }
@@ -388,7 +482,14 @@ public struct WorkspacePublication: Codable, Equatable, Identifiable, Sendable {
 }
 
 public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case selectedPublicationID
+        case publications
+        case relays
+    }
 
     public var schemaVersion: Int
     public var selectedPublicationID: String?
@@ -413,6 +514,52 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         self.selectedPublicationID = selectedPublicationID
         self.publications = publications
         self.relays = relays
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let schemaVersion = try container.decode(
+            Int.self,
+            forKey: .schemaVersion
+        )
+        let selectedPublicationID = try container.decodeIfPresent(
+            String.self,
+            forKey: .selectedPublicationID
+        )
+        let publications = try container.decode(
+            [WorkspacePublication].self,
+            forKey: .publications
+        )
+        let relays = try container.decode(
+            [RelayNode].self,
+            forKey: .relays
+        )
+        do {
+            _ = try RelayTopology(nodes: relays)
+        } catch {
+            throw DecodingError.dataCorruptedError(
+                forKey: .relays,
+                in: container,
+                debugDescription: error.localizedDescription
+            )
+        }
+        self.init(
+            schemaVersion: schemaVersion,
+            selectedPublicationID: selectedPublicationID,
+            publications: publications,
+            relays: relays
+        )
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encodeIfPresent(
+            selectedPublicationID,
+            forKey: .selectedPublicationID
+        )
+        try container.encode(publications, forKey: .publications)
+        try container.encode(relays, forKey: .relays)
     }
 }
 

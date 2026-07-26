@@ -23,11 +23,21 @@ final class NoctwebLabCoreTests: XCTestCase {
 
     private func draft(
         publicationID: String = UUID().uuidString.lowercased(),
-        bundle: WebsiteBundle? = nil
+        bundle: WebsiteBundle? = nil,
+        siteLabel: String = "quiet-garden",
+        namespaceRelayID: String = "host-lisbon"
     ) -> CapsuleSiteDraft {
-        CapsuleSiteDraft(
+        let node = RelayTopology.labDefault.nodes.first {
+            $0.id == namespaceRelayID
+        }!
+        let namespace = try! node.relayNamespace()!
+        return CapsuleSiteDraft(
             publicationID: publicationID,
-            address: "noct://quiet-garden/",
+            address: try! NoctwebAddress(
+                siteLabel: siteLabel,
+                relaySuffix: namespace.suffix
+            ).canonicalString,
+            relayNamespaceID: namespace.id,
             title: "Quiet Garden",
             subtitle: "A native Noctweb publication",
             body: "Verified structured content.",
@@ -75,6 +85,302 @@ final class NoctwebLabCoreTests: XCTestCase {
         XCTAssertEqual(RelayRole.host.module.rawValue, "nw.net-host@1")
     }
 
+    func testRelayNamespacesSupportCustomAndStableAutomaticSuffixes() throws {
+        let topology = RelayTopology.labDefault
+        let lisbon = try XCTUnwrap(
+            topology.nodes.first { $0.id == "host-lisbon" }?.relayNamespace()
+        )
+        let salvadorNode = try XCTUnwrap(
+            topology.nodes.first { $0.id == "host-salvador" }
+        )
+        let salvador = try XCTUnwrap(salvadorNode.relayNamespace())
+
+        XCTAssertEqual(lisbon.suffix, "lisbon")
+        XCTAssertTrue(lisbon.usesCustomSuffix)
+        XCTAssertTrue(salvador.suffix.hasPrefix("r-"))
+        XCTAssertEqual(salvador.suffix.count, 18)
+        XCTAssertFalse(salvador.usesCustomSuffix)
+        XCTAssertEqual(
+            salvador,
+            try RelayNamespace(
+                publicKey: try XCTUnwrap(salvadorNode.namespacePublicKey)
+            )
+        )
+        XCTAssertNotEqual(lisbon.id, salvador.id)
+    }
+
+    func testCanonicalNoctwebAddressRejectsAliasSpellings() throws {
+        let valid = try NoctwebAddress.parse(
+            "noct://quiet-garden.lisbon/"
+        )
+        XCTAssertEqual(valid.siteLabel, "quiet-garden")
+        XCTAssertEqual(valid.relaySuffix, "lisbon")
+        XCTAssertEqual(valid.canonicalString, "noct://quiet-garden.lisbon/")
+
+        let invalid = [
+            "noct://quiet-garden/",
+            "noct://Quiet-Garden.lisbon/",
+            "noct://quiet-garden.lisbon",
+            "noct://quiet-garden.lisbon./",
+            "noct://quiet-garden.lisbon/path",
+            "noct://quiet-garden.lisbon/?query=1",
+            "noct://quiet-garden.lisbon/#fragment",
+            "noct://user@quiet-garden.lisbon/",
+            "noct://quiet-garden.lisbon:9340/",
+            "noct://quiet%2dgarden.lisbon/",
+            "noct://quiet.garden.lisbon/",
+            "noct://xn--garden.lisbon/",
+        ]
+        for address in invalid {
+            XCTAssertThrowsError(
+                try NoctwebAddress.parse(address),
+                "accepted noncanonical address \(address)"
+            )
+        }
+    }
+
+    func testRelayTopologyRejectsDuplicateVisibleNamespaceSuffix() throws {
+        var nodes = RelayTopology.labDefault.nodes
+        let salvadorIndex = try XCTUnwrap(
+            nodes.firstIndex { $0.id == "host-salvador" }
+        )
+        nodes[salvadorIndex].namespaceSuffix = ".lisbon"
+
+        XCTAssertThrowsError(try RelayTopology(nodes: nodes)) { error in
+            guard case NoctwebLabError.invalidRelayTopology = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testSameSiteLabelCanExistInDifferentRelayNamespaces() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let lisbon = try await engine.publish(
+            draft: draft(namespaceRelayID: "host-lisbon")
+        )
+        let salvador = try await engine.publish(
+            draft: draft(namespaceRelayID: "host-salvador")
+        )
+
+        XCTAssertNotEqual(lisbon.object.address, salvador.object.address)
+        XCTAssertNotEqual(
+            lisbon.object.relayNamespaceID,
+            salvador.object.relayNamespaceID
+        )
+        XCTAssertEqual(
+            try NoctwebAddress.parse(lisbon.object.address).siteLabel,
+            try NoctwebAddress.parse(salvador.object.address).siteLabel
+        )
+        _ = try await engine.resolve(
+            address: lisbon.object.address,
+            preference: .direct
+        )
+        _ = try await engine.resolve(
+            address: salvador.object.address,
+            preference: .direct
+        )
+    }
+
+    func testSameFullNameCannotBeClaimedByAnotherPublication() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let first = draft()
+        _ = try await engine.publish(draft: first)
+
+        let second = draft()
+        do {
+            _ = try await engine.publish(draft: second)
+            XCTFail("a finalized relay-scoped name must have one publication")
+        } catch let error as NoctwebLabError {
+            XCTAssertEqual(
+                error,
+                .publisherMismatch(
+                    expected: first.publicationID,
+                    actual: second.publicationID
+                )
+            )
+        }
+    }
+
+    func testAddressSuffixMustMatchSignedRelayNamespaceIdentity() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        var mismatched = draft(namespaceRelayID: "host-lisbon")
+        let salvador = try XCTUnwrap(
+            RelayTopology.labDefault.nodes
+                .first { $0.id == "host-salvador" }?
+                .relayNamespace()
+        )
+        mismatched.relayNamespaceID = salvador.id
+
+        do {
+            _ = try await engine.publish(draft: mismatched)
+            XCTFail("suffix and full relay namespace identity must be bound")
+        } catch let error as NoctwebLabError {
+            guard case .invalidRelayTopology = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testRestoreCannotReplaceFinalizedNameWithAnotherPublisher() async throws {
+        let firstEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let secondEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let first = try await firstEngine.publish(draft: draft())
+        let second = try await secondEngine.publish(draft: draft())
+        let restoreEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+
+        try await restoreEngine.restore(first)
+        do {
+            try await restoreEngine.restore(second)
+            XCTFail("restore must not rebind a finalized name")
+        } catch let error as NoctwebLabError {
+            XCTAssertEqual(
+                error,
+                .publisherMismatch(
+                    expected: first.object.publisherID,
+                    actual: second.object.publisherID
+                )
+            )
+        }
+
+        let resolved = try await restoreEngine.resolve(
+            address: first.object.address,
+            preference: .direct
+        )
+        XCTAssertEqual(resolved.object.publisherID, first.object.publisherID)
+        XCTAssertEqual(resolved.headID, first.headID)
+    }
+
+    func testRestoreCannotRollBackANewerAcceptedRevision() async throws {
+        let source = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        var initialDraft = draft(bundle: bundle())
+        let first = try await source.publish(draft: initialDraft)
+        initialDraft.title = "Quiet Garden, revised"
+        let second = try await source.publish(draft: initialDraft)
+        let restoreEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+
+        try await restoreEngine.restore(second)
+        do {
+            try await restoreEngine.restore(first)
+            XCTFail("restore must not roll a finalized name back")
+        } catch let error as NoctwebLabError {
+            guard case .invalidFinality = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+
+        let resolved = try await restoreEngine.resolve(
+            address: second.object.address,
+            preference: .direct
+        )
+        XCTAssertEqual(resolved.object.revision, 2)
+        XCTAssertEqual(resolved.headID, second.headID)
+    }
+
+    func testLegacyV1ReadValidationMatchesOriginalAddressProfile() throws {
+        let publicationID = UUID().uuidString.lowercased()
+        let identity = try PublicationSigningIdentity(
+            publicationID: publicationID,
+            rawPrivateKey: Data(repeating: 9, count: 32)
+        )
+        let acceptedAddresses = [
+            "noct://legacy-site",
+            "noct://legacy-site/",
+            "noct://legacy.example/",
+            "noct://user@legacy.example:9340/?mode=old#section",
+        ]
+        let legacyBundle = try WebsiteBundleValidation.canonicalized(bundle())
+
+        for address in acceptedAddresses {
+            let object = CapsuleObject(
+                protocolVersion: CapsuleObject.legacyProtocolVersion,
+                publicationID: publicationID,
+                address: address,
+                publisherID: identity.publisherID,
+                revision: 1,
+                previousObjectID: nil,
+                title: "Legacy",
+                subtitle: "",
+                body: "Signed under the v1 read profile.",
+                accentHex: "#4f8f77",
+                bundle: legacyBundle
+            )
+            XCTAssertNoThrow(try PublicationValidation.validateObject(object))
+
+            let claims = PublisherHeadClaims(
+                protocolVersion: CapsuleObject.legacyProtocolVersion,
+                publicationID: publicationID,
+                address: address,
+                publisherID: identity.publisherID,
+                publisherPublicKey: identity.publicKey,
+                objectID: "sha256:" + String(repeating: "a", count: 64),
+                revision: 1,
+                previousHeadID: nil,
+                issuedAtMilliseconds: 1_700_000_000_000
+            )
+            let signature = try identity.sign(headClaims: claims)
+            XCTAssertTrue(
+                PublicationSigningIdentity.verify(
+                    signature: signature,
+                    headClaims: claims
+                )
+            )
+        }
+
+        XCTAssertThrowsError(
+            try PublicationValidation.validateLegacyAddress(
+                "https://legacy-site/"
+            )
+        )
+        XCTAssertThrowsError(
+            try PublicationValidation.validateLegacyAddress("noct:///")
+        )
+    }
+
+    func testWorkspaceDecodeAndSaveRejectInvalidRelayNamespaces() throws {
+        var nodes = RelayTopology.labDefault.nodes
+        let salvadorIndex = try XCTUnwrap(
+            nodes.firstIndex { $0.id == "host-salvador" }
+        )
+        nodes[salvadorIndex].namespaceSuffix = "lisbon"
+        let snapshot = WorkspaceSnapshot(
+            selectedPublicationID: nil,
+            publications: [],
+            relays: nodes
+        )
+        let encoded = try CanonicalJSON.encode(snapshot)
+
+        XCTAssertThrowsError(
+            try CanonicalJSON.decode(
+                WorkspaceSnapshot.self,
+                from: encoded
+            )
+        )
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = JSONWorkspaceRepository(
+            fileURL: root.appendingPathComponent("workspace.json")
+        )
+        XCTAssertThrowsError(try repository.save(snapshot))
+    }
+
     func testPublishAndResolveThroughDirectAndPassthroughRoutes() async throws {
         let engine = try NoctwebLabEngine(
             identityStore: InMemoryPublicationPrivateKeyStore()
@@ -116,7 +422,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             at: Date(timeIntervalSince1970: 1_700_000_000)
         )
 
-        XCTAssertEqual(publication.object.protocolVersion, "noctweb-lab-v1")
+        XCTAssertEqual(publication.object.protocolVersion, "noctweb-lab-v2")
         XCTAssertEqual(
             publication.object.bundle?.files.map(\.path),
             original.files.map(\.path).sorted()
@@ -374,6 +680,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             protocolVersion: object.protocolVersion,
             publicationID: object.publicationID,
             address: object.address,
+            relayNamespaceID: object.relayNamespaceID,
             publisherID: object.publisherID,
             revision: object.revision,
             previousObjectID: object.previousObjectID,
@@ -413,7 +720,13 @@ final class NoctwebLabCoreTests: XCTestCase {
         )
         let claims = PublisherHeadClaims(
             publicationID: publicationID,
-            address: "noct://quiet-garden/",
+            address: "noct://quiet-garden.lisbon/",
+            relayNamespaceID: try XCTUnwrap(
+                RelayTopology.labDefault.nodes
+                    .first { $0.id == "host-lisbon" }?
+                    .relayNamespace()?
+                    .id
+            ),
             publisherID: identity.publisherID,
             publisherPublicKey: identity.publicKey,
             objectID: "sha256:" + String(repeating: "a", count: 64),
@@ -432,6 +745,7 @@ final class NoctwebLabCoreTests: XCTestCase {
         let tampered = PublisherHeadClaims(
             publicationID: publicationID,
             address: claims.address,
+            relayNamespaceID: claims.relayNamespaceID,
             publisherID: claims.publisherID,
             publisherPublicKey: claims.publisherPublicKey,
             objectID: "sha256:" + String(repeating: "b", count: 64),
@@ -460,6 +774,7 @@ final class NoctwebLabCoreTests: XCTestCase {
                 draft: CapsuleSiteDraft(
                     publicationID: published.object.publicationID,
                     address: published.object.address,
+                    relayNamespaceID: published.object.relayNamespaceID,
                     title: published.object.title,
                     subtitle: published.object.subtitle,
                     body: published.object.body,

@@ -6,8 +6,9 @@ management, publisher authority, relay controls, and verification surfaces are
 native SwiftUI. The Lab is not a hosted website, progressive web app, browser
 extension, Electron bundle, or remote-origin WebView shell.
 
-The Lab currently implements the explicitly incompatible `noctweb-lab-v1`
-website-bundle profile. It is a local protocol simulator and
+The Lab currently implements the explicitly incompatible `noctweb-lab-v2`
+website-bundle and relay-scoped namespace profile. It is a local protocol
+simulator and
 product-development surface; it does not claim production consensus,
 wire-format compatibility, or production sandboxing. Its deterministic relay
 adapters model standard, passthrough, and host behavior but do not yet connect
@@ -56,7 +57,7 @@ dependencies and assets must be included in the imported build.
 
 ## Signed website bundles
 
-A `noctweb-lab-v1` object carries a canonical website bundle with:
+A `noctweb-lab-v2` object carries a canonical website bundle with:
 
 - one normalized relative entry path;
 - at most 512 files;
@@ -74,6 +75,29 @@ drafts, topology, revisions, and test runs are stored locally in Application
 Support. Standard, passthrough, and host relay roles remain independent, and
 the Lab reports integrity, publisher authority, and mock-consensus finality as
 separate evidence.
+
+## Relay-scoped names
+
+The Lab models canonical public base URLs as:
+
+```text
+noct://<site>.<relay-suffix>/
+```
+
+Each namespace relay is one of the Lab's host relays, not a fourth relay role.
+An operator may choose a custom suffix, or use the profile's deterministic
+`r-<hash>` fallback derived from a dedicated namespace public key. Site labels
+are unique only within one suffix, so two different suffixes may each allocate
+the same label.
+
+The Lab's deterministic topology rejects duplicate visible suffixes, and its
+in-process finality model rejects a second publication claiming the same full
+name. This is a local test stand-in: a production consensus profile must
+finalize globally unique suffix allocations and unique site-label bindings
+within each suffix. The binding resolves to the site's publication-scoped
+publisher identity. The namespace relay does not gain the publisher key and
+need not be the current content host; resolution uses current host locators and
+verifies the publisher signature and exact bundle bytes.
 
 ## Verified website runtime
 

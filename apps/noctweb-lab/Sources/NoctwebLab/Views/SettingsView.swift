@@ -15,6 +15,7 @@ struct SettingsView: View {
 
             Section("Publication Security") {
                 LabeledContent("Identity scope", value: "Per publication")
+                LabeledContent("Name scope", value: "Relay namespace")
                 LabeledContent("Renderer", value: "Isolated WebKit")
                 LabeledContent("Website scripts", value: "Same-publication only")
                 Text("Every site has a publisher-scoped Keychain identity. Only verified bundle bytes run, with no native bridge and website access to external network resources blocked by runtime policy.")
@@ -30,7 +31,7 @@ struct SettingsView: View {
             }
 
             Section("Experimental Profile") {
-                LabeledContent("Profile", value: "noctweb-lab-v1")
+                LabeledContent("Profile", value: "noctweb-lab-v2")
                 LabeledContent("Bundle limit", value: "512 files · 16 MB")
                 LabeledContent("Consensus", value: "Deterministic test adapter")
                 Text("This profile is a development surface and is not a stable Noctweave Net wire format.")

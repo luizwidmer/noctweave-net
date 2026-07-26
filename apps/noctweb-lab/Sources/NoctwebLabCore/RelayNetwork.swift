@@ -181,16 +181,65 @@ public actor InMemoryRelayNetwork {
 
     func restore(
         _ publication: PublishedCapsule,
-        onHost relayID: String
+        onHosts relayIDs: [String]
     ) throws {
-        try requireOnlineRelay(relayID, role: .host)
-        publicationsByHost[relayID, default: [:]][publication.object.address] =
-            HostedPublication(
+        let relayIDs = Array(Set(relayIDs)).sorted()
+        for relayID in relayIDs {
+            try requireOnlineRelay(relayID, role: .host)
+            if let current = publicationsByHost[relayID]?[
+                publication.object.address
+            ] {
+                try validateRestoreSuccessor(
+                    publication,
+                    after: current,
+                    relayID: relayID
+                )
+            }
+        }
+
+        for relayID in relayIDs {
+            publicationsByHost[relayID, default: [:]][
+                publication.object.address
+            ] = HostedPublication(
                 encodedObject: publication.encodedObject,
                 head: publication.head,
                 headID: publication.headID,
                 finality: publication.finality
             )
+        }
+    }
+
+    private func validateRestoreSuccessor(
+        _ publication: PublishedCapsule,
+        after current: HostedPublication,
+        relayID: String
+    ) throws {
+        guard current.headID != publication.headID else { return }
+        let currentClaims = current.head.claims
+        let candidateClaims = publication.head.claims
+        guard
+            currentClaims.publicationID == candidateClaims.publicationID,
+            currentClaims.publisherID == candidateClaims.publisherID,
+            currentClaims.relayNamespaceID ==
+                candidateClaims.relayNamespaceID
+        else {
+            throw NoctwebLabError.invalidFinality(
+                "host \(relayID) rejected a restored name owned by another publication"
+            )
+        }
+        guard currentClaims.revision < candidateClaims.revision else {
+            throw NoctwebLabError.invalidFinality(
+                "host \(relayID) rejected a stale restored revision"
+            )
+        }
+        guard
+            candidateClaims.previousHeadID == current.headID,
+            publication.object.previousObjectID == currentClaims.objectID
+        else {
+            throw NoctwebLabError.invalidFinality(
+                "host \(relayID) rejected a discontinuous restored revision"
+            )
+        }
     }
 
     private func validate(route: RelayRoute) throws -> String {

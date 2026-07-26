@@ -109,6 +109,7 @@ final class AppModel: ObservableObject {
             initialWorkspaces = [.starter()]
         }
         workspaces = initialWorkspaces
+        Self.migrateRelayNamespaces(in: &workspaces)
         for workspaceIndex in workspaces.indices {
             for siteIndex in workspaces[workspaceIndex].sites.indices {
                 WebsiteProjectBuilder.ensureProject(
@@ -150,6 +151,14 @@ final class AppModel: ObservableObject {
         return trustEvidence.first(where: { $0.id == inspectorEvidenceID })
     }
 
+    var availableRelayNamespaces: [LabRelayNode] {
+        activeWorkspace?.relays.filter {
+            $0.role == .host &&
+                $0.relayNamespaceID != nil &&
+                $0.namespaceSuffix != nil
+        } ?? []
+    }
+
     var canGoBack: Bool {
         runtimeHistoryIndex > 0
     }
@@ -175,9 +184,29 @@ final class AppModel: ObservableObject {
             return
         }
         let number = workspaces[workspaceIndex].sites.count + 1
+        guard
+            let namespaceRelay = workspaces[workspaceIndex].relays.first(
+                where: {
+                    $0.role == .host &&
+                        $0.relayNamespaceID != nil &&
+                        $0.namespaceSuffix != nil
+                }
+            ),
+            let relayNamespaceID = namespaceRelay.relayNamespaceID,
+            let namespaceSuffix = namespaceRelay.namespaceSuffix,
+            let address = try? NoctwebAddress(
+                siteLabel: "untitled-\(number)",
+                relaySuffix: namespaceSuffix
+            ).canonicalString
+        else {
+            operationError =
+                "Configure at least one host relay namespace before creating a site."
+            return
+        }
         var site = SiteProject(
             id: UUID(),
-            address: "noct://untitled-\(number)/",
+            address: address,
+            relayNamespaceID: relayNamespaceID,
             title: "Untitled publication",
             subtitle: "A new site for Noctweb.",
             body: "Start writing here.",
@@ -228,6 +257,37 @@ final class AppModel: ObservableObject {
 
         update(&workspaces[workspaceIndex].sites[siteIndex])
         markDraftChanged()
+    }
+
+    func selectRelayNamespace(_ relayNamespaceID: String) {
+        guard
+            let site = selectedSite,
+            site.publishedEnvelope == nil,
+            let relay = availableRelayNamespaces.first(where: {
+                $0.relayNamespaceID == relayNamespaceID
+            }),
+            let suffix = relay.namespaceSuffix
+        else { return }
+
+        let siteLabel: String
+        if let parsed = try? NoctwebAddress.parse(site.address) {
+            siteLabel = parsed.siteLabel
+        } else if let legacy = Self.legacySiteLabel(from: site.address) {
+            siteLabel = legacy
+        } else {
+            siteLabel = "untitled"
+        }
+        guard
+            let address = try? NoctwebAddress(
+                siteLabel: siteLabel,
+                relaySuffix: suffix
+            ).canonicalString
+        else { return }
+
+        updateSelectedSite {
+            $0.address = address
+            $0.relayNamespaceID = relayNamespaceID
+        }
     }
 
     func updateSelectedVisualSite(_ update: (inout SiteProject) -> Void) {
@@ -436,11 +496,31 @@ final class AppModel: ObservableObject {
     }
 
     func navigateRuntime() {
-        let address = runtimeAddress.trimmingCharacters(
+        let enteredAddress = runtimeAddress.trimmingCharacters(
             in: .whitespacesAndNewlines
         )
-        guard !address.isEmpty else {
+        guard !enteredAddress.isEmpty else {
             runtimeResult = .unavailable(message: "Enter a Noctweb address.")
+            return
+        }
+        let address: String
+        if let canonical = try? NoctwebAddress.parse(enteredAddress) {
+            address = canonical.canonicalString
+            runtimeAddress = address
+        } else if workspaces
+            .flatMap(\.sites)
+            .contains(where: {
+                $0.address == enteredAddress &&
+                    $0.publishedEnvelope != nil &&
+                    $0.relayNamespaceID == nil
+            })
+        {
+            address = enteredAddress
+        } else {
+            runtimeResult = .unavailable(
+                message:
+                    "Use a canonical address such as noct://site.relay-suffix/."
+            )
             return
         }
 
@@ -905,7 +985,10 @@ final class AppModel: ObservableObject {
             message: "Validating the address, entry point, file paths, media types, and bounded website bundle."
         )
         guard
-            initialSite.address.hasPrefix("noct://"),
+            (try? NoctwebAddress.parse(initialSite.address)) != nil,
+            initialSite.relayNamespaceID.map(
+                RelayNamespace.isValidID
+            ) == true,
             !initialSite.title.trimmingCharacters(
                 in: .whitespacesAndNewlines
             ).isEmpty,
@@ -915,7 +998,7 @@ final class AppModel: ObservableObject {
             )
         else {
             failPublication(
-                "Validation failed. A title, noct:// address, and existing website entry file are required."
+                "Validation failed. A title, canonical relay-scoped Noctweb address, signed namespace identity, and existing website entry file are required."
             )
             return
         }
@@ -1072,6 +1155,7 @@ final class AppModel: ObservableObject {
         let snapshot = ResolvedSiteSnapshot(
             sourceSiteID: sourceSiteID,
             address: object.address,
+            relayNamespaceID: object.relayNamespaceID,
             title: object.title,
             subtitle: object.subtitle,
             body: object.body,
@@ -1285,6 +1369,7 @@ final class AppModel: ObservableObject {
         CapsuleSiteDraft(
             publicationID: site.id.uuidString.lowercased(),
             address: site.address,
+            relayNamespaceID: site.relayNamespaceID,
             title: site.title,
             subtitle: site.subtitle,
             body: site.body,
@@ -1332,6 +1417,116 @@ final class AppModel: ObservableObject {
 
     private var coreRoute: LabRoute {
         routeMode == .direct ? .direct : .passthrough
+    }
+
+    private static func migrateRelayNamespaces(
+        in workspaces: inout [Workspace]
+    ) {
+        let defaults = RelayTopology.labDefault.nodes.reduce(
+            into: [String: RelayNamespace]()
+        ) { result, node in
+            if let namespace = try? node.relayNamespace() {
+                result[node.id] = namespace
+            }
+        }
+
+        for workspaceIndex in workspaces.indices {
+            for relayIndex in workspaces[workspaceIndex].relays.indices {
+                let relayID = workspaces[workspaceIndex].relays[relayIndex].id
+                guard let namespace = defaults[relayID] else { continue }
+                if workspaces[workspaceIndex].relays[relayIndex]
+                    .relayNamespaceID == nil
+                {
+                    workspaces[workspaceIndex].relays[relayIndex]
+                        .relayNamespaceID = namespace.id
+                }
+                if workspaces[workspaceIndex].relays[relayIndex]
+                    .namespaceSuffix == nil
+                {
+                    workspaces[workspaceIndex].relays[relayIndex]
+                        .namespaceSuffix = namespace.suffix
+                }
+            }
+
+            guard
+                let primary = workspaces[workspaceIndex].relays.first(
+                    where: {
+                        $0.role == .host &&
+                            $0.relayNamespaceID != nil &&
+                            $0.namespaceSuffix != nil
+                    }
+                ),
+                let primaryID = primary.relayNamespaceID,
+                let primarySuffix = primary.namespaceSuffix
+            else { continue }
+
+            for siteIndex in workspaces[workspaceIndex].sites.indices {
+                var site = workspaces[workspaceIndex].sites[siteIndex]
+                if let envelope = site.publishedEnvelope {
+                    if
+                        let publication = try? CanonicalJSON.decode(
+                            PublishedCapsule.self,
+                            from: envelope
+                        ),
+                        publication.object.protocolVersion ==
+                            CapsuleObject.currentProtocolVersion,
+                        publication.head.claims.protocolVersion ==
+                            CapsuleObject.currentProtocolVersion,
+                        let namespaceID =
+                            publication.object.relayNamespaceID,
+                        publication.head.claims.relayNamespaceID ==
+                            namespaceID
+                    {
+                        site.relayNamespaceID = namespaceID
+                    } else {
+                        // A signed v1 publication is immutable historical data.
+                        // Never infer v2 namespace state from its dotted address.
+                        site.relayNamespaceID = nil
+                    }
+                    workspaces[workspaceIndex].sites[siteIndex] = site
+                    continue
+                }
+                if let parsed = try? NoctwebAddress.parse(site.address) {
+                    if site.relayNamespaceID == nil,
+                       let namespace = workspaces[workspaceIndex].relays.first(
+                           where: { $0.namespaceSuffix == parsed.relaySuffix }
+                       )?.relayNamespaceID
+                    {
+                        site.relayNamespaceID = namespace
+                    }
+                } else if
+                    let label = legacySiteLabel(from: site.address),
+                    let migratedAddress = try? NoctwebAddress(
+                        siteLabel: label,
+                        relaySuffix: primarySuffix
+                    ).canonicalString
+                {
+                    site.address = migratedAddress
+                    site.relayNamespaceID = primaryID
+                }
+                workspaces[workspaceIndex].sites[siteIndex] = site
+            }
+        }
+    }
+
+    private static func legacySiteLabel(from address: String) -> String? {
+        guard
+            address.hasPrefix("noct://"),
+            address.hasSuffix("/")
+        else { return nil }
+        let label = String(
+            address
+                .dropFirst("noct://".count)
+                .dropLast()
+        )
+        guard
+            !label.contains("."),
+            (try? NoctwebAddress(
+                siteLabel: label,
+                relaySuffix: "legacy"
+            )) != nil
+        else { return nil }
+        return label
     }
 
     private func publishedCapsule(

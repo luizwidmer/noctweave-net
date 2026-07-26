@@ -82,7 +82,9 @@ It may:
 - issue bounded signed hosting receipts;
 - enforce tenant, storage, bandwidth, retention, and abuse policy;
 - mirror public objects when policy permits;
-- advertise expiring public retrieval endpoints through the consensus profile.
+- advertise expiring public retrieval endpoints through the consensus profile;
+- act as the namespace relay for one consensus-allocated suffix, including a
+  custom operator suffix or the profile's deterministic `r-<hash>` fallback.
 
 It must:
 
@@ -100,6 +102,22 @@ It must not:
 - finalize publisher heads;
 - possess private capsule keys by protocol requirement;
 - turn hosting credentials into a global Noctweave Net account.
+
+### Namespace function
+
+The namespace function is a host-relay capability, not a fourth relay role.
+Consensus owns global suffix uniqueness and unique site-label allocation within
+each suffix. A host relay may request a custom suffix or use the active
+profile's deterministic `r-<hash>` fallback derived from its dedicated
+namespace public key.
+
+The namespace relay is the host relay associated with the suffix. It is not
+automatically the current content host for every publication under that suffix.
+A finalized name record binds the canonical
+`noct://<site>.<relay-suffix>/` URL to a publication-scoped publisher
+identifier; independently finalized locators identify current content hosts.
+Neither suffix control nor name allocation grants authority to sign or advance
+the publication head.
 
 ## Co-located roles
 
@@ -127,9 +145,10 @@ reader runtime    -> own host relay
 Hosted publication:
 
 ```text
-publisher runtime -> hosting provider's host relay
-                  -> consensus adapter (head + locators)
-reader runtime    -> selected host relay
+publisher runtime -> namespace host relay (suffix + name request)
+                  -> selected content host relay(s)
+                  -> consensus adapter (name + head + locators)
+reader runtime    -> selected current content host relay
 ```
 
 Indirect retrieval:

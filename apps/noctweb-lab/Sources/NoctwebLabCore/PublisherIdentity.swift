@@ -272,13 +272,14 @@ enum PublicationValidation {
 
     static func validateDraft(_ draft: CapsuleSiteDraft) throws {
         try validateID(draft.publicationID)
+        _ = try NoctwebAddress.parse(draft.address)
         guard
-            let components = URLComponents(string: draft.address),
-            components.scheme == "noct",
-            components.host?.isEmpty == false,
-            components.path.isEmpty || components.path == "/"
+            let relayNamespaceID = draft.relayNamespaceID,
+            RelayNamespace.isValidID(relayNamespaceID)
         else {
-            throw NoctwebLabError.invalidAddress(draft.address)
+            throw NoctwebLabError.canonicalEncoding(
+                "a valid relay namespace identity is required"
+            )
         }
         if draft.bundle == nil, (
             draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
@@ -340,10 +341,21 @@ enum PublicationValidation {
     }
 
     static func validateObject(_ object: CapsuleObject) throws {
-        if object.protocolVersion == CapsuleObject.currentProtocolVersion {
+        try validateID(object.publicationID)
+        switch object.protocolVersion {
+        case CapsuleObject.currentProtocolVersion:
+            _ = try NoctwebAddress.parse(object.address)
+            guard
+                let relayNamespaceID = object.relayNamespaceID,
+                RelayNamespace.isValidID(relayNamespaceID)
+            else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v2 objects require a relay namespace identity"
+                )
+            }
             guard let bundle = object.bundle else {
                 throw NoctwebLabError.invalidWebsiteBundle(
-                    "noctweb-lab-v1 objects require a website bundle"
+                    "noctweb-lab-v2 objects require a website bundle"
                 )
             }
             guard try WebsiteBundleValidation.canonicalized(bundle) == bundle else {
@@ -351,12 +363,38 @@ enum PublicationValidation {
                     "website files are not in canonical path order"
                 )
             }
-        } else if let bundle = object.bundle {
+        case CapsuleObject.legacyProtocolVersion:
+            try validateLegacyAddress(object.address)
+            guard object.relayNamespaceID == nil else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "legacy noctweb-lab-v1 objects cannot claim a relay namespace"
+                )
+            }
+            guard let bundle = object.bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "legacy noctweb-lab-v1 objects require a website bundle"
+                )
+            }
             guard try WebsiteBundleValidation.canonicalized(bundle) == bundle else {
                 throw NoctwebLabError.invalidWebsiteBundle(
                     "website files are not in canonical path order"
                 )
             }
+        default:
+            throw NoctwebLabError.canonicalEncoding(
+                "unsupported Noctweb object profile \(object.protocolVersion)"
+            )
+        }
+    }
+
+    static func validateLegacyAddress(_ address: String) throws {
+        guard
+            let components = URLComponents(string: address),
+            components.scheme == "noct",
+            components.host?.isEmpty == false,
+            components.path.isEmpty || components.path == "/"
+        else {
+            throw NoctwebLabError.invalidAddress(address)
         }
     }
 
