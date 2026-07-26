@@ -34,7 +34,7 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
                 WorkspaceSnapshot.self,
                 from: data
             )
-            guard
+            guard snapshot.schemaVersion == 2 ||
                 snapshot.schemaVersion ==
                     WorkspaceSnapshot.currentSchemaVersion
             else {
@@ -42,7 +42,18 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
                     snapshot.schemaVersion
                 )
             }
-            return snapshot
+            if
+                snapshot.schemaVersion ==
+                    WorkspaceSnapshot.currentSchemaVersion
+            {
+                return snapshot
+            }
+            return WorkspaceSnapshot(
+                selectedPublicationID: snapshot.selectedPublicationID,
+                publications: snapshot.publications,
+                relays: snapshot.relays,
+                federationPolicy: snapshot.federationPolicy
+            )
         } catch let error as NoctwebLabError {
             throw error
         } catch {
@@ -57,7 +68,10 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
         else {
             throw NoctwebLabError.workspaceSchema(snapshot.schemaVersion)
         }
-        _ = try RelayTopology(nodes: snapshot.relays)
+        _ = try RelayTopology(
+            nodes: snapshot.relays,
+            federationPolicy: snapshot.federationPolicy
+        )
         do {
             try FileManager.default.createDirectory(
                 at: fileURL.deletingLastPathComponent(),

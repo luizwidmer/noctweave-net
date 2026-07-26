@@ -81,16 +81,39 @@ enum PublisherSignatureDomain {
             )
         }
         var transcript = BinaryTranscript()
-        let isCurrentProfile: Bool
+        let includesNamespace: Bool
+        let includesRouteDirective: Bool
         switch claims.protocolVersion {
         case CapsuleObject.currentProtocolVersion:
-            isCurrentProfile = true
+            includesNamespace = true
+            includesRouteDirective = true
             guard
                 let relayNamespaceID = claims.relayNamespaceID,
                 RelayNamespace.isValidID(relayNamespaceID)
             else {
                 throw NoctwebLabError.canonicalEncoding(
-                    "noctweb-lab-v2 heads require a relay namespace identity"
+                    "noctweb-lab-v3 heads require a relay namespace identity"
+                )
+            }
+            guard claims.routeDirective != nil else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v3 heads require a publisher route directive"
+                )
+            }
+            try transcript.append(
+                Data("org.noctweave.noctweb/signed-head/v3".utf8),
+                maximum: 64
+            )
+        case CapsuleObject.relayNamespaceProtocolVersion:
+            includesNamespace = true
+            includesRouteDirective = false
+            guard
+                let relayNamespaceID = claims.relayNamespaceID,
+                RelayNamespace.isValidID(relayNamespaceID),
+                claims.routeDirective == nil
+            else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v2 heads require a relay namespace and cannot claim routing policy"
                 )
             }
             try transcript.append(
@@ -98,10 +121,14 @@ enum PublisherSignatureDomain {
                 maximum: 64
             )
         case CapsuleObject.legacyProtocolVersion:
-            isCurrentProfile = false
-            guard claims.relayNamespaceID == nil else {
+            includesNamespace = false
+            includesRouteDirective = false
+            guard
+                claims.relayNamespaceID == nil,
+                claims.routeDirective == nil
+            else {
                 throw NoctwebLabError.canonicalEncoding(
-                    "legacy noctweb-lab-v1 heads cannot claim a relay namespace"
+                    "legacy noctweb-lab-v1 heads cannot claim a relay namespace or routing policy"
                 )
             }
             try transcript.append(
@@ -117,8 +144,14 @@ enum PublisherSignatureDomain {
         try transcript.append(claims.protocolVersion, maximum: 64)
         try transcript.append(claims.publicationID, maximum: 64)
         try transcript.append(claims.address, maximum: 2_048)
-        if isCurrentProfile {
+        if includesNamespace {
             try transcript.append(claims.relayNamespaceID!, maximum: 80)
+        }
+        if includesRouteDirective {
+            try transcript.append(
+                claims.routeDirective!.rawValue,
+                maximum: 32
+            )
         }
         try transcript.append(claims.publisherID, maximum: 128)
         try transcript.append(claims.publisherPublicKey, maximum: 32)

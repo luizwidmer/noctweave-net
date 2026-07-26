@@ -13,6 +13,8 @@ submitPublisherHead(proposal)
 resolveFinalizedHead(publisherID)
 submitHostLocators(update)
 resolveFinalizedLocators(objectID)
+submitFederationPolicy(record)
+resolveFinalizedFederationPolicy(routingTrustDomain)
 claimRelaySuffix(claim)
 registerNoctwebName(record)
 resolveFinalizedNoctwebName(site, relaySuffix)
@@ -29,6 +31,8 @@ independent verification.
 
 - publisher head ordering and continuity commitments;
 - bounded public host locator sets;
+- the selected authenticated federation-policy record for a Noctweave Net
+  routing trust domain;
 - globally unique relay-suffix allocations, including custom suffixes and the
   deterministic `r-<hash>` fallback defined by the active profile;
 - unique site-label bindings within each suffix;
@@ -56,10 +60,23 @@ profile?" It does not answer:
 - whether a relay observed or delivered a private message;
 - whether a publisher is a real-world person;
 - whether two publisher keys belong to the same person;
-- which retrieval path a client should choose.
+- whether content is authentic merely because a routing policy selected its
+  path.
 
 Publisher signatures, object hashes, runtime policy, and local capability
 checks remain mandatory after consensus verification.
+
+Consensus may finalize or share the selected federation-policy record, which
+is the highest-authority routing input. “Federation policy” means an
+authenticated Noctweave Net routing trust-domain/control-plane constraint. It
+is not a fourth relay role, relay forwarding, `nw.federation` discovery, a
+consensus retrieval hop, or content authority.
+
+The effective route directive is the first non-`open` value in strict
+federation-policy, host-operator, signed-publisher, then visitor order. If all
+are open, direct is the deterministic default. Consensus finality for the top
+record cannot be used by a lower layer to weaken or widen it, and required
+passthrough must fail closed when unavailable.
 
 A finalized `noct://<site>.<relay-suffix>/` record selects a
 publication-scoped publisher identifier. It does not authorize the suffix
@@ -89,6 +106,10 @@ Before a consensus profile can be called supported, it must specify:
 - exact deterministic fallback-suffix derivation, encoding, length, and
   collision handling;
 - replay, expiry, and clock assumptions;
+- authentication, trust-domain binding, freshness, and replacement rules for
+  federation-policy and host-operator records;
+- exact `open`, `direct`, and `passthrough` directive semantics, including
+  first-non-open authority resolution and fail-closed unavailability;
 - denial-of-service costs and admission policy;
 - privacy leakage of queries and submissions;
 - upgrade and emergency-stop semantics;

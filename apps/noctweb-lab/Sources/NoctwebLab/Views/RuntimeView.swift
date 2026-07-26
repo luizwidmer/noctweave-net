@@ -1,3 +1,4 @@
+import NoctwebLabCore
 import SwiftUI
 
 struct RuntimeView: View {
@@ -44,13 +45,13 @@ struct RuntimeView: View {
                     runtimeHeaderCopy(compact: false)
                     Spacer(minLength: 20)
                     routePicker
-                        .frame(width: 220)
+                        .frame(width: 320)
                 }
             } else {
                 VStack(alignment: .leading, spacing: 12) {
                     runtimeHeaderCopy(compact: true)
                     routePicker
-                        .frame(maxWidth: 320)
+                        .frame(maxWidth: 380)
                 }
             }
 
@@ -71,13 +72,20 @@ struct RuntimeView: View {
     }
 
     private var routePicker: some View {
-        Picker("Route", selection: $model.routeMode) {
-            ForEach(RouteMode.allCases) { route in
-                Text(route.title)
-                    .tag(route)
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("Visitor route", selection: $model.routeMode) {
+                ForEach(RouteMode.allCases) { route in
+                    Text(route.title)
+                        .tag(route)
+                }
             }
+            .pickerStyle(.segmented)
+
+            Text("Higher levels take precedence: Federation → Relay operator → Publisher → Visitor. Automatic defers to policy.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .pickerStyle(.segmented)
         .onChange(of: model.routeMode) {
             websiteReloadToken = UUID()
             model.reloadRuntime()
@@ -168,6 +176,7 @@ struct RuntimeView: View {
                         relays: relayPath.compactMap { id in
                             workspace.relays.first(where: { $0.id == id })
                         },
+                        decision: snapshot.routingDecision,
                         compact: compact
                     )
                     .padding(12)
@@ -197,7 +206,11 @@ struct RuntimeView: View {
     }
 
     @ViewBuilder
-    private func resolutionStatus(relays: [LabRelayNode], compact: Bool) -> some View {
+    private func resolutionStatus(
+        relays: [LabRelayNode],
+        decision: RoutingDecision,
+        compact: Bool
+    ) -> some View {
         if compact {
             VStack(alignment: .leading, spacing: 8) {
                 StatusPill(
@@ -205,21 +218,57 @@ struct RuntimeView: View {
                     systemImage: "checkmark.shield.fill",
                     color: .green
                 )
+                routingDecisionStatus(decision)
                 ScrollView(.horizontal, showsIndicators: false) {
                     RelayPathView(relays: relays)
                 }
             }
         } else {
-            HStack {
-                StatusPill(
-                    title: "Object accepted",
-                    systemImage: "checkmark.shield.fill",
-                    color: .green
-                )
-                Spacer()
-                RelayPathView(relays: relays)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    StatusPill(
+                        title: "Object accepted",
+                        systemImage: "checkmark.shield.fill",
+                        color: .green
+                    )
+                    Spacer()
+                    routingDecisionStatus(decision)
+                        .fixedSize(horizontal: true, vertical: false)
+                    RelayPathView(relays: relays)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        StatusPill(
+                            title: "Object accepted",
+                            systemImage: "checkmark.shield.fill",
+                            color: .green
+                        )
+                        Spacer()
+                        routingDecisionStatus(decision)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        RelayPathView(relays: relays)
+                    }
+                }
             }
         }
+    }
+
+    private func routingDecisionStatus(
+        _ decision: RoutingDecision
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Effective route: \(decision.directive.shortTitle)")
+                .font(.caption.weight(.semibold))
+            Text("Governing authority: \(decision.authority.title)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
     }
 
     private var evidenceSidebar: some View {

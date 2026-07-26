@@ -24,7 +24,8 @@ publisher key
 
 - Immutable objects are addressed by a digest of canonical bytes.
 - A publisher key signs proposed publication heads.
-- Consensus finalizes shared public head, locator, and namespace state.
+- Consensus finalizes shared public head, locator, namespace, and selected
+  federation-policy state.
 - Host relays store and serve capsule bytes.
 - Standard relays carry private Noctweave traffic.
 - Passthrough relays forward bounded opaque exchanges to an explicit next hop.
@@ -56,7 +57,7 @@ publisher head and exact object bytes.
 
 ## Relay topology
 
-Noctweave Net has exactly three relay roles:
+Noctweave Net has exactly three relay/module families:
 
 | Role | Durable payload storage | Function |
 | --- | --- | --- |
@@ -64,9 +65,15 @@ Noctweave Net has exactly three relay roles:
 | Passthrough relay | No | Bounded forwarding to one client-selected, policy-valid next hop |
 | Host relay | Yes | Store and serve content-addressed capsule objects for self-hosters or hosting providers |
 
-A deployment may run more than one role in one process, but each enabled role
-must advertise and enforce its own capabilities, limits, credentials, storage,
-and logs. Co-location must not blur trust boundaries.
+A deployment may advertise more than one module family from one relay process.
+In particular, a `solo` standard relay may also advertise `nw.net-host@1` and
+directly host and serve content. Hosting does not require a passthrough hop,
+federation forwarding, a consensus hop, or ownership of a namespace.
+Namespace advertisement remains optional.
+
+Each enabled module must advertise and enforce its own capabilities, limits,
+credentials, rate limits, storage, and logs. Co-location must not blur trust or
+metadata boundaries.
 
 See [relay topology](docs/relay-topology.md).
 
@@ -74,12 +81,45 @@ The transport integration is implemented by Noctweave's provisional
 `nw.net-passthrough@1` and `nw.net-host@1` modules. See the
 [Noctweave integration contract](docs/noctweave-integration.md).
 
+## Public retrieval policy
+
+Public retrieval has exactly two v0 shapes:
+
+```text
+visitor -> host
+visitor -> passthrough -> host
+```
+
+They are alternatives. Noctweave Net does not require a
+standard-to-passthrough-to-host chain.
+
+Each authority supplies `open`, `direct`, or `passthrough`. The effective hard
+directive is the first non-`open` value in this strict order:
+
+1. federation policy for the authenticated routing trust domain;
+2. host-relay operator advertisement;
+3. signed publisher directive; and
+4. visitor preference.
+
+If all four leave the choice open, direct retrieval is the deterministic
+default. A lower layer cannot weaken or widen a higher requirement. In
+particular, required passthrough retrieval fails closed when no policy-valid
+passthrough is available; it never silently downgrades to direct.
+
+“Federation policy” is product terminology for an authenticated Noctweave Net
+routing trust-domain/control-plane constraint. It is not a fourth relay role,
+a relay-forwarding hop, `nw.federation` discovery, or content authority.
+Existing consensus may finalize and share the selected federation-policy
+record without carrying retrieval traffic.
+
 ## Consensus boundary
 
-Consensus replaces relay federation, discovery coordination, and shared
-publication ordering for Noctweave Net. It finalizes only bounded public
-commitments such as namespace allocations, publisher heads, host locators,
-protocol epochs, and revocations defined by the eventual consensus profile.
+Consensus supplies shared publication ordering and may finalize the selected,
+authenticated federation-policy record for a Noctweave Net routing trust
+domain. It finalizes only bounded public commitments such as namespace
+allocations, publisher heads, host locators, routing policy, protocol epochs,
+and revocations defined by the eventual consensus profile. This policy input
+does not enable Noctweave relay federation, discovery, or forwarding.
 
 Consensus does not:
 
@@ -88,7 +128,7 @@ Consensus does not:
 - receive Noctweave relationship or route authority;
 - prove that a host will remain available;
 - turn a publisher key into a global user account;
-- choose a hidden relay route for a client.
+- become a retrieval hop or silently weaken a hard route directive.
 
 The initial codebase will depend on a narrow `ConsensusAdapter` interface so a
 consensus profile can be selected independently. See
@@ -131,6 +171,9 @@ SECURITY.md                Threat model summary and reporting policy
 10. Canonical named sites use `noct://<site>.<relay-suffix>/`. Namespace relays
     are host relays, consensus owns global allocation, and publisher signatures
     remain the publication authority.
+11. Public retrieval is either direct to a host or through one bounded
+    passthrough. The first non-open directive in federation-policy, host
+    operator, signed publisher, then visitor order is authoritative.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -150,12 +193,15 @@ The provisional host and passthrough relay modules are implemented in
 Noctweave. This repository documents their integration contract; Noctweb Lab
 currently exercises matching deterministic in-process adapters rather than
 connecting to operator relay endpoints. The Lab is a runnable native macOS
-application for the explicitly incompatible
-`noctweb-lab-v2` website-bundle and relay-scoped namespace profile. It edits
+application for the explicitly incompatible `noctweb-lab-v3` profile, whose
+publisher routing directive is signed with the publication. Existing v2
+relay-namespace publications remain verifiable and upgradeable; v1 remains
+legacy read-only. The Lab edits
 ordinary HTML, CSS, JavaScript, and asset files; imports production builds from
 tools such as React and Vite; publishes with publication-scoped Keychain
 identities; simulates all three relay roles; allocates canonical `noct://`
-names; and resolves through direct or passthrough paths. Verified client-side
+names; and resolves through the effective direct or one-hop policy. Verified
+client-side
 sites run in a publication-scoped, network-isolated WebKit canvas
 inside the App Sandbox. Project, workspace, source-file, visual-block, and
 publisher-key deletion all require explicit destructive confirmation.

@@ -1,7 +1,10 @@
 # Relay Topology
 
-Noctweave Net recognizes exactly three relay roles. Additional behavior belongs
-in a client, host service, or consensus adapter—not in a fourth relay type.
+Noctweave Net recognizes exactly three relay/module families: standard,
+passthrough, and host. Additional behavior belongs in a client, one of those
+modules, a host service, or a consensus adapter—not in a fourth relay type.
+Role labels describe boundaries; they do not make module advertisements
+exclusive. One relay process may advertise multiple modules.
 
 ## Standard relay
 
@@ -26,7 +29,12 @@ It must not:
 - decrypt private payloads or log ciphertext bodies and bearer capabilities.
 
 Standard relays remain direct client submission endpoints. Existing
-Noctweave federation is not part of the Noctweave Net topology.
+Noctweave federation forwarding is not part of the Noctweave Net topology.
+
+A `solo` standard relay may also advertise `nw.net-host@1`. In that
+configuration the same process can directly host and serve content, but the
+standard and host modules retain separate authorization and limits. Hosting
+does not become a standard-module operation.
 
 ## Passthrough relay
 
@@ -64,8 +72,10 @@ It must not:
 - cache or mutate capsule objects;
 - claim delivery after merely accepting a transient forwarding request.
 
-The v0 profile permits at most one passthrough hop. Multi-hop privacy designs
-require a separate threat model and are out of scope.
+The v0 profile permits at most one passthrough hop. Public retrieval is either
+direct to a host or through one passthrough and then the host. Those are
+alternatives, never a required standard-to-passthrough-to-host chain. Multi-hop
+privacy designs require a separate threat model and are out of scope.
 
 ## Host relay
 
@@ -83,8 +93,9 @@ It may:
 - enforce tenant, storage, bandwidth, retention, and abuse policy;
 - mirror public objects when policy permits;
 - advertise expiring public retrieval endpoints through the consensus profile;
-- act as the namespace relay for one consensus-allocated suffix, including a
-  custom operator suffix or the profile's deterministic `r-<hash>` fallback.
+- optionally advertise the namespace function for one consensus-allocated
+  suffix, including a custom operator suffix or the profile's deterministic
+  `r-<hash>` fallback.
 
 It must:
 
@@ -103,13 +114,17 @@ It must not:
 - possess private capsule keys by protocol requirement;
 - turn hosting credentials into a global Noctweave Net account.
 
+A host can store and directly serve content without a passthrough module,
+federation forwarding, a consensus retrieval hop, or namespace ownership.
+
 ### Namespace function
 
-The namespace function is a host-relay capability, not a fourth relay role.
-Consensus owns global suffix uniqueness and unique site-label allocation within
-each suffix. A host relay may request a custom suffix or use the active
-profile's deterministic `r-<hash>` fallback derived from its dedicated
-namespace public key.
+The namespace function is an optional advertisement by a relay with the host
+module, not a fourth relay role and not a prerequisite for hosting. Consensus
+owns global suffix uniqueness and unique site-label allocation within each
+suffix. A host module advertising the function may request a custom suffix or
+use the active profile's deterministic `r-<hash>` fallback derived from its
+dedicated namespace public key.
 
 The namespace relay is the host relay associated with the suffix. It is not
 automatically the current content host for every publication under that suffix.
@@ -119,43 +134,84 @@ identifier; independently finalized locators identify current content hosts.
 Neither suffix control nor name allocation grants authority to sign or advance
 the publication head.
 
-## Co-located roles
+## Retrieval-policy authority
 
-One process or operator may enable multiple roles, but capability discovery
-must list them independently. Each role requires separate rate limits,
+The only v0 public retrieval shapes are:
+
+```text
+visitor -> host
+visitor -> passthrough -> host
+```
+
+The effective hard route directive is the first non-`open` value in this strict
+authority order:
+
+1. federation policy for the authenticated routing trust domain;
+2. host-relay operator advertisement;
+3. signed publisher directive; and
+4. visitor preference.
+
+If all layers are open, direct is the deterministic default. A higher
+requirement cannot be weakened or widened by a lower layer. Required
+passthrough fails closed when unavailable and never silently downgrades to
+direct.
+
+“Federation policy” is product terminology for an authenticated Noctweave Net
+routing trust-domain/control-plane constraint. It is not a fourth relay role,
+a forwarding hop, `nw.federation` discovery, or content authority. Existing
+consensus may finalize or share the selected policy record; consensus is still
+not a retrieval hop.
+
+Experimental `noctweb-lab-v3` signs the publisher directive. V2
+relay-namespace publications remain verifiable and upgradeable, while v1 is
+legacy read-only. Operator advertisements and federation-policy records require
+authentication in production; the Lab uses deterministic local adapters.
+
+## Co-located modules
+
+One process or operator may enable multiple modules, but capability discovery
+must list them independently. Each module requires separate rate limits,
 credentials, policy, storage lifetime, and audit boundaries.
 
-A failure or compromise in one role must not silently grant authority in
+A failure or compromise in one module must not silently grant authority in
 another. In particular:
 
 - passthrough authorization does not grant host write access;
 - host tenancy does not grant standard-route read authority;
 - standard relay administration does not grant consensus signing authority.
 
+Co-locating passthrough and host modules also collapses the intended metadata
+separation: one operator can correlate both sides of the nominal hop. UI and
+audit records must report that topology accurately. Separate module
+credentials and rate limits remain mandatory even though they cannot prevent
+operator-level traffic correlation.
+
 ## Topology examples
 
-Self-hosted publication:
+Solo self-hosted publication and direct retrieval:
 
 ```text
-publisher runtime -> own host relay
+publisher runtime -> solo standard relay + nw.net-host@1
                   -> consensus adapter (head + locators)
-reader runtime    -> own host relay
+visitor runtime   -> same relay's nw.net-host@1
 ```
 
 Hosted publication:
 
 ```text
-publisher runtime -> namespace host relay (suffix + name request)
-                  -> selected content host relay(s)
+publisher runtime -> selected content host relay(s)
+                  -> optional namespace function (suffix + name request)
                   -> consensus adapter (name + head + locators)
 reader runtime    -> selected current content host relay
 ```
 
-Indirect retrieval:
+One-hop retrieval alternative:
 
 ```text
 reader runtime -> passthrough relay -> host relay
 ```
+
+Neither example includes federation forwarding or a consensus retrieval hop.
 
 Private collaboration:
 

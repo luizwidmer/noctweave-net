@@ -350,7 +350,33 @@ enum PublicationValidation {
                 RelayNamespace.isValidID(relayNamespaceID)
             else {
                 throw NoctwebLabError.canonicalEncoding(
-                    "noctweb-lab-v2 objects require a relay namespace identity"
+                    "noctweb-lab-v3 objects require a relay namespace identity"
+                )
+            }
+            guard object.routeDirective != nil else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v3 objects require a publisher route directive"
+                )
+            }
+            guard let bundle = object.bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "noctweb-lab-v3 objects require a website bundle"
+                )
+            }
+            guard try WebsiteBundleValidation.canonicalized(bundle) == bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "website files are not in canonical path order"
+                )
+            }
+        case CapsuleObject.relayNamespaceProtocolVersion:
+            _ = try NoctwebAddress.parse(object.address)
+            guard
+                let relayNamespaceID = object.relayNamespaceID,
+                RelayNamespace.isValidID(relayNamespaceID),
+                object.routeDirective == nil
+            else {
+                throw NoctwebLabError.canonicalEncoding(
+                    "noctweb-lab-v2 objects require a relay namespace and cannot claim routing policy"
                 )
             }
             guard let bundle = object.bundle else {
@@ -365,9 +391,12 @@ enum PublicationValidation {
             }
         case CapsuleObject.legacyProtocolVersion:
             try validateLegacyAddress(object.address)
-            guard object.relayNamespaceID == nil else {
+            guard
+                object.relayNamespaceID == nil,
+                object.routeDirective == nil
+            else {
                 throw NoctwebLabError.canonicalEncoding(
-                    "legacy noctweb-lab-v1 objects cannot claim a relay namespace"
+                    "legacy noctweb-lab-v1 objects cannot claim a relay namespace or routing policy"
                 )
             }
             guard let bundle = object.bundle else {

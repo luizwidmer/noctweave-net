@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RelayRole: String, Codable, CaseIterable, Sendable {
+public enum RelayRole: String, Codable, CaseIterable, Hashable, Sendable {
     case standard
     case passthrough
     case host
@@ -17,7 +17,7 @@ public enum RelayRole: String, Codable, CaseIterable, Sendable {
     }
 }
 
-public enum RelayModule: String, Codable, CaseIterable, Sendable {
+public enum RelayModule: String, Codable, CaseIterable, Hashable, Sendable {
     case standard = "nw.opaque-route@2"
     case passthrough = "nw.net-passthrough@1"
     case host = "nw.net-host@1"
@@ -31,9 +31,26 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
     public var isOnline: Bool
     public var namespacePublicKey: Data?
     public var namespaceSuffix: String?
+    public var advertisedModules: [RelayModule]?
+    public var operatorRouteDirective: RouteDirective?
 
     public var module: RelayModule {
         role.module
+    }
+
+    public var modules: [RelayModule] {
+        let configured = Set(
+            (advertisedModules ?? [module]) + [module]
+        )
+        return RelayModule.allCases.filter(configured.contains)
+    }
+
+    public var routeDirective: RouteDirective {
+        operatorRouteDirective ?? .open
+    }
+
+    public func supports(_ role: RelayRole) -> Bool {
+        modules.contains(role.module)
     }
 
     public init(
@@ -43,7 +60,9 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
         endpoint: URL,
         isOnline: Bool = true,
         namespacePublicKey: Data? = nil,
-        namespaceSuffix: String? = nil
+        namespaceSuffix: String? = nil,
+        advertisedModules: [RelayModule]? = nil,
+        operatorRouteDirective: RouteDirective? = nil
     ) {
         self.id = id
         self.name = name
@@ -52,13 +71,23 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
         self.isOnline = isOnline
         self.namespacePublicKey = namespacePublicKey
         self.namespaceSuffix = namespaceSuffix
+        self.advertisedModules = advertisedModules
+        self.operatorRouteDirective = operatorRouteDirective
     }
 
     public func relayNamespace() throws -> RelayNamespace? {
-        guard role == .host else { return nil }
+        guard supports(.host) else { return nil }
         guard let namespacePublicKey else {
+            guard namespaceSuffix == nil else {
+                throw NoctwebLabError.invalidRelayTopology(
+                    "relay \(id) has a namespace suffix without a namespace public key"
+                )
+            }
+            return nil
+        }
+        guard namespacePublicKey.count == 32 else {
             throw NoctwebLabError.invalidRelayTopology(
-                "host relay \(id) is missing its namespace public key"
+                "relay \(id) has an invalid namespace public key"
             )
         }
         return try RelayNamespace(
@@ -70,36 +99,62 @@ public struct RelayNode: Codable, Equatable, Identifiable, Sendable {
 
 public struct RelayTopology: Codable, Equatable, Sendable {
     public var nodes: [RelayNode]
+    public var federationPolicy: FederationRoutingPolicy
 
     private enum CodingKeys: String, CodingKey {
         case nodes
+        case federationPolicy
     }
 
-    public init(nodes: [RelayNode]) throws {
+    public init(
+        nodes: [RelayNode],
+        federationPolicy: FederationRoutingPolicy = .soloOpen
+    ) throws {
         guard Set(nodes.map(\.id)).count == nodes.count else {
             throw NoctwebLabError.invalidRelayTopology("relay IDs must be unique")
+        }
+        guard
+            federationPolicy.mode != .solo ||
+                federationPolicy.directive == .open
+        else {
+            throw NoctwebLabError.invalidRelayTopology(
+                "solo federation mode must leave routing policy open"
+            )
         }
 
         var namespaceIDs = Set<String>()
         var namespaceSuffixes = Set<String>()
         for node in nodes {
-            if node.role != .host {
+            if let advertised = node.advertisedModules {
+                let canonical = RelayModule.allCases.filter {
+                    Set(advertised).contains($0)
+                }
                 guard
-                    node.namespacePublicKey == nil,
-                    node.namespaceSuffix == nil
+                    !advertised.isEmpty,
+                    Set(advertised).count == advertised.count,
+                    advertised == canonical,
+                    advertised.contains(node.module)
                 else {
                     throw NoctwebLabError.invalidRelayTopology(
-                        "only host relays may advertise a Noctweb namespace"
+                        "relay \(node.id) modules must be unique, canonical, and include its primary role"
+                    )
+                }
+            }
+
+            if !node.supports(.host) {
+                guard
+                    node.namespacePublicKey == nil,
+                    node.namespaceSuffix == nil,
+                    node.routeDirective == .open
+                else {
+                    throw NoctwebLabError.invalidRelayTopology(
+                        "only host-capable relays may advertise a namespace or operator route directive"
                     )
                 }
                 continue
             }
 
-            guard let namespace = try node.relayNamespace() else {
-                throw NoctwebLabError.invalidRelayTopology(
-                    "host relay \(node.id) has no namespace"
-                )
-            }
+            guard let namespace = try node.relayNamespace() else { continue }
             guard namespaceIDs.insert(namespace.id).inserted else {
                 throw NoctwebLabError.invalidRelayTopology(
                     "relay namespace identities must be unique"
@@ -112,6 +167,7 @@ public struct RelayTopology: Codable, Equatable, Sendable {
             }
         }
         self.nodes = nodes
+        self.federationPolicy = federationPolicy
     }
 
     public init(from decoder: any Decoder) throws {
@@ -120,8 +176,15 @@ public struct RelayTopology: Codable, Equatable, Sendable {
             [RelayNode].self,
             forKey: .nodes
         )
+        let federationPolicy = try container.decodeIfPresent(
+            FederationRoutingPolicy.self,
+            forKey: .federationPolicy
+        ) ?? .soloOpen
         do {
-            try self.init(nodes: decodedNodes)
+            try self.init(
+                nodes: decodedNodes,
+                federationPolicy: federationPolicy
+            )
         } catch {
             throw DecodingError.dataCorruptedError(
                 forKey: .nodes,
@@ -134,10 +197,11 @@ public struct RelayTopology: Codable, Equatable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(nodes, forKey: .nodes)
+        try container.encode(federationPolicy, forKey: .federationPolicy)
     }
 
     public func nodes(with role: RelayRole) -> [RelayNode] {
-        nodes.filter { $0.role == role }
+        nodes.filter { $0.supports(role) }
     }
 }
 
@@ -145,6 +209,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
     public var publicationID: String
     public var address: String
     public var relayNamespaceID: String?
+    public var routeDirective: RouteDirective?
     public var title: String
     public var subtitle: String
     public var body: String
@@ -155,6 +220,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
         publicationID: String,
         address: String,
         relayNamespaceID: String? = nil,
+        routeDirective: RouteDirective? = .open,
         title: String,
         subtitle: String,
         body: String,
@@ -164,6 +230,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
         self.publicationID = publicationID
         self.address = address
         self.relayNamespaceID = relayNamespaceID
+        self.routeDirective = routeDirective
         self.title = title
         self.subtitle = subtitle
         self.body = body
@@ -173,13 +240,22 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
 }
 
 public struct CapsuleObject: Codable, Equatable, Sendable {
-    public static let currentProtocolVersion = "noctweb-lab-v2"
+    public static let currentProtocolVersion = "noctweb-lab-v3"
+    public static let relayNamespaceProtocolVersion = "noctweb-lab-v2"
     public static let legacyProtocolVersion = "noctweb-lab-v1"
+
+    public static func usesRelayNamespace(
+        protocolVersion: String
+    ) -> Bool {
+        protocolVersion == currentProtocolVersion ||
+            protocolVersion == relayNamespaceProtocolVersion
+    }
 
     public let protocolVersion: String
     public let publicationID: String
     public let address: String
     public let relayNamespaceID: String?
+    public let routeDirective: RouteDirective?
     public let publisherID: String
     public let revision: UInt64
     public let previousObjectID: String?
@@ -194,6 +270,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         publicationID: String,
         address: String,
         relayNamespaceID: String? = nil,
+        routeDirective: RouteDirective? = nil,
         publisherID: String,
         revision: UInt64,
         previousObjectID: String?,
@@ -207,6 +284,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         self.publicationID = publicationID
         self.address = address
         self.relayNamespaceID = relayNamespaceID
+        self.routeDirective = routeDirective
         self.publisherID = publisherID
         self.revision = revision
         self.previousObjectID = previousObjectID
@@ -223,6 +301,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
     public let publicationID: String
     public let address: String
     public let relayNamespaceID: String?
+    public let routeDirective: RouteDirective?
     public let publisherID: String
     public let publisherPublicKey: Data
     public let objectID: String
@@ -235,6 +314,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
         publicationID: String,
         address: String,
         relayNamespaceID: String? = nil,
+        routeDirective: RouteDirective? = nil,
         publisherID: String,
         publisherPublicKey: Data,
         objectID: String,
@@ -246,6 +326,7 @@ public struct PublisherHeadClaims: Codable, Equatable, Sendable {
         self.publicationID = publicationID
         self.address = address
         self.relayNamespaceID = relayNamespaceID
+        self.routeDirective = routeDirective
         self.publisherID = publisherID
         self.publisherPublicKey = publisherPublicKey
         self.objectID = objectID
@@ -399,7 +480,8 @@ public extension RelayTopology {
                 id: "standard-local",
                 name: "Local Standard",
                 role: .standard,
-                endpoint: URL(string: "https://standard.noctweave.invalid")!
+                endpoint: URL(string: "https://standard.noctweave.invalid")!,
+                advertisedModules: [.standard, .host]
             ),
             RelayNode(
                 id: "passthrough-atlantic",
@@ -426,7 +508,7 @@ public extension RelayTopology {
                     seed: "host-salvador"
                 )
             ),
-        ])
+        ], federationPolicy: .soloOpen)
     }
 }
 
@@ -435,6 +517,7 @@ public struct ResolutionResult: Codable, Equatable, Sendable {
     public let head: PublisherHead
     public let headID: String
     public let route: RelayRoute
+    public let routingDecision: RoutingDecision
     public let evidence: ResolutionEvidence
 
     public init(
@@ -442,12 +525,14 @@ public struct ResolutionResult: Codable, Equatable, Sendable {
         head: PublisherHead,
         headID: String,
         route: RelayRoute,
+        routingDecision: RoutingDecision,
         evidence: ResolutionEvidence
     ) {
         self.object = object
         self.head = head
         self.headID = headID
         self.route = route
+        self.routingDecision = routingDecision
         self.evidence = evidence
     }
 }
@@ -482,19 +567,21 @@ public struct WorkspacePublication: Codable, Equatable, Identifiable, Sendable {
 }
 
 public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case selectedPublicationID
         case publications
         case relays
+        case federationPolicy
     }
 
     public var schemaVersion: Int
     public var selectedPublicationID: String?
     public var publications: [WorkspacePublication]
     public var relays: [RelayNode]
+    public var federationPolicy: FederationRoutingPolicy
 
     public static var empty: WorkspaceSnapshot {
         WorkspaceSnapshot(
@@ -508,12 +595,14 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         schemaVersion: Int = WorkspaceSnapshot.currentSchemaVersion,
         selectedPublicationID: String?,
         publications: [WorkspacePublication],
-        relays: [RelayNode]
+        relays: [RelayNode],
+        federationPolicy: FederationRoutingPolicy = .soloOpen
     ) {
         self.schemaVersion = schemaVersion
         self.selectedPublicationID = selectedPublicationID
         self.publications = publications
         self.relays = relays
+        self.federationPolicy = federationPolicy
     }
 
     public init(from decoder: any Decoder) throws {
@@ -534,8 +623,15 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
             [RelayNode].self,
             forKey: .relays
         )
+        let federationPolicy = try container.decodeIfPresent(
+            FederationRoutingPolicy.self,
+            forKey: .federationPolicy
+        ) ?? .soloOpen
         do {
-            _ = try RelayTopology(nodes: relays)
+            _ = try RelayTopology(
+                nodes: relays,
+                federationPolicy: federationPolicy
+            )
         } catch {
             throw DecodingError.dataCorruptedError(
                 forKey: .relays,
@@ -547,7 +643,8 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
             schemaVersion: schemaVersion,
             selectedPublicationID: selectedPublicationID,
             publications: publications,
-            relays: relays
+            relays: relays,
+            federationPolicy: federationPolicy
         )
     }
 
@@ -560,6 +657,10 @@ public struct WorkspaceSnapshot: Codable, Equatable, Sendable {
         )
         try container.encode(publications, forKey: .publications)
         try container.encode(relays, forKey: .relays)
+        try container.encode(
+            federationPolicy,
+            forKey: .federationPolicy
+        )
     }
 }
 

@@ -30,11 +30,22 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Routing Policy") {
+                LabeledContent(
+                    "Authority order",
+                    value: "Federation → Relay operator → Publisher → Visitor"
+                )
+                LabeledContent("Open fallback", value: "Direct host retrieval")
+                Text("The first non-open directive governs retrieval. Solo mode keeps federation authority open; passthrough is required only when the effective directive selects one hop.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Experimental Profile") {
-                LabeledContent("Profile", value: "noctweb-lab-v2")
+                LabeledContent("Profile", value: "noctweb-lab-v3")
                 LabeledContent("Bundle limit", value: "512 files · 16 MB")
                 LabeledContent("Consensus", value: "Deterministic test adapter")
-                Text("This profile is a development surface and is not a stable Noctweave Net wire format.")
+                Text("This profile includes hierarchical route policy and remains a development surface, not a stable Noctweave Net wire format.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

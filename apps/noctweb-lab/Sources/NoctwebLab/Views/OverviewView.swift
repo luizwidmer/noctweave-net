@@ -124,7 +124,9 @@ struct OverviewView: View {
     private var networkSummary: some View {
         SectionCard("Relay topology", systemImage: "network") {
             ForEach(LabRelayRole.allCases) { role in
-                let relays = model.activeWorkspace?.relays.filter { $0.role == role } ?? []
+                let relays = model.activeWorkspace?.relays.filter {
+                    $0.supports(role)
+                } ?? []
                 HStack {
                     RelayRoleBadge(role: role)
                     Spacer()

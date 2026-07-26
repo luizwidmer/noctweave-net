@@ -25,7 +25,8 @@ final class NoctwebLabCoreTests: XCTestCase {
         publicationID: String = UUID().uuidString.lowercased(),
         bundle: WebsiteBundle? = nil,
         siteLabel: String = "quiet-garden",
-        namespaceRelayID: String = "host-lisbon"
+        namespaceRelayID: String = "host-lisbon",
+        routeDirective: RouteDirective? = .open
     ) -> CapsuleSiteDraft {
         let node = RelayTopology.labDefault.nodes.first {
             $0.id == namespaceRelayID
@@ -38,6 +39,7 @@ final class NoctwebLabCoreTests: XCTestCase {
                 relaySuffix: namespace.suffix
             ).canonicalString,
             relayNamespaceID: namespace.id,
+            routeDirective: routeDirective,
             title: "Quiet Garden",
             subtitle: "A native Noctweb publication",
             body: "Verified structured content.",
@@ -151,6 +153,366 @@ final class NoctwebLabCoreTests: XCTestCase {
                 return XCTFail("unexpected error: \(error)")
             }
         }
+    }
+
+    func testRoutingPolicyUsesFirstNonOpenAuthority() {
+        let cases: [(
+            FederationRoutingPolicy,
+            RouteDirective,
+            RouteDirective,
+            RouteDirective,
+            RouteDirective,
+            RoutingAuthority
+        )] = [
+            (
+                .init(mode: .curated, directive: .passthrough),
+                .direct, .direct, .direct, .passthrough, .federation
+            ),
+            (
+                .init(mode: .manual, directive: .open),
+                .passthrough, .direct, .direct, .passthrough, .relayOperator
+            ),
+            (
+                .init(mode: .open, directive: .open),
+                .open, .passthrough, .direct, .passthrough, .publisher
+            ),
+            (
+                .soloOpen,
+                .open, .open, .passthrough, .passthrough, .visitor
+            ),
+            (
+                .soloOpen,
+                .open, .open, .open, .direct, .defaultDirect
+            ),
+        ]
+
+        for item in cases {
+            let decision = RoutingPolicyResolver.resolve(
+                federation: item.0,
+                relayOperator: item.1,
+                publisher: item.2,
+                visitor: item.3
+            )
+            XCTAssertEqual(decision.directive, item.4)
+            XCTAssertEqual(decision.authority, item.5)
+        }
+    }
+
+    func testSoloStandardRelayCanHostAndResolveDirectly() async throws {
+        let namespaceKey = RelayNamespace.deterministicLabPublicKey(
+            seed: "solo-standard-host"
+        )
+        let namespace = try RelayNamespace(
+            publicKey: namespaceKey,
+            operatorSuffix: "solo"
+        )
+        let topology = try RelayTopology(
+            nodes: [
+                RelayNode(
+                    id: "solo-standard",
+                    name: "Solo Standard + Host",
+                    role: .standard,
+                    endpoint: URL(string: "https://solo.invalid")!,
+                    namespacePublicKey: namespaceKey,
+                    namespaceSuffix: "solo",
+                    advertisedModules: [.standard, .host]
+                )
+            ],
+            federationPolicy: .soloOpen
+        )
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore(),
+            topology: topology
+        )
+        let publication = try await engine.publish(
+            draft: CapsuleSiteDraft(
+                publicationID: UUID().uuidString.lowercased(),
+                address: "noct://garden.solo/",
+                relayNamespaceID: namespace.id,
+                routeDirective: .direct,
+                title: "Solo",
+                subtitle: "",
+                body: "Directly hosted.",
+                accentHex: "#4f8f77",
+                bundle: bundle()
+            )
+        )
+
+        XCTAssertEqual(publication.hostRelayIDs, ["solo-standard"])
+        let result = try await engine.resolve(
+            address: publication.object.address,
+            preference: .automatic
+        )
+        XCTAssertEqual(result.route.hostRelayID, "solo-standard")
+        XCTAssertEqual(result.routingDecision.directive, .direct)
+        XCTAssertEqual(result.routingDecision.authority, .publisher)
+    }
+
+    func testRelayConfigurationAppliesCapabilitiesAndPolicyAtomically()
+        async throws
+    {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        try await engine.setRelayOperatorRouteDirective(
+            .direct,
+            relayID: "standard-local"
+        )
+        let before = try await engine.topology()
+        let configuration = before.nodes.map { node in
+            RelayRuntimeConfiguration(
+                relayID: node.id,
+                advertisedModules: node.id == "standard-local"
+                    ? [.standard]
+                    : node.modules,
+                operatorRouteDirective: node.id == "standard-local"
+                    ? .open
+                    : node.routeDirective,
+                isOnline: node.isOnline
+            )
+        }
+
+        try await engine.applyRelayConfiguration(
+            federationPolicy: .soloOpen,
+            relays: configuration
+        )
+
+        let topology = try await engine.topology()
+        let standard = try XCTUnwrap(
+            topology.nodes.first {
+                $0.id == "standard-local"
+            }
+        )
+        XCTAssertFalse(standard.supports(.host))
+        XCTAssertEqual(standard.routeDirective, .open)
+    }
+
+    func testSchemaTwoWorkspaceLoadsAsSchemaThree() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fileURL = root.appendingPathComponent("workspace.json")
+        let legacy = WorkspaceSnapshot(
+            schemaVersion: 2,
+            selectedPublicationID: nil,
+            publications: [],
+            relays: RelayTopology.labDefault.nodes
+        )
+        try CanonicalJSON.encode(legacy).write(to: fileURL)
+
+        let loaded = try JSONWorkspaceRepository(fileURL: fileURL).load()
+
+        XCTAssertEqual(
+            loaded.schemaVersion,
+            WorkspaceSnapshot.currentSchemaVersion
+        )
+        XCTAssertEqual(loaded.relays, legacy.relays)
+        XCTAssertEqual(loaded.federationPolicy, .soloOpen)
+    }
+
+    func testContentHostDoesNotNeedNamespaceAuthority() throws {
+        let topology = try RelayTopology(
+            nodes: [
+                RelayNode(
+                    id: "content-only",
+                    name: "Content-only Solo",
+                    role: .standard,
+                    endpoint: URL(string: "https://content.invalid")!,
+                    advertisedModules: [.standard, .host]
+                )
+            ]
+        )
+        XCTAssertTrue(try XCTUnwrap(topology.nodes.first).supports(.host))
+        XCTAssertNil(try topology.nodes.first?.relayNamespace())
+    }
+
+    func testFederationPassthroughMandateCannotDowngradeOrBeBypassed()
+        async throws
+    {
+        let topology = try RelayTopology(
+            nodes: RelayTopology.labDefault.nodes,
+            federationPolicy: FederationRoutingPolicy(
+                mode: .curated,
+                directive: .passthrough
+            )
+        )
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore(),
+            topology: topology
+        )
+        let publication = try await engine.publish(
+            draft: draft(routeDirective: .direct)
+        )
+
+        do {
+            _ = try await engine.resolve(
+                address: publication.object.address,
+                route: .direct(hostRelayID: "host-lisbon")
+            )
+            XCTFail("an explicit route must not bypass federation policy")
+        } catch let error as NoctwebLabError {
+            guard case .invalidRoute = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+
+        let mandated = try await engine.resolve(
+            address: publication.object.address,
+            preference: .direct
+        )
+        guard case .passthrough = mandated.route else {
+            return XCTFail("federation mandate must select one-hop retrieval")
+        }
+        XCTAssertEqual(mandated.routingDecision.authority, .federation)
+        XCTAssertEqual(
+            mandated.routingDecision.directive,
+            .passthrough
+        )
+
+        try await engine.setRelayOnline(
+            false,
+            relayID: "passthrough-atlantic"
+        )
+        do {
+            _ = try await engine.resolve(
+                address: publication.object.address,
+                preference: .direct
+            )
+            XCTFail("a required passthrough must not downgrade to direct")
+        } catch let error as NoctwebLabError {
+            XCTAssertEqual(
+                error,
+                .noHostReplica(publication.object.address)
+            )
+        }
+    }
+
+    func testSignedPublisherRouteDirectiveCannotBeTampered() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let publication = try await engine.publish(
+            draft: draft(routeDirective: .passthrough)
+        )
+        let claims = publication.head.claims
+        let tampered = PublisherHeadClaims(
+            protocolVersion: claims.protocolVersion,
+            publicationID: claims.publicationID,
+            address: claims.address,
+            relayNamespaceID: claims.relayNamespaceID,
+            routeDirective: .direct,
+            publisherID: claims.publisherID,
+            publisherPublicKey: claims.publisherPublicKey,
+            objectID: claims.objectID,
+            revision: claims.revision,
+            previousHeadID: claims.previousHeadID,
+            issuedAtMilliseconds: claims.issuedAtMilliseconds
+        )
+        XCTAssertFalse(
+            PublicationSigningIdentity.verify(
+                signature: publication.head.signature,
+                headClaims: tampered
+            )
+        )
+    }
+
+    func testV2RelayNamespaceProfileStillVerifiesExactly() throws {
+        let publicationID = UUID().uuidString.lowercased()
+        let identity = try PublicationSigningIdentity(
+            publicationID: publicationID,
+            rawPrivateKey: Data(repeating: 11, count: 32)
+        )
+        let namespace = try XCTUnwrap(
+            RelayTopology.labDefault.nodes
+                .first { $0.id == "host-lisbon" }?
+                .relayNamespace()
+        )
+        let object = CapsuleObject(
+            protocolVersion: CapsuleObject.relayNamespaceProtocolVersion,
+            publicationID: publicationID,
+            address: "noct://legacy-v2.lisbon/",
+            relayNamespaceID: namespace.id,
+            routeDirective: nil,
+            publisherID: identity.publisherID,
+            revision: 1,
+            previousObjectID: nil,
+            title: "V2",
+            subtitle: "",
+            body: "Preserved.",
+            accentHex: "#4f8f77",
+            bundle: try bundle().canonicalized()
+        )
+        XCTAssertNoThrow(try PublicationValidation.validateObject(object))
+        let objectID = NoctwebDigest.objectID(
+            for: try CanonicalJSON.encode(object)
+        )
+        let claims = PublisherHeadClaims(
+            protocolVersion: CapsuleObject.relayNamespaceProtocolVersion,
+            publicationID: publicationID,
+            address: object.address,
+            relayNamespaceID: namespace.id,
+            routeDirective: nil,
+            publisherID: identity.publisherID,
+            publisherPublicKey: identity.publicKey,
+            objectID: objectID,
+            revision: 1,
+            previousHeadID: nil,
+            issuedAtMilliseconds: 1_700_000_000_000
+        )
+        let signature = try identity.sign(headClaims: claims)
+        XCTAssertTrue(
+            PublicationSigningIdentity.verify(
+                signature: signature,
+                headClaims: claims
+            )
+        )
+    }
+
+    func testRelayModulesMustBeUniqueCanonicalAndIncludePrimaryRole() {
+        let endpoint = URL(string: "https://modules.invalid")!
+        XCTAssertThrowsError(
+            try RelayTopology(
+                nodes: [
+                    RelayNode(
+                        id: "duplicate",
+                        name: "Duplicate",
+                        role: .standard,
+                        endpoint: endpoint,
+                        advertisedModules: [.standard, .host, .host]
+                    )
+                ]
+            )
+        )
+        XCTAssertThrowsError(
+            try RelayTopology(
+                nodes: [
+                    RelayNode(
+                        id: "reordered",
+                        name: "Reordered",
+                        role: .standard,
+                        endpoint: endpoint,
+                        advertisedModules: [.host, .standard]
+                    )
+                ]
+            )
+        )
+        XCTAssertThrowsError(
+            try RelayTopology(
+                nodes: [
+                    RelayNode(
+                        id: "missing-primary",
+                        name: "Missing primary",
+                        role: .standard,
+                        endpoint: endpoint,
+                        advertisedModules: [.host]
+                    )
+                ]
+            )
+        )
     }
 
     func testSameSiteLabelCanExistInDifferentRelayNamespaces() async throws {
@@ -389,7 +751,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             draft: draft(),
             at: Date(timeIntervalSince1970: 1_700_000_000)
         )
-        XCTAssertEqual(publication.hostRelayIDs.count, 2)
+        XCTAssertEqual(publication.hostRelayIDs.count, 3)
 
         let direct = try await engine.resolve(
             address: publication.object.address,
@@ -422,7 +784,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             at: Date(timeIntervalSince1970: 1_700_000_000)
         )
 
-        XCTAssertEqual(publication.object.protocolVersion, "noctweb-lab-v2")
+        XCTAssertEqual(publication.object.protocolVersion, "noctweb-lab-v3")
         XCTAssertEqual(
             publication.object.bundle?.files.map(\.path),
             original.files.map(\.path).sorted()
@@ -652,6 +1014,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             hostRelayID: "host-lisbon"
         )
         try await engine.setRelayOnline(false, relayID: "host-salvador")
+        try await engine.setRelayOnline(false, relayID: "standard-local")
 
         do {
             _ = try await engine.resolve(
@@ -727,6 +1090,7 @@ final class NoctwebLabCoreTests: XCTestCase {
                     .relayNamespace()?
                     .id
             ),
+            routeDirective: .open,
             publisherID: identity.publisherID,
             publisherPublicKey: identity.publicKey,
             objectID: "sha256:" + String(repeating: "a", count: 64),
@@ -746,6 +1110,7 @@ final class NoctwebLabCoreTests: XCTestCase {
             publicationID: publicationID,
             address: claims.address,
             relayNamespaceID: claims.relayNamespaceID,
+            routeDirective: claims.routeDirective,
             publisherID: claims.publisherID,
             publisherPublicKey: claims.publisherPublicKey,
             objectID: "sha256:" + String(repeating: "b", count: 64),

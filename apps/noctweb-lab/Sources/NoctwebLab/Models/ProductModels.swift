@@ -144,6 +144,14 @@ enum LabRelayRole: String, CaseIterable, Codable, Identifiable {
         case .host: "externaldrive.connected.to.line.below"
         }
     }
+
+    var module: RelayModule {
+        switch self {
+        case .standard: .standard
+        case .passthrough: .passthrough
+        case .host: .host
+        }
+    }
 }
 
 struct LabRelayNode: Identifiable, Codable, Hashable {
@@ -157,6 +165,25 @@ struct LabRelayNode: Identifiable, Codable, Hashable {
     var retainedObjects: Int
     var relayNamespaceID: String? = nil
     var namespaceSuffix: String? = nil
+    var advertisedModules: [RelayModule]? = nil
+    var operatorRouteDirective: RouteDirective? = nil
+
+    var modules: [RelayModule] {
+        let configured = Set(
+            (advertisedModules ?? [role.module]) + [role.module]
+        )
+        return RelayModule.allCases.filter {
+            configured.contains($0)
+        }
+    }
+
+    func supports(_ role: LabRelayRole) -> Bool {
+        modules.contains(role.module)
+    }
+
+    var resolvedOperatorRouteDirective: RouteDirective {
+        operatorRouteDirective ?? .open
+    }
 }
 
 enum TrustEvidenceKind: String, CaseIterable, Codable, Identifiable {
@@ -348,6 +375,7 @@ struct SiteProject: Identifiable, Codable, Hashable {
     let id: UUID
     var address: String
     var relayNamespaceID: String? = nil
+    var publisherRouteDirective: RouteDirective? = nil
     var title: String
     var subtitle: String
     var body: String
@@ -379,9 +407,20 @@ struct SiteProject: Identifiable, Codable, Hashable {
     var resolvedBlocks: [SiteBlock] {
         blocks ?? []
     }
+
+    var resolvedPublisherRouteDirective: RouteDirective {
+        publisherRouteDirective ?? .open
+    }
+}
+
+struct WebsiteRoutingContext: Equatable {
+    let publisherDirective: RouteDirective
+    let hostRelayIDs: Set<String>?
+    let usesSignedPublication: Bool
 }
 
 enum RouteMode: String, CaseIterable, Identifiable {
+    case automatic
     case direct
     case passthrough
 
@@ -389,8 +428,17 @@ enum RouteMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .automatic: "Automatic"
         case .direct: "Direct"
-        case .passthrough: "Passthrough"
+        case .passthrough: "One-hop"
+        }
+    }
+
+    var directive: RouteDirective {
+        switch self {
+        case .automatic: .open
+        case .direct: .direct
+        case .passthrough: .passthrough
         }
     }
 }
@@ -414,6 +462,7 @@ struct ResolvedSiteSnapshot: Equatable {
     let objectID: String
     let publisherID: String
     let bundle: WebsiteBundle
+    let routingDecision: RoutingDecision
 }
 
 enum FaultKind: String, Codable {
@@ -453,6 +502,16 @@ struct Workspace: Identifiable, Codable, Hashable {
     var sites: [SiteProject]
     var relays: [LabRelayNode]
     var runs: [ScenarioRun]
+    var federationMode: FederationMode? = nil
+    var federationRouteDirective: RouteDirective? = nil
+
+    var resolvedFederationMode: FederationMode {
+        federationMode ?? .solo
+    }
+
+    var resolvedFederationRouteDirective: RouteDirective {
+        federationRouteDirective ?? .open
+    }
 }
 
 extension Workspace {
@@ -473,6 +532,7 @@ extension Workspace {
                         relaySuffix: primaryNamespace.suffix
                     ).canonicalString,
                     relayNamespaceID: primaryNamespace.id,
+                    publisherRouteDirective: .open,
                     title: "A garden with no address",
                     subtitle: "Field notes from a site that belongs to its publisher, not its host.",
                     body: """
@@ -533,10 +593,55 @@ extension Workspace {
                         (node.role == .passthrough ? 41 : 32),
                     retainedObjects: 0,
                     relayNamespaceID: namespace?.id,
-                    namespaceSuffix: namespace?.suffix
+                    namespaceSuffix: namespace?.suffix,
+                    advertisedModules: node.modules,
+                    operatorRouteDirective: node.routeDirective
                 )
             },
-            runs: []
+            runs: [],
+            federationMode: topology.federationPolicy.mode,
+            federationRouteDirective: topology.federationPolicy.directive
         )
+    }
+}
+
+extension FederationMode {
+    var title: String {
+        switch self {
+        case .solo: "Solo"
+        case .manual: "Manual"
+        case .curated: "Curated"
+        case .open: "Open"
+        }
+    }
+}
+
+extension RouteDirective {
+    var title: String {
+        switch self {
+        case .open: "Leave open"
+        case .direct: "Require direct"
+        case .passthrough: "Require one-hop"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .open: "Open"
+        case .direct: "Direct"
+        case .passthrough: "One-hop"
+        }
+    }
+}
+
+extension RoutingAuthority {
+    var title: String {
+        switch self {
+        case .federation: "Federation"
+        case .relayOperator: "Relay operator"
+        case .publisher: "Publisher"
+        case .visitor: "Visitor"
+        case .defaultDirect: "Safe default"
+        }
     }
 }

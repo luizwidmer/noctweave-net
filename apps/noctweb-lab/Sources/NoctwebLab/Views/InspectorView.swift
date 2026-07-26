@@ -133,6 +133,10 @@ struct InspectorView: View {
                         ? "Unpublished"
                         : "\(site.revision)"
                 )
+                inspectorField(
+                    "Publisher route policy",
+                    value: site.resolvedPublisherRouteDirective.title
+                )
                 inspectorField("Profile", value: "Native static capsule")
                 inspectorField("Rendered by", value: "SwiftUI")
             }

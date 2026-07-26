@@ -485,6 +485,20 @@ struct WebsiteProjectEditorView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
+                            Picker(
+                                "Publisher route policy",
+                                selection: publisherRouteDirectiveBinding
+                            ) {
+                                ForEach(RouteDirective.allCases, id: \.self) { directive in
+                                    Text(directive.title)
+                                        .tag(directive)
+                                }
+                            }
+
+                            Text("Open defers to the visitor unless federation or relay-operator policy has already decided. The publisher policy may change in a newly signed revision even after this address is finalized.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
                             LabeledContent("Publisher") {
                                 Text(site.publisherID?.shortIdentifier ?? "Preparing…")
                                     .font(.system(.caption, design: .monospaced))
@@ -953,6 +967,15 @@ struct WebsiteProjectEditorView: View {
         Binding(
             get: { model.selectedSite?.relayNamespaceID ?? "" },
             set: { model.selectRelayNamespace($0) }
+        )
+    }
+
+    private var publisherRouteDirectiveBinding: Binding<RouteDirective> {
+        Binding(
+            get: {
+                model.selectedSite?.resolvedPublisherRouteDirective ?? .open
+            },
+            set: { model.setPublisherRouteDirective($0) }
         )
     }
 

@@ -32,6 +32,42 @@ public actor NoctwebLabEngine {
         try await network.setOnline(online, relayID: relayID)
     }
 
+    public func setFederationPolicy(
+        _ policy: FederationRoutingPolicy
+    ) async throws {
+        try await network.setFederationPolicy(policy)
+    }
+
+    public func applyRelayConfiguration(
+        federationPolicy: FederationRoutingPolicy,
+        relays: [RelayRuntimeConfiguration]
+    ) async throws {
+        try await network.applyConfiguration(
+            federationPolicy: federationPolicy,
+            relays: relays
+        )
+    }
+
+    public func setRelayAdvertisedModules(
+        _ modules: [RelayModule],
+        relayID: String
+    ) async throws {
+        try await network.setAdvertisedModules(
+            modules,
+            relayID: relayID
+        )
+    }
+
+    public func setRelayOperatorRouteDirective(
+        _ directive: RouteDirective,
+        relayID: String
+    ) async throws {
+        try await network.setOperatorRouteDirective(
+            directive,
+            relayID: relayID
+        )
+    }
+
     public func corruptReplica(
         address: String,
         hostRelayID: String
@@ -114,10 +150,12 @@ public actor NoctwebLabEngine {
         }
 
         let revision = (previous?.object.revision ?? 0) + 1
+        let publisherRouteDirective = draft.routeDirective ?? .open
         let object = CapsuleObject(
             publicationID: draft.publicationID,
             address: draft.address,
             relayNamespaceID: draft.relayNamespaceID,
+            routeDirective: publisherRouteDirective,
             publisherID: identity.publisherID,
             revision: revision,
             previousObjectID: previous?.head.claims.objectID,
@@ -134,6 +172,7 @@ public actor NoctwebLabEngine {
             publicationID: draft.publicationID,
             address: draft.address,
             relayNamespaceID: draft.relayNamespaceID,
+            routeDirective: publisherRouteDirective,
             publisherID: identity.publisherID,
             publisherPublicKey: identity.publicKey,
             objectID: objectID,
@@ -148,7 +187,7 @@ public actor NoctwebLabEngine {
         let headID = try NoctwebDigest.headID(for: head)
 
         var hostRelayIDs: [String] = []
-        for route in await network.routes(for: .direct) {
+        for route in await network.directHostRoutes() {
             do {
                 let relayID = try await network.store(
                     encodedObject: encodedObject,
@@ -204,11 +243,29 @@ public actor NoctwebLabEngine {
         address: String,
         preference: LabRoute = .automatic
     ) async throws -> ResolutionResult {
-        let candidates = await network.routes(for: preference)
+        guard let accepted = publicationsByAddress[address] else {
+            throw NoctwebLabError.publicationNotFound(address)
+        }
+        let candidates = await network.policyRoutes(
+            publisher: accepted.object.routeDirective ?? .open,
+            visitor: preference
+        )
+        guard !candidates.isEmpty else {
+            throw NoctwebLabError.invalidRoute(
+                "effective routing policy has no available route shape"
+            )
+        }
         var lastFailure: (any Error)?
-        for route in candidates {
+        for candidate in candidates {
             do {
-                return try await resolve(address: address, route: route)
+                return try await resolve(
+                    address: address,
+                    route: candidate.route,
+                    routingDecision: candidate.decision,
+                    publisherRouteDirective:
+                        accepted.object.routeDirective ?? .open,
+                    visitor: preference
+                )
             } catch NoctwebLabError.relayUnavailable {
                 continue
             } catch NoctwebLabError.publicationNotFound {
@@ -230,14 +287,47 @@ public actor NoctwebLabEngine {
         guard let accepted = publicationsByAddress[address] else {
             throw NoctwebLabError.publicationNotFound(address)
         }
-        if accepted.object.protocolVersion == CapsuleObject.currentProtocolVersion {
+        let visitor: LabRoute = route.directive == .direct
+            ? .direct
+            : .passthrough
+        let decision = try await network.routingDecision(
+            for: route,
+            publisher: accepted.object.routeDirective ?? .open,
+            visitor: visitor
+        )
+        return try await resolve(
+            address: address,
+            route: route,
+            routingDecision: decision,
+            publisherRouteDirective:
+                accepted.object.routeDirective ?? .open,
+            visitor: visitor
+        )
+    }
+
+    private func resolve(
+        address: String,
+        route: RelayRoute,
+        routingDecision: RoutingDecision,
+        publisherRouteDirective: RouteDirective,
+        visitor: LabRoute
+    ) async throws -> ResolutionResult {
+        guard let accepted = publicationsByAddress[address] else {
+            throw NoctwebLabError.publicationNotFound(address)
+        }
+        if CapsuleObject.usesRelayNamespace(
+            protocolVersion: accepted.object.protocolVersion
+        ) {
             _ = try NoctwebAddress.parse(address)
         } else {
             try PublicationValidation.validateLegacyAddress(address)
         }
         guard let hosted = try await network.fetch(
             address: address,
-            route: route
+            route: route,
+            publisher: publisherRouteDirective,
+            visitor: visitor,
+            expectedDecision: routingDecision
         ) else {
             throw NoctwebLabError.publicationNotFound(address)
         }
@@ -285,6 +375,8 @@ public actor NoctwebLabEngine {
             canonicalObject.publicationID == hosted.head.claims.publicationID,
             canonicalObject.relayNamespaceID ==
                 hosted.head.claims.relayNamespaceID,
+            canonicalObject.routeDirective ==
+                hosted.head.claims.routeDirective,
             canonicalObject.publisherID == hosted.head.claims.publisherID,
             canonicalObject.revision == hosted.head.claims.revision
         else {
@@ -327,6 +419,7 @@ public actor NoctwebLabEngine {
             head: hosted.head,
             headID: hosted.headID,
             route: route,
+            routingDecision: routingDecision,
             evidence: ResolutionEvidence(
                 integrity: IntegrityEvidence(
                     declaredObjectID: hosted.head.claims.objectID,
@@ -376,6 +469,8 @@ public actor NoctwebLabEngine {
                 publication.head.claims.address,
             publication.object.relayNamespaceID ==
                 publication.head.claims.relayNamespaceID,
+            publication.object.routeDirective ==
+                publication.head.claims.routeDirective,
             publication.object.publisherID ==
                 publication.head.claims.publisherID,
             publication.object.revision ==
@@ -410,7 +505,9 @@ public actor NoctwebLabEngine {
         relayNamespaceID: String?,
         protocolVersion: String
     ) async throws {
-        guard protocolVersion == CapsuleObject.currentProtocolVersion else {
+        guard CapsuleObject.usesRelayNamespace(
+            protocolVersion: protocolVersion
+        ) else {
             return
         }
         let parsed = try NoctwebAddress.parse(address)
@@ -421,7 +518,7 @@ public actor NoctwebLabEngine {
         }
         let topology = try await network.topology()
         let matches = try topology.nodes
-            .filter { $0.role == .host }
+            .filter { $0.supports(.host) }
             .compactMap { try $0.relayNamespace() }
             .contains {
                 $0.id == relayNamespaceID &&

@@ -110,6 +110,7 @@ final class AppModel: ObservableObject {
         }
         workspaces = initialWorkspaces
         Self.migrateRelayNamespaces(in: &workspaces)
+        Self.migrateRoutingPolicies(in: &workspaces)
         for workspaceIndex in workspaces.indices {
             for siteIndex in workspaces[workspaceIndex].sites.indices {
                 WebsiteProjectBuilder.ensureProject(
@@ -141,6 +142,29 @@ final class AppModel: ObservableObject {
         return activeWorkspace?.sites.first(where: { $0.id == selectedSiteID })
     }
 
+    var selectedWebsiteRoutingContext: WebsiteRoutingContext {
+        guard let site = selectedSite else {
+            return WebsiteRoutingContext(
+                publisherDirective: .open,
+                hostRelayIDs: nil,
+                usesSignedPublication: false
+            )
+        }
+        guard let publication = try? publishedCapsule(from: site) else {
+            return WebsiteRoutingContext(
+                publisherDirective: site.resolvedPublisherRouteDirective,
+                hostRelayIDs: nil,
+                usesSignedPublication: false
+            )
+        }
+        return WebsiteRoutingContext(
+            publisherDirective:
+                publication.head.claims.routeDirective ?? .open,
+            hostRelayIDs: Set(publication.hostRelayIDs),
+            usesSignedPublication: true
+        )
+    }
+
     var selectedScenario: FaultScenario? {
         guard let selectedScenarioID else { return nil }
         return scenarios.first(where: { $0.id == selectedScenarioID })
@@ -153,7 +177,7 @@ final class AppModel: ObservableObject {
 
     var availableRelayNamespaces: [LabRelayNode] {
         activeWorkspace?.relays.filter {
-            $0.role == .host &&
+            $0.supports(.host) &&
                 $0.relayNamespaceID != nil &&
                 $0.namespaceSuffix != nil
         } ?? []
@@ -187,7 +211,7 @@ final class AppModel: ObservableObject {
         guard
             let namespaceRelay = workspaces[workspaceIndex].relays.first(
                 where: {
-                    $0.role == .host &&
+                    $0.supports(.host) &&
                         $0.relayNamespaceID != nil &&
                         $0.namespaceSuffix != nil
                 }
@@ -287,6 +311,54 @@ final class AppModel: ObservableObject {
         updateSelectedSite {
             $0.address = address
             $0.relayNamespaceID = relayNamespaceID
+        }
+    }
+
+    func setPublisherRouteDirective(_ directive: RouteDirective) {
+        updateSelectedSite {
+            $0.publisherRouteDirective = directive
+        }
+    }
+
+    func setFederationMode(_ mode: FederationMode) {
+        guard let workspaceIndex = activeWorkspaceIndex else { return }
+        workspaces[workspaceIndex].federationMode = mode
+        if mode == .solo {
+            workspaces[workspaceIndex].federationRouteDirective = .open
+        }
+        persist()
+        Task { [weak self] in
+            await self?.applyActiveRelayState()
+        }
+    }
+
+    func setFederationRouteDirective(_ directive: RouteDirective) {
+        guard
+            let workspaceIndex = activeWorkspaceIndex,
+            workspaces[workspaceIndex].resolvedFederationMode != .solo
+        else { return }
+        workspaces[workspaceIndex].federationRouteDirective = directive
+        persist()
+        Task { [weak self] in
+            await self?.applyActiveRelayState()
+        }
+    }
+
+    func setRelayOperatorRouteDirective(
+        _ directive: RouteDirective,
+        relayID: String
+    ) {
+        guard
+            let workspaceIndex = activeWorkspaceIndex,
+            let relayIndex = workspaces[workspaceIndex].relays.firstIndex(
+                where: { $0.id == relayID && $0.supports(.host) }
+            )
+        else { return }
+        workspaces[workspaceIndex].relays[relayIndex]
+            .operatorRouteDirective = directive
+        persist()
+        Task { [weak self] in
+            await self?.applyActiveRelayState()
         }
     }
 
@@ -1009,9 +1081,24 @@ final class AppModel: ObservableObject {
         )
 
         do {
+            let expectedPublisherID: String
+            if let publisherID = initialSite.publisherID {
+                expectedPublisherID = publisherID
+            } else if
+                let publication = try? publishedCapsule(
+                    from: initialSite
+                )
+            {
+                expectedPublisherID = publication.object.publisherID
+            } else {
+                expectedPublisherID =
+                    try await engine.preparePublisherIdentity(
+                        for: initialSite.id.uuidString.lowercased()
+                    )
+            }
             let publication = try await engine.publish(
                 draft: try coreDraft(from: initialSite),
-                expectedPublisherID: initialSite.publisherID
+                expectedPublisherID: expectedPublisherID
             )
             transition(
                 to: .finalize,
@@ -1163,7 +1250,8 @@ final class AppModel: ObservableObject {
             revision: object.revision,
             objectID: result.head.claims.objectID,
             publisherID: object.publisherID,
-            bundle: object.bundle ?? legacyBundle(from: object)
+            bundle: object.bundle ?? legacyBundle(from: object),
+            routingDecision: result.routingDecision
         )
         runtimeResult = .resolved(
             snapshot: snapshot,
@@ -1192,9 +1280,13 @@ final class AppModel: ObservableObject {
         var events: [String] = []
         var passed = false
         let relays = workspaces[workspaceIndex].relays
-        let hostIDs = relays.filter { $0.role == .host }.map(\.id)
-        let passthroughIDs = relays.filter { $0.role == .passthrough }.map(\.id)
-        let standardIDs = relays.filter { $0.role == .standard }.map(\.id)
+        let hostIDs = relays.filter { $0.supports(.host) }.map(\.id)
+        let passthroughIDs = relays.filter {
+            $0.supports(.passthrough)
+        }.map(\.id)
+        let standardIDs = relays.filter {
+            $0.supports(.standard)
+        }.map(\.id)
 
         do {
             switch scenario.fault {
@@ -1357,11 +1449,27 @@ final class AppModel: ObservableObject {
 
     private func applyActiveRelayState() async {
         guard let activeWorkspace else { return }
-        for relay in activeWorkspace.relays {
-            try? await engine.setRelayOnline(
-                relay.isOnline,
-                relayID: relay.id
+        let federationPolicy = FederationRoutingPolicy(
+            mode: activeWorkspace.resolvedFederationMode,
+            directive: activeWorkspace.resolvedFederationRouteDirective
+        )
+        let relayConfiguration = activeWorkspace.relays.map {
+            RelayRuntimeConfiguration(
+                relayID: $0.id,
+                advertisedModules: $0.modules,
+                operatorRouteDirective:
+                    $0.resolvedOperatorRouteDirective,
+                isOnline: $0.isOnline
             )
+        }
+        do {
+            try await engine.applyRelayConfiguration(
+                federationPolicy: federationPolicy,
+                relays: relayConfiguration
+            )
+        } catch {
+            operationError =
+                "Could not apply relay policy: \(error.localizedDescription)"
         }
     }
 
@@ -1370,6 +1478,7 @@ final class AppModel: ObservableObject {
             publicationID: site.id.uuidString.lowercased(),
             address: site.address,
             relayNamespaceID: site.relayNamespaceID,
+            routeDirective: site.resolvedPublisherRouteDirective,
             title: site.title,
             subtitle: site.subtitle,
             body: site.body,
@@ -1416,7 +1525,11 @@ final class AppModel: ObservableObject {
     }
 
     private var coreRoute: LabRoute {
-        routeMode == .direct ? .direct : .passthrough
+        switch routeMode {
+        case .automatic: .automatic
+        case .direct: .direct
+        case .passthrough: .passthrough
+        }
     }
 
     private static func migrateRelayNamespaces(
@@ -1451,7 +1564,7 @@ final class AppModel: ObservableObject {
             guard
                 let primary = workspaces[workspaceIndex].relays.first(
                     where: {
-                        $0.role == .host &&
+                        $0.supports(.host) &&
                             $0.relayNamespaceID != nil &&
                             $0.namespaceSuffix != nil
                     }
@@ -1468,10 +1581,14 @@ final class AppModel: ObservableObject {
                             PublishedCapsule.self,
                             from: envelope
                         ),
-                        publication.object.protocolVersion ==
-                            CapsuleObject.currentProtocolVersion,
-                        publication.head.claims.protocolVersion ==
-                            CapsuleObject.currentProtocolVersion,
+                        CapsuleObject.usesRelayNamespace(
+                            protocolVersion:
+                                publication.object.protocolVersion
+                        ),
+                        CapsuleObject.usesRelayNamespace(
+                            protocolVersion:
+                                publication.head.claims.protocolVersion
+                        ),
                         let namespaceID =
                             publication.object.relayNamespaceID,
                         publication.head.claims.relayNamespaceID ==
@@ -1505,6 +1622,62 @@ final class AppModel: ObservableObject {
                     site.relayNamespaceID = primaryID
                 }
                 workspaces[workspaceIndex].sites[siteIndex] = site
+            }
+        }
+    }
+
+    private static func migrateRoutingPolicies(
+        in workspaces: inout [Workspace]
+    ) {
+        let topology = RelayTopology.labDefault
+        let defaultsByID = Dictionary(
+            uniqueKeysWithValues: topology.nodes.map { ($0.id, $0) }
+        )
+
+        for workspaceIndex in workspaces.indices {
+            if workspaces[workspaceIndex].federationMode == nil {
+                workspaces[workspaceIndex].federationMode =
+                    topology.federationPolicy.mode
+            }
+            if workspaces[workspaceIndex].federationRouteDirective == nil {
+                workspaces[workspaceIndex].federationRouteDirective =
+                    topology.federationPolicy.directive
+            }
+            if workspaces[workspaceIndex].resolvedFederationMode == .solo {
+                workspaces[workspaceIndex].federationRouteDirective = .open
+            }
+
+            for relayIndex in workspaces[workspaceIndex].relays.indices {
+                let relayID = workspaces[workspaceIndex].relays[relayIndex].id
+                guard let defaultNode = defaultsByID[relayID] else { continue }
+                if workspaces[workspaceIndex].relays[relayIndex]
+                    .advertisedModules == nil
+                {
+                    workspaces[workspaceIndex].relays[relayIndex]
+                        .advertisedModules = defaultNode.modules
+                }
+                if workspaces[workspaceIndex].relays[relayIndex]
+                    .operatorRouteDirective == nil
+                {
+                    workspaces[workspaceIndex].relays[relayIndex]
+                        .operatorRouteDirective = defaultNode.routeDirective
+                }
+            }
+
+            for siteIndex in workspaces[workspaceIndex].sites.indices
+            where workspaces[workspaceIndex].sites[siteIndex]
+                .publisherRouteDirective == nil
+            {
+                let envelope = workspaces[workspaceIndex].sites[siteIndex]
+                    .publishedEnvelope
+                let signedDirective = envelope.flatMap { data in
+                    (try? CanonicalJSON.decode(
+                        PublishedCapsule.self,
+                        from: data
+                    ))?.object.routeDirective
+                }
+                workspaces[workspaceIndex].sites[siteIndex]
+                    .publisherRouteDirective = signedDirective ?? .open
             }
         }
     }
@@ -1619,7 +1792,7 @@ final class AppModel: ObservableObject {
         for relayIndex in workspaces[workspaceIndex].relays.indices {
             let relayID = workspaces[workspaceIndex].relays[relayIndex].id
             guard
-                workspaces[workspaceIndex].relays[relayIndex].role == .host
+                workspaces[workspaceIndex].relays[relayIndex].supports(.host)
             else {
                 workspaces[workspaceIndex].relays[relayIndex].retainedObjects = 0
                 continue

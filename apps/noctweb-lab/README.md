@@ -6,13 +6,15 @@ management, publisher authority, relay controls, and verification surfaces are
 native SwiftUI. The Lab is not a hosted website, progressive web app, browser
 extension, Electron bundle, or remote-origin WebView shell.
 
-The Lab currently implements the explicitly incompatible `noctweb-lab-v2`
-website-bundle and relay-scoped namespace profile. It is a local protocol
+The Lab currently implements the explicitly incompatible `noctweb-lab-v3`
+website-bundle, signed publisher-routing, and relay-scoped namespace profile.
+It is a local protocol
 simulator and
 product-development surface; it does not claim production consensus,
 wire-format compatibility, or production sandboxing. Its deterministic relay
-adapters model standard, passthrough, and host behavior but do not yet connect
-the application to live Noctweave relay endpoints.
+and routing-policy adapters model standard, passthrough, and host modules,
+operator advertisements, and federation policy but do not yet connect the
+application to live Noctweave relay endpoints.
 
 ## Website workflow
 
@@ -55,9 +57,9 @@ server actions, backend APIs, or service workers. Remote navigation, network
 fetches, and CDN-hosted scripts are blocked in Preview and Runtime, so
 dependencies and assets must be included in the imported build.
 
-## Signed website bundles
+## Signed website bundles and compatibility
 
-A `noctweb-lab-v2` object carries a canonical website bundle with:
+A `noctweb-lab-v3` object carries a canonical website bundle with:
 
 - one normalized relative entry path;
 - at most 512 files;
@@ -65,16 +67,58 @@ A `noctweb-lab-v2` object carries a canonical website bundle with:
 - a media type for every file; and
 - no absolute, traversing, duplicate, or case-conflicting paths.
 
-The bundle is covered by the content digest and the publication-scoped
-publisher signature. Host and passthrough relays can move or retain the bytes,
-but cannot alter a file without failing verification.
+The bundle and publisher route directive are covered by the content digest and
+publication-scoped publisher signature. Host and passthrough modules can move
+or retain the bytes, but cannot alter a file or routing directive without
+failing verification.
+
+Existing `noctweb-lab-v2` relay-namespace publications remain verifiable and
+may be upgraded to v3. Already signed `noctweb-lab-v1` publications remain
+legacy read-only; the Lab does not rewrite their signed history.
 
 Each publication receives its own Ed25519 publisher key. Private key material
 is stored in the macOS Keychain and marked non-synchronizable. Workspace
 drafts, topology, revisions, and test runs are stored locally in Application
-Support. Standard, passthrough, and host relay roles remain independent, and
-the Lab reports integrity, publisher authority, and mock-consensus finality as
-separate evidence.
+Support. Standard, passthrough, and host module families remain independent
+even when one simulated relay advertises more than one module. The Lab reports
+integrity, publisher authority, routing-policy authority, and mock-consensus
+finality as separate evidence.
+
+## Public retrieval policy
+
+The Lab models the only two v0 public retrieval shapes:
+
+```text
+visitor -> host
+visitor -> passthrough -> host
+```
+
+They are alternatives; there is no mandatory
+standard-to-passthrough-to-host chain. A `solo` standard relay may also
+advertise `nw.net-host@1` and directly host and serve a publication.
+
+Each layer may leave routing open, require direct retrieval, or require one
+bounded passthrough hop. The first non-open directive wins in this strict
+authority order:
+
+1. federation policy;
+2. host-relay operator;
+3. signed publisher; and
+4. visitor.
+
+When all layers leave routing open, direct is the deterministic default. A
+lower layer cannot weaken or widen a higher directive. If effective policy
+requires one-hop retrieval and no eligible passthrough is available, the Lab
+fails closed instead of silently choosing direct.
+
+The UI calls the top layer “federation policy.” In this Lab it is a
+deterministic local model of an authenticated Noctweave Net routing
+trust-domain/control-plane constraint. It is not a fourth relay role,
+`nw.federation` discovery, a relay-forwarding hop, or content authority.
+Existing consensus may finalize or share the selected federation-policy record
+without becoming part of the retrieval path. Production operator
+advertisements and federation-policy records require authentication; the Lab's
+adapters are test fixtures, not that authentication.
 
 ## Relay-scoped names
 
@@ -84,11 +128,12 @@ The Lab models canonical public base URLs as:
 noct://<site>.<relay-suffix>/
 ```
 
-Each namespace relay is one of the Lab's host relays, not a fourth relay role.
-An operator may choose a custom suffix, or use the profile's deterministic
-`r-<hash>` fallback derived from a dedicated namespace public key. Site labels
-are unique only within one suffix, so two different suffixes may each allocate
-the same label.
+The namespace function is an optional advertisement by a relay with the host
+module, not a fourth relay role and not a prerequisite for hosting. An operator
+that advertises it may choose a custom suffix or use the profile's
+deterministic `r-<hash>` fallback derived from a dedicated namespace public
+key. Site labels are unique only within one suffix, so two different suffixes
+may each allocate the same label.
 
 The Lab's deterministic topology rejects duplicate visible suffixes, and its
 in-process finality model rejects a second publication claiming the same full
@@ -152,6 +197,13 @@ account or person. If the recorded private key for an existing publication is
 missing, publishing fails closed; the Lab does not silently replace that
 identity. Relays receive public signed commitments and content bytes only.
 They never receive the private publisher key.
+
+Routing also fails closed. The Lab must reject stripped publisher directives
+and stale or forged policy evidence, report passthrough when policy selected
+passthrough rather than claiming a direct route, and never silently downgrade a
+required one-hop route. A simulated relay advertising both passthrough and host
+modules retains separate credentials, rate limits, and audit evidence for each
+module so co-location does not collapse metadata boundaries.
 
 Removing a site or workspace removes that local Lab project and its local
 runtime history. It does not unpublish already replicated immutable revisions,

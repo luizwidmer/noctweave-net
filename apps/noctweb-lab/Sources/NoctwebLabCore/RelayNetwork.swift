@@ -7,19 +7,113 @@ struct HostedPublication: Sendable {
     var finality: FinalityEvidence?
 }
 
+struct PolicyRouteCandidate: Sendable {
+    let route: RelayRoute
+    let decision: RoutingDecision
+}
+
 public actor InMemoryRelayNetwork {
     private var nodesByID: [String: RelayNode]
     private var publicationsByHost: [String: [String: HostedPublication]]
+    private var federationPolicy: FederationRoutingPolicy
 
     public init(topology: RelayTopology) {
         self.nodesByID = Dictionary(
             uniqueKeysWithValues: topology.nodes.map { ($0.id, $0) }
         )
         self.publicationsByHost = [:]
+        self.federationPolicy = topology.federationPolicy
     }
 
     public func topology() throws -> RelayTopology {
-        try RelayTopology(nodes: nodesByID.values.sorted { $0.id < $1.id })
+        try RelayTopology(
+            nodes: nodesByID.values.sorted { $0.id < $1.id },
+            federationPolicy: federationPolicy
+        )
+    }
+
+    public func setFederationPolicy(
+        _ policy: FederationRoutingPolicy
+    ) throws {
+        _ = try RelayTopology(
+            nodes: Array(nodesByID.values),
+            federationPolicy: policy
+        )
+        federationPolicy = policy
+    }
+
+    public func applyConfiguration(
+        federationPolicy: FederationRoutingPolicy,
+        relays: [RelayRuntimeConfiguration]
+    ) throws {
+        let relayIDs = relays.map(\.relayID)
+        guard Set(relayIDs).count == relayIDs.count else {
+            throw NoctwebLabError.invalidRelayTopology(
+                "relay configuration IDs must be unique"
+            )
+        }
+        guard Set(relayIDs) == Set(nodesByID.keys) else {
+            throw NoctwebLabError.invalidRelayTopology(
+                "relay configuration must describe every active relay exactly once"
+            )
+        }
+
+        var candidate = nodesByID
+        for configuration in relays {
+            guard var node = candidate[configuration.relayID] else {
+                throw NoctwebLabError.invalidRoute(
+                    "unknown relay \(configuration.relayID)"
+                )
+            }
+            node.advertisedModules = configuration.advertisedModules
+            node.operatorRouteDirective =
+                configuration.operatorRouteDirective
+            node.isOnline = configuration.isOnline
+            candidate[configuration.relayID] = node
+        }
+
+        let topology = try RelayTopology(
+            nodes: Array(candidate.values),
+            federationPolicy: federationPolicy
+        )
+        nodesByID = Dictionary(
+            uniqueKeysWithValues: topology.nodes.map { ($0.id, $0) }
+        )
+        self.federationPolicy = topology.federationPolicy
+    }
+
+    public func setAdvertisedModules(
+        _ modules: [RelayModule],
+        relayID: String
+    ) throws {
+        guard var node = nodesByID[relayID] else {
+            throw NoctwebLabError.invalidRoute("unknown relay \(relayID)")
+        }
+        node.advertisedModules = modules
+        var candidate = nodesByID
+        candidate[relayID] = node
+        _ = try RelayTopology(
+            nodes: Array(candidate.values),
+            federationPolicy: federationPolicy
+        )
+        nodesByID = candidate
+    }
+
+    public func setOperatorRouteDirective(
+        _ directive: RouteDirective,
+        relayID: String
+    ) throws {
+        guard var node = nodesByID[relayID] else {
+            throw NoctwebLabError.invalidRoute("unknown relay \(relayID)")
+        }
+        node.operatorRouteDirective = directive
+        var candidate = nodesByID
+        candidate[relayID] = node
+        _ = try RelayTopology(
+            nodes: Array(candidate.values),
+            federationPolicy: federationPolicy
+        )
+        nodesByID = candidate
     }
 
     public func setOnline(
@@ -30,9 +124,9 @@ public actor InMemoryRelayNetwork {
         guard var node = nodesByID[relayID] else {
             throw NoctwebLabError.invalidRoute("unknown relay \(relayID)")
         }
-        if let expectedRole, node.role != expectedRole {
+        if let expectedRole, !node.supports(expectedRole) {
             throw NoctwebLabError.invalidRoute(
-                "\(relayID) is \(node.role.rawValue), not \(expectedRole.rawValue)"
+                "\(relayID) does not advertise \(expectedRole.rawValue)"
             )
         }
         node.isOnline = online
@@ -93,8 +187,21 @@ public actor InMemoryRelayNetwork {
 
     func fetch(
         address: String,
-        route: RelayRoute
+        route: RelayRoute,
+        publisher: RouteDirective,
+        visitor: LabRoute,
+        expectedDecision: RoutingDecision
     ) throws -> HostedPublication? {
+        let currentDecision = try routingDecision(
+            for: route,
+            publisher: publisher,
+            visitor: visitor
+        )
+        guard currentDecision == expectedDecision else {
+            throw NoctwebLabError.invalidRoute(
+                "routing policy changed before retrieval"
+            )
+        }
         let hostID = try validate(route: route)
         return publicationsByHost[hostID]?[address]
     }
@@ -107,40 +214,106 @@ public actor InMemoryRelayNetwork {
     }
 
     public func routes(for preference: LabRoute) -> [RelayRoute] {
-        let hostIDs = nodesByID.values
-            .filter { $0.role == .host }
+        policyRoutes(
+            publisher: .open,
+            visitor: preference
+        ).map(\.route)
+    }
+
+    func directHostRoutes() -> [RelayRoute] {
+        nodesByID.values
+            .filter { $0.supports(.host) }
             .map(\.id)
             .sorted()
+            .map(RelayRoute.direct(hostRelayID:))
+    }
+
+    func policyRoutes(
+        publisher: RouteDirective,
+        visitor: LabRoute
+    ) -> [PolicyRouteCandidate] {
+        let hosts = nodesByID.values
+            .filter { $0.supports(.host) }
+            .sorted { $0.id < $1.id }
         let passthroughIDs = nodesByID.values
-            .filter { $0.role == .passthrough }
+            .filter { $0.supports(.passthrough) }
             .map(\.id)
             .sorted()
 
-        let direct = hostIDs.map(RelayRoute.direct(hostRelayID:))
-        let passthrough = passthroughIDs.flatMap { passthroughID in
-            hostIDs.map {
-                RelayRoute.passthrough(
-                    passthroughRelayID: passthroughID,
-                    hostRelayID: $0
+        return hosts.flatMap { host -> [PolicyRouteCandidate] in
+            let decision = RoutingPolicyResolver.resolve(
+                federation: federationPolicy,
+                relayOperator: host.routeDirective,
+                publisher: publisher,
+                visitor: visitor.directive
+            )
+            switch decision.directive {
+            case .direct:
+                return [
+                    PolicyRouteCandidate(
+                        route: .direct(hostRelayID: host.id),
+                        decision: decision
+                    )
+                ]
+            case .passthrough:
+                return passthroughIDs.compactMap { passthroughID in
+                    guard passthroughID != host.id else { return nil }
+                    return PolicyRouteCandidate(
+                        route: .passthrough(
+                            passthroughRelayID: passthroughID,
+                            hostRelayID: host.id
+                        ),
+                        decision: decision
+                    )
+                }
+            case .open:
+                preconditionFailure(
+                    "resolved routing policy cannot remain open"
                 )
             }
         }
+    }
 
-        switch preference {
-        case .direct:
-            return direct
-        case .passthrough:
-            return passthrough
-        case .automatic:
-            return direct + passthrough
+    func routingDecision(
+        for route: RelayRoute,
+        publisher: RouteDirective,
+        visitor: LabRoute
+    ) throws -> RoutingDecision {
+        guard
+            let host = nodesByID[route.hostRelayID],
+            host.supports(.host)
+        else {
+            throw NoctwebLabError.invalidRoute(
+                "\(route.hostRelayID) is not a host-capable relay"
+            )
         }
+        let decision = RoutingPolicyResolver.resolve(
+            federation: federationPolicy,
+            relayOperator: host.routeDirective,
+            publisher: publisher,
+            visitor: visitor.directive
+        )
+        guard decision.directive == route.directive else {
+            throw NoctwebLabError.invalidRoute(
+                "\(decision.authority.rawValue) policy requires \(decision.directive.rawValue) retrieval"
+            )
+        }
+        if
+            case let .passthrough(passthroughRelayID, hostRelayID) = route,
+            passthroughRelayID == hostRelayID
+        {
+            throw NoctwebLabError.invalidRoute(
+                "a host relay cannot be its own passthrough hop"
+            )
+        }
+        return decision
     }
 
     public func corruptObject(
         address: String,
         onHost relayID: String
     ) throws {
-        guard nodesByID[relayID]?.role == .host else {
+        guard nodesByID[relayID]?.supports(.host) == true else {
             throw NoctwebLabError.invalidRoute("\(relayID) is not a host relay")
         }
         guard var record = publicationsByHost[relayID]?[address] else {
@@ -258,7 +431,7 @@ public actor InMemoryRelayNetwork {
         _ relayID: String,
         role: RelayRole
     ) throws {
-        guard let node = nodesByID[relayID], node.role == role else {
+        guard let node = nodesByID[relayID], node.supports(role) else {
             throw NoctwebLabError.invalidRoute(
                 "\(relayID) is not a \(role.rawValue) relay"
             )

@@ -87,7 +87,11 @@ final class AppModelTests: XCTestCase {
             await Task.yield()
         }
         XCTAssertFalse(model.publicationInFlight)
-        XCTAssertEqual(model.publicationOutcome, .ready)
+        XCTAssertEqual(
+            model.publicationOutcome,
+            .ready,
+            model.publicationMessage
+        )
         XCTAssertTrue(
             model.publicationMessage.contains("newer draft")
         )
@@ -112,7 +116,7 @@ final class AppModelTests: XCTestCase {
         }
 
         let topology = try await fixture.engine.topology()
-        for host in topology.nodes where host.role == .host {
+        for host in topology.nodes where host.supports(.host) {
             try await fixture.engine.setRelayOnline(
                 false,
                 relayID: host.id
@@ -317,6 +321,111 @@ final class AppModelTests: XCTestCase {
             RelayNamespace.isValidID(
                 try XCTUnwrap(site.relayNamespaceID)
             )
+        )
+    }
+
+    func testStarterSoloStandardRelayAdvertisesWebsiteHosting() throws {
+        let workspace = Workspace.starter()
+        let relay = try XCTUnwrap(
+            workspace.relays.first { $0.id == "standard-local" }
+        )
+
+        XCTAssertEqual(workspace.resolvedFederationMode, .solo)
+        XCTAssertEqual(
+            workspace.resolvedFederationRouteDirective,
+            .open
+        )
+        XCTAssertEqual(relay.role, .standard)
+        XCTAssertTrue(relay.supports(.standard))
+        XCTAssertTrue(relay.supports(.host))
+    }
+
+    func testRoutingAuthorityChoicesPersist() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+
+        model.setFederationMode(.curated)
+        model.setFederationRouteDirective(.passthrough)
+        model.setRelayOperatorRouteDirective(
+            .direct,
+            relayID: "host-lisbon"
+        )
+        model.setPublisherRouteDirective(.passthrough)
+        model.flushPersistence()
+
+        let workspace = try XCTUnwrap(
+            decodeWorkspaces(at: fixture.workspaceURL).first
+        )
+        XCTAssertEqual(workspace.resolvedFederationMode, .curated)
+        XCTAssertEqual(
+            workspace.resolvedFederationRouteDirective,
+            .passthrough
+        )
+        XCTAssertEqual(
+            workspace.relays.first { $0.id == "host-lisbon" }?
+                .resolvedOperatorRouteDirective,
+            .direct
+        )
+        XCTAssertEqual(
+            workspace.sites.first?.resolvedPublisherRouteDirective,
+            .passthrough
+        )
+    }
+
+    func testPublisherRoutingDirectiveIsSignedInV3Publication() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+        model.setPublisherRouteDirective(.passthrough)
+
+        model.publishSelectedSite()
+        for _ in 0..<1_000 where model.publicationInFlight {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(
+            model.publicationOutcome,
+            .succeeded,
+            model.publicationMessage
+        )
+        let envelope = try XCTUnwrap(model.selectedSite?.publishedEnvelope)
+        let publication = try CanonicalJSON.decode(
+            PublishedCapsule.self,
+            from: envelope
+        )
+        XCTAssertEqual(
+            publication.object.protocolVersion,
+            "noctweb-lab-v3"
+        )
+        XCTAssertEqual(publication.object.routeDirective, .passthrough)
+        XCTAssertEqual(
+            publication.head.claims.routeDirective,
+            .passthrough
+        )
+        XCTAssertEqual(
+            model.selectedWebsiteRoutingContext.publisherDirective,
+            .passthrough
+        )
+        XCTAssertEqual(
+            model.selectedWebsiteRoutingContext.hostRelayIDs,
+            Set(publication.hostRelayIDs)
+        )
+        XCTAssertTrue(
+            model.selectedWebsiteRoutingContext.usesSignedPublication
+        )
+
+        model.setPublisherRouteDirective(.direct)
+
+        XCTAssertEqual(
+            model.selectedWebsiteRoutingContext.publisherDirective,
+            .passthrough
         )
     }
 
