@@ -36,24 +36,29 @@ changing a capsule object's identity.
 
 ## Noctweb namespace
 
-The canonical public base URL for a named site is:
+The intended canonical public base URL for a named site is:
 
 ```text
 noct://<site>.<relay-suffix>/
 ```
 
-The suffix belongs to a namespace relay, which is an ordinary host relay.
-Operators may request a globally unique custom suffix. When they do not, the
-active profile derives a deterministic `r-<hash>` suffix from the relay's
-stable identity. Site-label allocation is scoped to one suffix, so the same
+The suffix belongs to a namespace-capable host relay. An operator may configure
+the suffix. When it does not, the current Noctweb Publisher derives a
+deterministic provisional suffix from the public key that verifies that host's
+hosting receipts. Site-label allocation is scoped to one suffix, so the same
 label may exist under different suffixes without conflict.
 
-Consensus finalizes global suffix allocation and each unique
+The eventual consensus profile finalizes global suffix allocation and each unique
 `(<site>, <relay-suffix>)` mapping. The mapping identifies a
 publication-scoped publisher authority; it does not make the suffix operator
 the publisher. The namespace relay is also not required to be a publication's
 current content host. Readers use finalized host locators and still verify the
 publisher head and exact object bytes.
+
+No consensus naming profile exists yet. The current Publisher therefore labels
+every displayed `noct://` name as provisional. An operator-set suffix or a
+receipt-key-derived suffix is a local hosting namespace hint, not proof of
+global uniqueness, allocation, finality, or portable resolution.
 
 ## Relay topology
 
@@ -80,6 +85,48 @@ See [relay topology](docs/relay-topology.md).
 The transport integration is implemented by Noctweave's provisional
 `nw.net-passthrough@1` and `nw.net-host@1` modules. See the
 [Noctweave integration contract](docs/noctweave-integration.md).
+
+## Noctweb Publisher
+
+**Noctweb Publisher** is the initial public authoring surface. It is a simple
+browser page served from the same origin as an opted-in host endpoint. The
+endpoint may be a dedicated host relay or a `solo` standard relay process that
+also advertises `nw.net-host@1`; the page is not a fourth relay role and the
+standard module alone does not gain hosting authority.
+
+The Publisher and every capability- or authentication-bearing host operation
+must be reached directly over loopback or through an operator-declared trusted
+TLS reverse proxy. Remote plaintext HTTP fails closed: the relay password must
+not cross it, and the browser signing, encrypted local storage, and WebCrypto
+flows require a secure context.
+
+The editor accepts ordinary HTML, CSS, and JavaScript projects. It can also
+import browser-ready output compiled by tools such as React and Vite. The relay
+does not install dependencies, run a React build, start a development server,
+or execute server-side application code.
+
+Each publication receives its own browser-local signing key. The private key
+never becomes a relay credential, hosting account, global identity, or
+Noctweave relationship key. The browser signs the bounded publication bundle;
+the relay stores the exact signed bundle as opaque bytes and signs only a
+bounded hosting receipt.
+
+After a valid receipt, the upload status is **Hosted**. Hosted means that one
+relay acknowledged the exact bytes under the receipt's stated bounds. It does
+not mean that a publisher head, locator, or name is consensus-finalized, and it
+does not promise continued availability. A restored local record is shown as
+Hosted only after the Publisher revalidates both its signed receipt and current
+relay presence.
+
+Each hosted revision retains its own AES-GCM-protected release capability in a
+bounded browser-local ledger. **Unhost all copies** attempts to release every
+tracked revision and retains any failures for retry. A release capability is
+never uploaded except when the publisher explicitly releases that object.
+
+Hosted active content is fetched as untrusted input. The client verifies the
+bundle digest and publisher signature before rendering it in a sandbox that
+does not inherit the Publisher page's same-origin privileges. Relay storage or
+HTTPS alone never authorizes execution.
 
 ## Public retrieval policy
 
@@ -174,6 +221,10 @@ SECURITY.md                Threat model summary and reporting policy
 11. Public retrieval is either direct to a host or through one bounded
     passthrough. The first non-open directive in federation-policy, host
     operator, signed publisher, then visitor order is authoritative.
+12. Noctweb Publisher is a relay-hosted same-origin authoring page over an
+    opted-in host capability. Its publication keys stay browser-local, relays
+    sign only hosting receipts, and hosted active content is verified before
+    sandboxed rendering.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -190,7 +241,15 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 ## Status
 
 The provisional host and passthrough relay modules are implemented in
-Noctweave. This repository documents their integration contract; Noctweb Lab
+Noctweave. Noctweb Publisher is the initial implemented public surface: a basic
+same-origin browser editor for HTML, CSS, JavaScript, and browser-ready compiled
+React bundles, served by an opted-in standard-plus-host deployment or a
+dedicated host relay. It keeps one signing key per publication in the browser
+and reports a verified upload receipt as **Hosted**. Its displayed `noct://`
+names remain provisional, and it does not claim consensus finality, naming
+authority, continued availability, or an in-relay React build service.
+
+This repository also documents the relay integration contract; Noctweb Lab
 currently exercises matching deterministic in-process adapters rather than
 connecting to operator relay endpoints. The Lab is a runnable native macOS
 application for the explicitly incompatible `noctweb-lab-v3` profile, whose

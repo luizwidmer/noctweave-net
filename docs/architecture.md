@@ -24,7 +24,60 @@ relay/module families remain, but one process may advertise more than one. A
 `solo` standard relay may also advertise `nw.net-host@1` and directly host and
 serve content.
 
-## 2. Data model
+## 2. Relay-hosted Noctweb Publisher
+
+Noctweb Publisher is a simple browser authoring page served from the same
+origin as an opted-in hosting endpoint. A deployment is either:
+
+- a `solo` standard relay process that separately advertises
+  `nw.net-host@1`; or
+- a dedicated host relay.
+
+The Publisher page is a product surface over the host capability, not a relay
+role, transport hop, consensus component, or server-side execution service.
+Exactly three roles remain `standard`, `passthrough`, and `host`.
+
+Publisher resources and capability- or authentication-bearing host operations
+are served only over direct loopback or through an operator-declared trusted
+TLS reverse proxy. Remote plaintext HTTP fails closed. The browser therefore
+gets the secure context required for its nonextractable signing key, WebCrypto
+verification, and encrypted local release state, while the relay password does
+not traverse plaintext transport.
+
+The editor accepts HTML, CSS, JavaScript, assets, and browser-ready static
+output already compiled by tools such as React and Vite. It does not ask the
+relay to install dependencies, compile React source, run a development server,
+or provide a server-side application runtime.
+
+For each publication, the browser creates and retains a distinct local signing
+key. It canonicalizes and signs the bounded bundle before upload. The private
+key is never submitted to the relay, reused as a hosting credential, or treated
+as a global account or Noctweave relationship authority.
+
+The host module treats the signed bundle as opaque exact bytes. It may validate
+bounds and object IDs needed by the host contract, but it does not rewrite the
+bundle, sign the publisher head, or interpret content as relay code. Its only
+signature is a bounded hosting receipt for accepted bytes.
+
+The UI reports a successfully verified receipt as **Hosted**. That state is
+deliberately weaker than published or finalized: no head, locator, or name is
+consensus-finalized merely because a relay accepted storage. A locally cached
+receipt is reverified together with current relay presence before Hosted is
+restored.
+
+Each hosted revision keeps an independently AES-GCM-protected release
+capability in a bounded browser-local ledger. Unhost-all attempts every tracked
+release and preserves failed entries for retry, preventing a newer revision
+from stranding older hosted copies. The host sees a capability only in the
+explicit release request for that object.
+
+The Publisher application and upload API share an origin, but hosted active
+content does not inherit that origin's authority. A client verifies the bundle
+digest and publication-scoped publisher signature before loading active
+content into a sandbox with no ambient Publisher-origin credentials or relay
+authority.
+
+## 3. Data model
 
 The first protocol revision must define canonical encodings and bounds for:
 
@@ -54,7 +107,7 @@ The exact canonical format, signature suite, encryption suite, and digest
 suite remain open until test vectors are added. Provisional documents must not
 claim wire compatibility.
 
-## 3. Relay-scoped Noctweb namespace
+## 4. Relay-scoped Noctweb namespace
 
 The canonical base URL for a named site is:
 
@@ -64,11 +117,12 @@ noct://<site>.<relay-suffix>/
 
 A namespace advertisement is an optional capability of a relay process that
 advertises the host module. It is not a fourth relay role and is not required
-to host or serve content. An operator that advertises the function may request
-a custom suffix; otherwise the active profile derives a deterministic
-`r-<hash>` fallback from a dedicated namespace public key. The profile must
-define the exact normalization, digest input, encoding, and collision handling
-before interoperability is claimed.
+to host or serve content. An operator may set the displayed relay suffix. If
+it does not, Noctweb Publisher derives a deterministic provisional
+`r-<hash>` fallback from the public key that verifies the host's signed
+receipts. A future consensus profile must define the exact normalization,
+digest input, encoding, allocation, and collision handling before
+interoperability is claimed.
 
 Site labels are allocated within a suffix. Consensus enforces global suffix
 uniqueness and uniqueness of each `(<site>, <relay-suffix>)` pair; the same
@@ -80,7 +134,12 @@ operator. The relay associated with a suffix is not required to be the current
 content host: object retrieval follows the publication's independently
 finalized host locators.
 
-## 4. Publish flow
+Until a consensus naming profile exists, Noctweb Publisher displays
+`noct://<site>.<relay-suffix>/` only as a provisional name. Neither an
+operator-configured suffix nor a receipt-key-derived fallback establishes
+global uniqueness, allocation, finality, or portable resolution.
+
+## 5. Publish flow
 
 1. The local runtime constructs a bounded canonical object graph.
 2. Private portions are encrypted locally.
@@ -101,7 +160,11 @@ publisher authority, consensus finality, or permanent availability.
 Publishing and hosting never require passthrough, relay federation forwarding,
 a consensus retrieval hop, or a namespace advertisement.
 
-## 5. Resolve flow
+For the current Noctweb Publisher surface, the implemented flow stops after the
+browser verifies the hosting receipt and reports **Hosted**. Consensus
+submission and finalized naming remain later profile work.
+
+## 6. Resolve flow
 
 1. For a named URL, the runtime canonicalizes the address and asks its
    `ConsensusAdapter` for the finalized publisher binding.
@@ -120,7 +183,8 @@ a consensus retrieval hop, or a namespace advertisement.
    object IDs, version links, bounds, and the actual route used.
 8. It decrypts authorized private portions locally.
 9. It renders or executes only within the runtime's sandbox and permission
-   model.
+   model. Hosted active content must not inherit Publisher-page origin
+   privileges.
 
 A relay response is untrusted input. HTTPS protects the connection to an
 endpoint; it does not replace capsule verification.
@@ -141,7 +205,7 @@ legacy read-only. Production host-operator advertisements and federation
 policy must be authenticated. The Lab's versions are deterministic local
 adapters rather than production authentication.
 
-## 6. Private interaction
+## 7. Private interaction
 
 Private messages, invitations, collaborative updates, and capability delivery
 use standard Noctweave opaque routes. Noctweave Net must not introduce a global
@@ -151,7 +215,7 @@ Public publication continuity and private relationship continuity are separate
 authorities. A consensus-visible publisher key must never be silently reused
 as a Noctweave relationship or group key.
 
-## 7. Failure model
+## 8. Failure model
 
 - Missing host object: retry another finalized locator or surface unavailable.
 - Hash or signature mismatch: reject the object and quarantine bounded
@@ -171,8 +235,12 @@ as a Noctweave relationship or group key.
 - Unavailable namespace relay: retain the finalized name-to-publisher binding
   and try current content locators; do not treat relay reachability as
   publisher authority.
+- Invalid hosting receipt: do not report **Hosted**, even if the upload request
+  returned success.
+- Unverified active bundle: reject it before creating or navigating the content
+  sandbox.
 
-## 8. Privacy claim
+## 9. Privacy claim
 
 Noctweave Net aims for semantic opacity to infrastructure carrying encrypted
 private traffic. It does not claim endpoint invisibility or global anonymity.

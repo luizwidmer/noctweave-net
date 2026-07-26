@@ -34,7 +34,9 @@ Noctweave federation forwarding is not part of the Noctweave Net topology.
 A `solo` standard relay may also advertise `nw.net-host@1`. In that
 configuration the same process can directly host and serve content, but the
 standard and host modules retain separate authorization and limits. Hosting
-does not become a standard-module operation.
+does not become a standard-module operation. Such a deployment may serve the
+same-origin Noctweb Publisher page only as part of its separately opted-in host
+surface.
 
 ## Passthrough relay
 
@@ -90,6 +92,8 @@ It may:
 - accept bounded objects whose bytes match their declared object IDs;
 - return immutable objects by object ID;
 - issue bounded signed hosting receipts;
+- serve the simple Noctweb Publisher page and its upload API from one origin
+  when the operator explicitly enables that surface;
 - enforce tenant, storage, bandwidth, retention, and abuse policy;
 - mirror public objects when policy permits;
 - advertise expiring public retrieval endpoints through the consensus profile;
@@ -110,6 +114,7 @@ It must not:
 
 - become authoritative because it serves an object;
 - rewrite, render, or execute hosted capsule code;
+- sign a publisher head or present a hosting receipt as consensus finality;
 - finalize publisher heads;
 - possess private capsule keys by protocol requirement;
 - turn hosting credentials into a global Noctweave Net account.
@@ -117,14 +122,35 @@ It must not:
 A host can store and directly serve content without a passthrough module,
 federation forwarding, a consensus retrieval hop, or namespace ownership.
 
+Signed publication bundles remain opaque relay payloads. Browser clients must
+verify their object digest and publication-scoped publisher signature before
+rendering active content in a sandbox that does not inherit the Publisher
+page's same-origin authority.
+
+### Publisher surface
+
+Noctweb Publisher does not add a topology role. It is served by a dedicated
+host relay or by a standard relay process that has separately enabled the host
+module. A standard-only relay cannot host the page or accept publication
+bundles.
+
+The editor accepts HTML, CSS, JavaScript, assets, and browser-ready compiled
+React bundles. Compilation, package installation, server-side rendering, and
+development servers remain client tooling rather than relay services.
+
+One browser-local signing key is created per publication and never sent to the
+relay. The host signs only a bounded receipt for the exact accepted bundle.
+The resulting UI state is **Hosted**, not consensus-finalized. Continued
+availability and name allocation remain separate claims.
+
 ### Namespace function
 
 The namespace function is an optional advertisement by a relay with the host
 module, not a fourth relay role and not a prerequisite for hosting. Consensus
-owns global suffix uniqueness and unique site-label allocation within each
-suffix. A host module advertising the function may request a custom suffix or
-use the active profile's deterministic `r-<hash>` fallback derived from its
-dedicated namespace public key.
+eventually owns global suffix uniqueness and unique site-label allocation
+within each suffix. An operator may configure a suffix; otherwise Noctweb
+Publisher derives its provisional `r-<hash>` fallback from the public key that
+verifies the host's signed receipts.
 
 The namespace relay is the host relay associated with the suffix. It is not
 automatically the current content host for every publication under that suffix.
@@ -133,6 +159,11 @@ A finalized name record binds the canonical
 identifier; independently finalized locators identify current content hosts.
 Neither suffix control nor name allocation grants authority to sign or advance
 the publication head.
+
+No consensus naming profile is implemented yet. Current Publisher displays of
+`noct://` names are provisional namespace hints, even when the suffix is
+operator-configured. They do not prove global uniqueness, finality, or portable
+resolution.
 
 ## Retrieval-policy authority
 
@@ -191,7 +222,8 @@ operator-level traffic correlation.
 Solo self-hosted publication and direct retrieval:
 
 ```text
-publisher runtime -> solo standard relay + nw.net-host@1
+Publisher browser -> solo standard relay + nw.net-host@1
+                  -> opaque signed bundle + hosting receipt
                   -> consensus adapter (head + locators)
 visitor runtime   -> same relay's nw.net-host@1
 ```

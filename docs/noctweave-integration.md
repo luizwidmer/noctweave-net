@@ -45,6 +45,51 @@ Private hosted objects must already be encrypted by the client.
 The host module does not require the relay to own or advertise a Noctweb
 namespace.
 
+## Noctweb Publisher deployment contract
+
+Noctweb Publisher is a basic browser page served from the same origin as its
+enabled hosting endpoint. It may be exposed by a dedicated host relay or by a
+`solo` standard relay process that separately opts into `nw.net-host@1`.
+Serving the page does not create a fourth role, and a standard-only deployment
+cannot accept publication bundles.
+
+The page and capability- or authentication-bearing host operations are exposed
+only to direct loopback clients or through an operator-declared trusted TLS
+reverse proxy. Remote plaintext HTTP fails closed. This keeps the relay
+password off plaintext transport and supplies the secure browser context
+required by WebCrypto and encrypted local publication state.
+
+The browser editor accepts HTML, CSS, JavaScript, assets, and browser-ready
+compiled React output. The relay is not a JavaScript package manager, React
+compiler, development server, server-side renderer, or arbitrary application
+runtime.
+
+The browser generates one publication-scoped signing key per publication and
+retains the private key locally. It uploads a bounded signed bundle. The relay
+treats that bundle as opaque exact bytes and signs only the hosting receipt
+defined by `nw.net-host@1`; it never signs the publisher head.
+
+The Publisher must verify the receipt before showing **Hosted**. That status
+asserts bounded storage acknowledgement only. It is not consensus finality,
+name allocation, content endorsement, or a guarantee of future availability.
+A cached receipt is reverified together with current relay presence before that
+state is restored.
+
+The browser retains one independently AES-GCM-protected release capability per
+hosted revision in a bounded local ledger. An unhost-all operation attempts
+every tracked release and keeps unreleased entries for retry. The capability is
+not submitted to the host except in its explicit release request.
+
+An operator may configure the relay suffix displayed by Publisher. If none is
+configured, Publisher derives a deterministic provisional suffix from the
+host-receipt verification public key. Until a consensus naming profile is
+implemented, every displayed `noct://` address is explicitly provisional.
+
+Publisher and upload API share an origin, but hosted active content must not
+inherit that origin's ambient authority. A client first verifies the bundle
+digest and publisher signature, then renders it in a sandbox. The relay itself
+does not render or execute the bundle.
+
 ## Passthrough contract
 
 `nw.net-passthrough@1 forward` carries an opaque HTTP relay request and returns

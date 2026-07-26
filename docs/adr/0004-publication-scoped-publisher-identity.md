@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
+- Amended by: ADR 0008
 
 ## Context
 
@@ -35,6 +36,12 @@ requires a separate signed statement and is never inferred by a relay.
 The publisher private key remains client-side. Host, passthrough, and standard
 relays never receive it. Consensus sees only the bounded public commitment
 defined by its profile.
+
+Noctweb Publisher implements the same boundary with one browser-local signing
+key per publication. The relay receives the public verification material and
+signed bundle, never the private key. Browser storage is not a hosting account,
+global identity, or recovery authority; backup, rotation, and recovery remain
+future profile work.
 
 Noctweb Lab implements this invariant with one locally generated Ed25519 key
 per publication. Its raw private representation is protected at rest by a

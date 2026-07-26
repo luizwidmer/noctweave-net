@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
+- Amended by: ADR 0008
 
 ## Context
 
@@ -27,12 +28,11 @@ Each relay suffix belongs to one namespace relay. A namespace relay is an
 ordinary `host` relay with a namespace capability; this decision does not add a
 fourth relay role.
 
-An operator may request a custom suffix. If it does not, the active profile
-derives a deterministic `r-<hash>` fallback from the relay's dedicated
-namespace public key. The profile must define canonical suffix and site-label
-syntax,
-normalization, hash domain separation, digest suite, encoding, length, and
-collision handling.
+An operator may configure a custom suffix. If it does not, Noctweb Publisher
+derives a deterministic provisional `r-<hash>` fallback from the public key
+that verifies the host's signed receipts. A consensus profile must define
+canonical suffix and site-label syntax, normalization, hash domain separation,
+digest suite, encoding, length, allocation, and collision handling.
 
 Consensus owns the global allocation rules:
 
@@ -56,11 +56,17 @@ publisher head and exact object bytes regardless of which relay serves them.
 
 Noctweb Lab implements this decision in the experimental `noctweb-lab-v2`
 profile. Its signed object and publisher-head transcript commit both the
-canonical address and the full namespace identifier. The fallback suffix uses
-the first 80 bits of a domain-separated SHA-256 namespace-key commitment,
-encoded as 16 lowercase base32 characters after `r-`. That short suffix is a
-display identifier; the full 256-bit namespace identifier remains the security
-comparison, and consensus must reject a visible-suffix collision.
+canonical address and the full namespace identifier. Its historical fallback
+uses the first 80 bits of a domain-separated SHA-256 namespace-key commitment,
+encoded as 16 lowercase base32 characters after `r-`. The relay-hosted
+Publisher instead uses the host-receipt verification public key as its
+provisional derivation input. Neither experimental derivation becomes a stable
+protocol promise without a selected consensus profile and conformance vectors.
+
+Until consensus naming exists, the Publisher must label every displayed
+`noct://` name as provisional. An operator-set suffix and a
+receipt-key-derived suffix are hosting namespace hints, not evidence of global
+uniqueness, allocation, finality, or portable resolution.
 
 Unpublished legacy drafts may be assigned a v2 namespace. Already signed
 `noctweb-lab-v1` publications are preserved as legacy read-only records because
@@ -74,6 +80,8 @@ rewriting their address would invalidate their object and head commitments.
   one flat global namespace.
 - A deterministic fallback gives every eligible host relay a stable suffix
   without a naming auction or operator choice.
+- Current Publisher names remain explicitly provisional until consensus naming
+  can establish the allocation and resolution claims above.
 - Compromise of a namespace relay or suffix credential cannot forge a valid
   publisher update, though it can affect namespace operations allowed by the
   consensus profile.

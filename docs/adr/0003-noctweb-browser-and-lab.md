@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
+- Amended by: ADR 0008
 
 ## Context
 
@@ -25,6 +26,9 @@ The user-facing product is **Noctweb**.
   runtime, inspector, deterministic testnet, and fault-injection product. Its
   application interface uses SwiftUI. It is not a web application, PWA,
   Electron shell, hosted service, or remote-origin WebView wrapper.
+- **Noctweb Publisher** is the distinct basic relay-hosted browser authoring
+  surface accepted by ADR 0008. It does not replace Noctweb Browser as the
+  authoritative runtime or turn Noctweb Lab into a hosted application.
 - A conventional browser extension may later recognize links, preview bounded
   public content, and hand navigation to Noctweb Browser. It never becomes the
   publisher-key, capability, consensus, or execution authority.

@@ -34,7 +34,8 @@ independent verification.
 - the selected authenticated federation-policy record for a Noctweave Net
   routing trust domain;
 - globally unique relay-suffix allocations, including custom suffixes and the
-  deterministic `r-<hash>` fallback defined by the active profile;
+  deterministic `r-<hash>` fallback derived from the host-receipt verification
+  public key and defined by the active profile;
 - unique site-label bindings within each suffix;
 - protocol epochs and supported mandatory suite identifiers;
 - explicit public revocations defined by a future profile;
@@ -83,6 +84,12 @@ publication-scoped publisher identifier. It does not authorize the suffix
 operator to sign publisher heads and does not require the namespace relay to
 serve current content. Consensus resolves independently finalized host
 locators after resolving the name.
+
+Noctweb Publisher currently has no consensus naming profile. Its
+operator-configured or host-receipt-key-derived suffix and every displayed
+`noct://` address are provisional. A valid hosting receipt permits the UI to
+report **Hosted** only; it cannot be promoted to finalized name, head, or
+locator evidence.
 
 ## Availability
 
