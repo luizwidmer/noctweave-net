@@ -309,3 +309,9 @@ publisher-key deletion all require explicit destructive confirmation.
 The stable object graph, consensus profile, production runtime, and
 cross-language conformance suite remain pre-protocol. No security audit or
 production readiness is claimed.
+
+## License
+
+Noctweave Net is licensed under the GNU Affero General Public License,
+version 3 or, at your option, any later version
+([`AGPL-3.0-or-later`](LICENSE)).
