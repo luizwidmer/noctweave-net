@@ -4,8 +4,26 @@ import XCTest
 @testable import NoctwebLabCore
 
 final class NoctwebLabCoreTests: XCTestCase {
+    func testPublisherIdentityCanBePreparedBeforeFirstPublication() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let publicationID = UUID().uuidString.lowercased()
+
+        let first = try await engine.preparePublisherIdentity(
+            for: publicationID
+        )
+        let second = try await engine.preparePublisherIdentity(
+            for: publicationID
+        )
+
+        XCTAssertEqual(first, second)
+        XCTAssertFalse(first.isEmpty)
+    }
+
     private func draft(
-        publicationID: String = UUID().uuidString.lowercased()
+        publicationID: String = UUID().uuidString.lowercased(),
+        bundle: WebsiteBundle? = nil
     ) -> CapsuleSiteDraft {
         CapsuleSiteDraft(
             publicationID: publicationID,
@@ -13,7 +31,36 @@ final class NoctwebLabCoreTests: XCTestCase {
             title: "Quiet Garden",
             subtitle: "A native Noctweb publication",
             body: "Verified structured content.",
-            accentHex: "#4f8f77"
+            accentHex: "#4f8f77",
+            bundle: bundle
+        )
+    }
+
+    private func bundle(files: [WebsiteFile]? = nil) -> WebsiteBundle {
+        WebsiteBundle(
+            entryPath: "index.html",
+            files: files ?? [
+                WebsiteFile(
+                    path: "index.html",
+                    mediaType: "text/html; charset=utf-8",
+                    bytes: Data("<main id=\"root\"></main>".utf8)
+                ),
+                WebsiteFile(
+                    path: "assets/app.js",
+                    mediaType: "text/javascript; charset=utf-8",
+                    bytes: Data("globalThis.noctweb = 'ready';".utf8)
+                ),
+                WebsiteFile(
+                    path: "assets/site.css",
+                    mediaType: "text/css; charset=utf-8",
+                    bytes: Data("body{margin:0}".utf8)
+                ),
+                WebsiteFile(
+                    path: "assets/pixel.bin",
+                    mediaType: "application/octet-stream",
+                    bytes: Data([0x00, 0xff, 0x10, 0x80])
+                ),
+            ]
         )
     }
 
@@ -59,6 +106,222 @@ final class NoctwebLabCoreTests: XCTestCase {
         }
     }
 
+    func testWebsiteBundleRoundTripsExactBytesAcrossBothRoutes() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let original = bundle()
+        let publication = try await engine.publish(
+            draft: draft(bundle: original),
+            at: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        XCTAssertEqual(publication.object.protocolVersion, "noctweb-lab-v1")
+        XCTAssertEqual(
+            publication.object.bundle?.files.map(\.path),
+            original.files.map(\.path).sorted()
+        )
+        for preference in [LabRoute.direct, .passthrough] {
+            let result = try await engine.resolve(
+                address: publication.object.address,
+                preference: preference
+            )
+            for source in original.files {
+                let resolved = result.object.bundle?.file(at: source.path)
+                XCTAssertEqual(resolved?.mediaType, source.mediaType)
+                XCTAssertEqual(resolved?.bytes, source.bytes)
+            }
+        }
+        XCTAssertEqual(
+            publication.object.bundle?.file(at: "assets/app.js")?.bytes,
+            Data("globalThis.noctweb = 'ready';".utf8)
+        )
+        XCTAssertEqual(
+            publication.object.bundle?.file(at: "assets/pixel.bin")?.bytes,
+            Data([0x00, 0xff, 0x10, 0x80])
+        )
+    }
+
+    func testWebsiteBundleOrderingProducesDeterministicObjectID() async throws {
+        let publicationID = "47e0951d-a5ef-4db1-8e1e-e276fbd8536d"
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let unsorted = bundle()
+        let sorted = WebsiteBundle(
+            entryPath: unsorted.entryPath,
+            files: unsorted.files.sorted { $0.path < $1.path }
+        )
+
+        let firstStore = InMemoryPublicationPrivateKeyStore()
+        let firstEngine = try NoctwebLabEngine(identityStore: firstStore)
+        let first = try await firstEngine.publish(
+            draft: draft(publicationID: publicationID, bundle: unsorted),
+            at: timestamp
+        )
+        let privateKey = try XCTUnwrap(
+            firstStore.loadPrivateKey(for: publicationID)
+        )
+        let secondStore = InMemoryPublicationPrivateKeyStore(
+            keys: [publicationID: privateKey]
+        )
+        let secondEngine = try NoctwebLabEngine(identityStore: secondStore)
+        let second = try await secondEngine.publish(
+            draft: draft(publicationID: publicationID, bundle: sorted),
+            expectedPublisherID: first.object.publisherID,
+            at: timestamp
+        )
+
+        XCTAssertEqual(first.encodedObject, second.encodedObject)
+        XCTAssertEqual(
+            first.head.claims.objectID,
+            second.head.claims.objectID
+        )
+    }
+
+    func testWebsiteBundleRejectsUnsafeAndAmbiguousPaths() async throws {
+        let candidates: [WebsiteBundle] = [
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "../index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "/index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                    WebsiteFile(
+                        path: "INDEX.HTML",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "missing.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                    WebsiteFile(
+                        path: "assets%2Fapp.js",
+                        mediaType: "text/javascript",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(entryPath: "index.html", files: []),
+        ]
+
+        for candidate in candidates {
+            let engine = try NoctwebLabEngine(
+                identityStore: InMemoryPublicationPrivateKeyStore()
+            )
+            do {
+                _ = try await engine.publish(draft: draft(bundle: candidate))
+                XCTFail("invalid website bundle was accepted: \(candidate)")
+            } catch let error as NoctwebLabError {
+                guard case .invalidWebsiteBundle = error else {
+                    return XCTFail("unexpected error: \(error)")
+                }
+            }
+        }
+    }
+
+    func testWebsiteBundleRejectsFileCountAndByteLimits() async throws {
+        let tooManyFiles = (0...WebsiteBundle.maximumFileCount).map {
+            WebsiteFile(
+                path: $0 == 0 ? "index.html" : "asset-\($0).bin",
+                mediaType: "application/octet-stream",
+                bytes: Data()
+            )
+        }
+        let candidates = [
+            WebsiteBundle(entryPath: "index.html", files: tooManyFiles),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data(
+                            repeating: 0x61,
+                            count: WebsiteBundle.maximumTotalBytes + 1
+                        )
+                    ),
+                ]
+            ),
+        ]
+
+        for candidate in candidates {
+            let engine = try NoctwebLabEngine(
+                identityStore: InMemoryPublicationPrivateKeyStore()
+            )
+            do {
+                _ = try await engine.publish(draft: draft(bundle: candidate))
+                XCTFail("oversized website bundle was accepted")
+            } catch let error as NoctwebLabError {
+                guard case .invalidWebsiteBundle = error else {
+                    return XCTFail("unexpected error: \(error)")
+                }
+            }
+        }
+    }
+
     func testHostFailoverUsesSecondReplica() async throws {
         let engine = try NoctwebLabEngine(
             identityStore: InMemoryPublicationPrivateKeyStore()
@@ -90,6 +353,51 @@ final class NoctwebLabCoreTests: XCTestCase {
                 preference: .direct
             )
             XCTFail("corrupt bytes must never reach the renderer")
+        } catch let error as NoctwebLabError {
+            guard case .integrityMismatch = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testTamperedDecodedWebsiteObjectFailsClosedOnRestore() async throws {
+        let originalEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let publication = try await originalEngine.publish(
+            draft: draft(bundle: bundle())
+        )
+        var tamperedBundle = try XCTUnwrap(publication.object.bundle)
+        tamperedBundle.files[0].bytes.append(0x00)
+        let object = publication.object
+        let tamperedObject = CapsuleObject(
+            protocolVersion: object.protocolVersion,
+            publicationID: object.publicationID,
+            address: object.address,
+            publisherID: object.publisherID,
+            revision: object.revision,
+            previousObjectID: object.previousObjectID,
+            title: object.title,
+            subtitle: object.subtitle,
+            body: object.body,
+            accentHex: object.accentHex,
+            bundle: tamperedBundle
+        )
+        let tamperedPublication = PublishedCapsule(
+            object: tamperedObject,
+            encodedObject: publication.encodedObject,
+            head: publication.head,
+            headID: publication.headID,
+            hostRelayIDs: publication.hostRelayIDs,
+            finality: publication.finality
+        )
+        let restoreEngine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+
+        do {
+            try await restoreEngine.restore(tamperedPublication)
+            XCTFail("a tampered decoded website object must not be restored")
         } catch let error as NoctwebLabError {
             guard case .integrityMismatch = error else {
                 return XCTFail("unexpected error: \(error)")
@@ -164,6 +472,65 @@ final class NoctwebLabCoreTests: XCTestCase {
             XCTAssertEqual(
                 error,
                 .identityMissing(published.object.publicationID)
+            )
+        }
+    }
+
+    func testPublisherContinuityAcrossWebsiteRevisions() async throws {
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let initialDraft = draft(bundle: bundle())
+        let first = try await engine.publish(draft: initialDraft)
+
+        var revisedDraft = initialDraft
+        revisedDraft.bundle?.files.append(
+            WebsiteFile(
+                path: "assets/chunk.js",
+                mediaType: "text/javascript",
+                bytes: Data("export const version = 2;".utf8)
+            )
+        )
+        let second = try await engine.publish(draft: revisedDraft)
+
+        XCTAssertEqual(second.object.publisherID, first.object.publisherID)
+        XCTAssertEqual(second.object.revision, 2)
+        XCTAssertEqual(
+            second.object.previousObjectID,
+            first.head.claims.objectID
+        )
+    }
+
+    func testPublisherIdentityDeletionIsExplicitAndIdempotent() async throws {
+        let store = InMemoryPublicationPrivateKeyStore()
+        let engine = try NoctwebLabEngine(identityStore: store)
+        let publication = try await engine.publish(draft: draft(bundle: bundle()))
+        XCTAssertNotNil(
+            try store.loadPrivateKey(for: publication.object.publicationID)
+        )
+
+        try await engine.deletePublisherIdentity(
+            for: publication.object.publicationID
+        )
+        try await engine.deletePublisherIdentity(
+            for: publication.object.publicationID
+        )
+        XCTAssertNil(
+            try store.loadPrivateKey(for: publication.object.publicationID)
+        )
+
+        do {
+            _ = try await engine.publish(
+                draft: draft(
+                    publicationID: publication.object.publicationID,
+                    bundle: bundle()
+                )
+            )
+            XCTFail("publisher continuity must fail after key deletion")
+        } catch let error as NoctwebLabError {
+            XCTAssertEqual(
+                error,
+                .identityMissing(publication.object.publicationID)
             )
         }
     }

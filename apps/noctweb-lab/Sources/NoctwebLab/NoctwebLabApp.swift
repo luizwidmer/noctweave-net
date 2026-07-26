@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct NoctwebLabApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = AppModel()
 
     var body: some Scene {
@@ -9,6 +10,11 @@ struct NoctwebLabApp: App {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 900, minHeight: 650)
+                .onChange(of: scenePhase) {
+                    if scenePhase != .active {
+                        model.flushPersistence()
+                    }
+                }
         }
         .defaultSize(width: 1_360, height: 860)
         .commands {
@@ -18,6 +24,7 @@ struct NoctwebLabApp: App {
                     model.selection = .sites
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
+                .disabled(model.activeWorkspace == nil)
             }
         }
 

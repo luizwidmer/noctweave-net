@@ -51,12 +51,25 @@ public actor NoctwebLabEngine {
         round = max(round, publication.finality.round)
     }
 
+    public func deletePublisherIdentity(for publicationID: String) async throws {
+        try await identities.deleteIdentity(for: publicationID)
+    }
+
+    public func preparePublisherIdentity(
+        for publicationID: String
+    ) async throws -> String {
+        try await identities
+            .loadOrCreateIdentity(for: publicationID)
+            .publisherID
+    }
+
     public func publish(
         draft: CapsuleSiteDraft,
         expectedPublisherID: String? = nil,
         at date: Date = Date()
     ) async throws -> PublishedCapsule {
         try PublicationValidation.validateDraft(draft)
+        let bundle = try PublicationValidation.canonicalBundle(for: draft)
 
         let previous = publicationsByAddress[draft.address]
         if
@@ -96,7 +109,8 @@ public actor NoctwebLabEngine {
             title: draft.title,
             subtitle: draft.subtitle,
             body: draft.body,
-            accentHex: draft.accentHex
+            accentHex: draft.accentHex,
+            bundle: bundle
         )
         let encodedObject = try CanonicalJSON.encode(object)
         let objectID = NoctwebDigest.objectID(for: encodedObject)
@@ -224,6 +238,7 @@ public actor NoctwebLabEngine {
                 CapsuleObject.self,
                 from: hosted.encodedObject
             )
+            try PublicationValidation.validateObject(canonicalObject)
             reencoded = try CanonicalJSON.encode(canonicalObject)
         } catch {
             throw NoctwebLabError.integrityMismatch(
@@ -243,6 +258,8 @@ public actor NoctwebLabEngine {
             )
         }
         guard
+            canonicalObject.protocolVersion ==
+                hosted.head.claims.protocolVersion,
             canonicalObject.address == address,
             canonicalObject.publicationID == hosted.head.claims.publicationID,
             canonicalObject.publisherID == hosted.head.claims.publisherID,
@@ -309,11 +326,41 @@ public actor NoctwebLabEngine {
     private func verifyStoredPublication(
         _ publication: PublishedCapsule
     ) throws {
+        let decoded: CapsuleObject
+        let canonicalBytes: Data
+        do {
+            decoded = try CanonicalJSON.decode(
+                CapsuleObject.self,
+                from: publication.encodedObject
+            )
+            try PublicationValidation.validateObject(decoded)
+            canonicalBytes = try CanonicalJSON.encode(decoded)
+        } catch {
+            throw NoctwebLabError.integrityMismatch(
+                "stored bytes are not a valid canonical capsule object"
+            )
+        }
         guard
+            decoded == publication.object,
+            canonicalBytes == publication.encodedObject,
             NoctwebDigest.objectID(for: publication.encodedObject) ==
                 publication.head.claims.objectID,
+            publication.object.protocolVersion ==
+                publication.head.claims.protocolVersion,
+            publication.object.publicationID ==
+                publication.head.claims.publicationID,
+            publication.object.address ==
+                publication.head.claims.address,
             publication.object.publisherID ==
                 publication.head.claims.publisherID,
+            publication.object.revision ==
+                publication.head.claims.revision
+        else {
+            throw NoctwebLabError.integrityMismatch(
+                "stored object does not match its canonical bytes or publisher head"
+            )
+        }
+        guard
             publication.head.claims.publisherID ==
                 NoctwebDigest.publisherID(
                     for: publication.head.claims.publisherPublicKey

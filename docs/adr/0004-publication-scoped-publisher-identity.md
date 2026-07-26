@@ -38,16 +38,25 @@ defined by its profile.
 
 Noctweb Lab implements this invariant with one locally generated Ed25519 key
 per publication. Its raw private representation is protected at rest by a
-non-synchronizable macOS Data Protection Keychain item scoped to the signed
-application. The key is not Secure Enclave-backed and is not described as
-non-extractable. A missing or malformed key for an established publication
-blocks publishing instead of silently minting a replacement.
+non-synchronizable generic-password item in the user's macOS Keychain, under a
+dedicated Noctweb Lab service name. The key is not Secure Enclave-backed and is
+not described as non-extractable. A missing or malformed key for an established
+publication blocks publishing instead of silently minting a replacement.
 
 The publisher identifier is the full SHA-256 digest of a domain-separated
-public-key commitment. The signed `lab-v0` head uses a strict versioned binary
-transcript rather than relying on ordinary JSON serialization. Ed25519 and the
-lab head encoding are temporary test mechanisms, not a stable suite or
+public-key commitment. The signed `noctweb-lab-v1` head uses a strict versioned
+binary transcript rather than relying on ordinary JSON serialization. Ed25519
+and the lab head encoding are temporary test mechanisms, not a stable suite or
 wire-format promise.
+
+Deleting a local site or workspace does not implicitly delete its publisher
+key. Key destruction is a separate explicit operation because it permanently
+removes the local authority to advance that publication. Neither local project
+deletion nor key destruction erases immutable revisions already replicated to
+hosts or caches. The deletion UI also offers a combined destroy-key-and-remove
+operation so a key is not accidentally stranded when its project handle
+disappears. Before deleting a Keychain item, the Lab persists a destruction
+marker and reconciles incomplete destruction at startup.
 
 ## Consequences
 
@@ -56,5 +65,7 @@ wire-format promise.
 - Moving between hosts preserves both object and publisher identity.
 - Separate sites are unlinkable by key unless the publisher explicitly links
   them.
+- Project deletion, key destruction, and host-retention controls are distinct
+  operations with different consequences.
 - Key backup, rotation, delegation, revocation, and recovery require future
   profile work before production use.

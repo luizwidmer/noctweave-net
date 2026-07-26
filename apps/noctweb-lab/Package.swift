@@ -25,11 +25,18 @@ let package = Package(
         ),
         .executableTarget(
             name: "NoctwebLab",
-            dependencies: ["NoctwebLabCore"]
+            dependencies: ["NoctwebLabCore"],
+            linkerSettings: [
+                .linkedFramework("WebKit")
+            ]
         ),
         .testTarget(
             name: "NoctwebLabCoreTests",
             dependencies: ["NoctwebLabCore"]
+        ),
+        .testTarget(
+            name: "NoctwebLabAppTests",
+            dependencies: ["NoctwebLab"]
         )
     ]
 )

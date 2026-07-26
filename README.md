@@ -104,7 +104,9 @@ SECURITY.md                Threat model summary and reporting policy
 8. Every publication has a publication-scoped cryptographic publisher identity;
    it is never inferred from a host, relay, account, or private relationship.
 9. Noctweb Lab is a native macOS application. It has no hosted web application,
-   OpenAI Sites dependency, PWA shell, Electron runtime, or WebView renderer.
+   OpenAI Sites dependency, PWA shell, Electron runtime, or remote-origin app
+   shell. Its verified website canvas uses an isolated WebKit runtime only after
+   the Lab has resolved and authenticated a signed website bundle.
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
@@ -120,10 +122,18 @@ The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
 ## Status
 
-The Noctweave relay integration is provisional and implemented. Noctweb Lab is
-a runnable native macOS application for the explicitly incompatible `lab-v0`
-static-site profile. It publishes with publication-scoped Keychain identities,
-simulates all three relay roles, resolves through direct or passthrough paths,
-and renders verified structured content with SwiftUI. The stable object graph,
-consensus profile, production runtime, and cross-language conformance suite
-remain pre-protocol. No security audit or production readiness is claimed.
+The provisional host and passthrough relay modules are implemented in
+Noctweave. This repository documents their integration contract; Noctweb Lab
+currently exercises matching deterministic in-process adapters rather than
+connecting to operator relay endpoints. The Lab is a runnable native macOS
+application for the explicitly incompatible
+`noctweb-lab-v1` website-bundle profile. It edits ordinary HTML, CSS,
+JavaScript, and asset files; imports production builds from tools such as React
+and Vite; publishes with publication-scoped Keychain identities; simulates all
+three relay roles; and resolves through direct or passthrough paths. Verified
+client-side sites run in a publication-scoped, network-isolated WebKit canvas
+inside the App Sandbox. Project, workspace, source-file, visual-block, and
+publisher-key deletion all require explicit destructive confirmation.
+The stable object graph, consensus profile, production runtime, and
+cross-language conformance suite remain pre-protocol. No security audit or
+production readiness is claimed.

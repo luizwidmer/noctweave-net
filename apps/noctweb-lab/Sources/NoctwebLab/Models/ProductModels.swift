@@ -102,6 +102,18 @@ enum PublicationIdentityStatus: String, Codable {
     }
 }
 
+struct PublisherIdentityDeletionTombstone: Codable, Hashable {
+    let siteID: UUID
+    let publicationID: String
+    let requestedAt: Date
+}
+
+struct PublisherIdentityDeletionJournal: Codable, Equatable {
+    var pending: [PublisherIdentityDeletionTombstone]
+
+    static let empty = PublisherIdentityDeletionJournal(pending: [])
+}
+
 enum LabRelayRole: String, CaseIterable, Codable, Identifiable {
     case standard
     case passthrough
@@ -197,6 +209,139 @@ struct TrustEvidence: Identifiable, Codable, Hashable {
     var checkedAt: Date?
 }
 
+enum SiteProjectKind: String, Codable, CaseIterable {
+    case visual
+    case imported
+
+    var title: String {
+        switch self {
+        case .visual: "Visual project"
+        case .imported: "Standard web project"
+        }
+    }
+}
+
+enum SiteBlockKind: String, Codable, CaseIterable, Identifiable {
+    case hero
+    case text
+    case feature
+    case callToAction
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .hero: "Hero"
+        case .text: "Text"
+        case .feature: "Feature"
+        case .callToAction: "Call to action"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .hero: "rectangle.topthird.inset.filled"
+        case .text: "text.alignleft"
+        case .feature: "sparkles.rectangle.stack"
+        case .callToAction: "cursorarrow.click.2"
+        }
+    }
+}
+
+struct SiteBlock: Identifiable, Codable, Hashable {
+    let id: UUID
+    var kind: SiteBlockKind
+    var eyebrow: String
+    var heading: String
+    var body: String
+    var buttonLabel: String
+    var buttonURL: String
+
+    static func blank(_ kind: SiteBlockKind) -> SiteBlock {
+        switch kind {
+        case .hero:
+            SiteBlock(
+                id: UUID(),
+                kind: .hero,
+                eyebrow: "Welcome",
+                heading: "A remarkable website",
+                body: "Tell visitors what makes this project worth exploring.",
+                buttonLabel: "Learn more",
+                buttonURL: "#content"
+            )
+        case .text:
+            SiteBlock(
+                id: UUID(),
+                kind: .text,
+                eyebrow: "",
+                heading: "Your story",
+                body: "Write clear, useful content here.",
+                buttonLabel: "",
+                buttonURL: ""
+            )
+        case .feature:
+            SiteBlock(
+                id: UUID(),
+                kind: .feature,
+                eyebrow: "Feature",
+                heading: "Built for the open web",
+                body: "HTML, CSS, JavaScript, images, and compiled framework assets travel together.",
+                buttonLabel: "",
+                buttonURL: ""
+            )
+        case .callToAction:
+            SiteBlock(
+                id: UUID(),
+                kind: .callToAction,
+                eyebrow: "Next step",
+                heading: "Ready to publish?",
+                body: "Create a signed revision and replicate it through host relays.",
+                buttonLabel: "Get started",
+                buttonURL: "#"
+            )
+        }
+    }
+}
+
+struct SiteSourceFile: Identifiable, Codable, Hashable {
+    let id: UUID
+    var path: String
+    var mediaType: String
+    var bytes: Data
+
+    init(
+        id: UUID = UUID(),
+        path: String,
+        mediaType: String,
+        bytes: Data
+    ) {
+        self.id = id
+        self.path = path
+        self.mediaType = mediaType
+        self.bytes = bytes
+    }
+
+    var isText: Bool {
+        mediaType.hasPrefix("text/") ||
+            mediaType.contains("javascript") ||
+            mediaType.contains("json") ||
+            mediaType.contains("xml") ||
+            ["html", "htm", "css", "js", "mjs", "jsx", "ts", "tsx", "svg"]
+                .contains(URL(fileURLWithPath: path).pathExtension.lowercased())
+    }
+
+    var text: String? {
+        get {
+            guard isText else { return nil }
+            return String(data: bytes, encoding: .utf8)
+        }
+        set {
+            guard let newValue else { return }
+            bytes = Data(newValue.utf8)
+        }
+    }
+}
+
 struct SiteProject: Identifiable, Codable, Hashable {
     let id: UUID
     var address: String
@@ -211,6 +356,26 @@ struct SiteProject: Identifiable, Codable, Hashable {
     var publisherID: String?
     var publishedEnvelope: Data?
     var publicationIdentity: PublicationIdentityStatus
+    var projectKind: SiteProjectKind? = nil
+    var entryPath: String? = nil
+    var files: [SiteSourceFile]? = nil
+    var blocks: [SiteBlock]? = nil
+
+    var resolvedProjectKind: SiteProjectKind {
+        projectKind ?? .visual
+    }
+
+    var resolvedEntryPath: String {
+        entryPath ?? "index.html"
+    }
+
+    var resolvedFiles: [SiteSourceFile] {
+        files ?? []
+    }
+
+    var resolvedBlocks: [SiteBlock] {
+        blocks ?? []
+    }
 }
 
 enum RouteMode: String, CaseIterable, Identifiable {
@@ -244,6 +409,7 @@ struct ResolvedSiteSnapshot: Equatable {
     let revision: UInt64
     let objectID: String
     let publisherID: String
+    let bundle: WebsiteBundle
 }
 
 enum FaultKind: String, Codable {
@@ -309,7 +475,34 @@ extension Workspace {
                     headID: nil,
                     publisherID: nil,
                     publishedEnvelope: nil,
-                    publicationIdentity: .pending
+                    publicationIdentity: .pending,
+                    projectKind: .visual,
+                    entryPath: "index.html",
+                    files: nil,
+                    blocks: [
+                        SiteBlock(
+                            id: UUID(),
+                            kind: .hero,
+                            eyebrow: "Verified Noctweb publication",
+                            heading: "A garden with no address",
+                            body: "Field notes from a site that belongs to its publisher, not its host.",
+                            buttonLabel: "Explore the project",
+                            buttonURL: "#content"
+                        ),
+                        SiteBlock(
+                            id: UUID(),
+                            kind: .text,
+                            eyebrow: "",
+                            heading: "A website reconstructed from verified objects",
+                            body: """
+                            This page is reconstructed from verified objects. Its host can change without changing what it is.
+
+                            Use the network workspace to take a relay offline, alter a stored object, or reroute retrieval. The runtime keeps the publication address stable and separates each piece of trust evidence.
+                            """,
+                            buttonLabel: "",
+                            buttonURL: ""
+                        )
+                    ]
                 )
             ],
             relays: RelayTopology.labDefault.nodes.map { node in

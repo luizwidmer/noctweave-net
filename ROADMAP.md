@@ -22,13 +22,15 @@ Exit gate: deterministic cross-language vectors and bounded-decoder tests pass.
 
 ### Noctweb Lab track
 
-Noctweb Lab begins during Phase 1 with an explicitly incompatible `lab-v0`
-profile. It is a native macOS SwiftUI application with mock consensus,
-independently modeled standard, passthrough, and host relays, direct and
-passthrough retrieval, publication-scoped Keychain identity, and a scriptless
-native renderer. It is the continuous test surface for every later phase;
-temporary lab objects never become protocol compatibility promises. The Lab
-must not be deployed as a website or PWA.
+Noctweb Lab begins during Phase 1 with the explicitly incompatible
+`noctweb-lab-v1` website-bundle profile. It is a native macOS SwiftUI
+application with a Design/Code/Preview editor, mock consensus, independently
+modeled standard, passthrough, and host relays, direct and passthrough
+retrieval, and publication-scoped Keychain identity. Ordinary static and
+client-side website files run only after verification in an isolated,
+publication-scoped WebKit canvas. The Lab is the continuous test surface for
+every later phase; temporary lab objects never become protocol compatibility
+promises. The Lab itself must not be deployed as a website or PWA.
 
 ## Phase 2: Standard relay adapter
 

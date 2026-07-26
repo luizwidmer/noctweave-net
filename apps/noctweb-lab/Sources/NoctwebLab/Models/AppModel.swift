@@ -1,3 +1,4 @@
+import Dispatch
 import Foundation
 import NoctwebLabCore
 import SwiftUI
@@ -11,6 +12,9 @@ final class AppModel: ObservableObject {
     @Published private(set) var publicationStage: PublicationStage = .draft
     @Published private(set) var publicationOutcome: PublicationOutcome = .ready
     @Published private(set) var publicationMessage = "Draft is ready for validation."
+    @Published private(set) var publicationInFlight = false
+    @Published private(set) var identityOperationSiteID: UUID?
+    @Published private(set) var identityPreparationSiteIDs = Set<UUID>()
     @Published private(set) var trustEvidence: [TrustEvidence] = AppModel.pendingEvidence()
     @Published var routeMode: RouteMode = .direct
     @Published var runtimeAddress = ""
@@ -20,6 +24,7 @@ final class AppModel: ObservableObject {
     @Published var selectedScenarioID: UUID?
     @Published var inspectorEvidenceID: UUID?
     @Published var preserveRunHistory = true
+    @Published private(set) var operationError: String?
 
     let scenarios: [FaultScenario] = [
         FaultScenario(
@@ -54,6 +59,15 @@ final class AppModel: ObservableObject {
 
     private let engine: NoctwebLabEngine
     private let workspaceFileURL: URL
+    private let identityDeletionJournalFileURL: URL
+    private let persistenceQueue = DispatchQueue(
+        label: "org.noctweave.noctweb-lab.workspace-persistence",
+        qos: .utility
+    )
+    private var scheduledPersistence: DispatchWorkItem?
+    private var draftChangedDuringPublication = false
+    private var pendingPublisherIdentityDeletions:
+        [PublisherIdentityDeletionTombstone] = []
 
     init(
         engine: NoctwebLabEngine? = nil,
@@ -62,17 +76,45 @@ final class AppModel: ObservableObject {
         self.engine = engine ?? (try! NoctwebLabEngine(
             identityStore: KeychainPublicationIdentityStore()
         ))
-        self.workspaceFileURL =
+        let resolvedWorkspaceFileURL =
             workspaceFileURL ?? Self.defaultWorkspaceFileURL()
+        self.workspaceFileURL = resolvedWorkspaceFileURL
+        self.identityDeletionJournalFileURL =
+            Self.publisherIdentityDeletionJournalURL(
+                for: resolvedWorkspaceFileURL
+            )
 
         if
-            let data = try? Data(contentsOf: self.workspaceFileURL),
-            let decoded = try? JSONDecoder().decode([Workspace].self, from: data),
-            !decoded.isEmpty
+            let data = try? Data(
+                contentsOf: self.identityDeletionJournalFileURL
+            ),
+            let journal = try? JSONDecoder().decode(
+                PublisherIdentityDeletionJournal.self,
+                from: data
+            )
         {
-            workspaces = decoded
+            var seenSiteIDs = Set<UUID>()
+            pendingPublisherIdentityDeletions = journal.pending.filter {
+                seenSiteIDs.insert($0.siteID).inserted
+            }
+        }
+
+        let initialWorkspaces: [Workspace]
+        if
+            let data = try? Data(contentsOf: self.workspaceFileURL),
+            let decoded = try? JSONDecoder().decode([Workspace].self, from: data)
+        {
+            initialWorkspaces = decoded
         } else {
-            workspaces = [.starter()]
+            initialWorkspaces = [.starter()]
+        }
+        workspaces = initialWorkspaces
+        for workspaceIndex in workspaces.indices {
+            for siteIndex in workspaces[workspaceIndex].sites.indices {
+                WebsiteProjectBuilder.ensureProject(
+                    &workspaces[workspaceIndex].sites[siteIndex]
+                )
+            }
         }
 
         activeWorkspaceID = workspaces.first?.id
@@ -83,6 +125,8 @@ final class AppModel: ObservableObject {
 
         Task { [weak self] in
             await self?.restoreEngineState()
+            await self?.reconcilePendingPublisherIdentityDeletions()
+            await self?.prepareMissingPublisherIdentities()
         }
     }
 
@@ -126,9 +170,12 @@ final class AppModel: ObservableObject {
     }
 
     func createSite() {
-        guard let workspaceIndex = activeWorkspaceIndex else { return }
+        guard let workspaceIndex = activeWorkspaceIndex else {
+            operationError = "Create or select a workspace before adding a site."
+            return
+        }
         let number = workspaces[workspaceIndex].sites.count + 1
-        let site = SiteProject(
+        var site = SiteProject(
             id: UUID(),
             address: "noct://untitled-\(number)/",
             title: "Untitled publication",
@@ -143,10 +190,14 @@ final class AppModel: ObservableObject {
             publishedEnvelope: nil,
             publicationIdentity: .pending
         )
+        WebsiteProjectBuilder.ensureProject(&site)
         workspaces[workspaceIndex].sites.append(site)
         selectedSiteID = site.id
         resetPublication()
         persist()
+        Task { [weak self] in
+            await self?.preparePublisherIdentity(for: site.id)
+        }
     }
 
     func selectWorkspace(_ id: UUID?) {
@@ -176,21 +227,199 @@ final class AppModel: ObservableObject {
         else { return }
 
         update(&workspaces[workspaceIndex].sites[siteIndex])
+        markDraftChanged()
+    }
+
+    func updateSelectedVisualSite(_ update: (inout SiteProject) -> Void) {
+        guard
+            let workspaceIndex = activeWorkspaceIndex,
+            let selectedSiteID,
+            let siteIndex = workspaces[workspaceIndex].sites.firstIndex(
+                where: { $0.id == selectedSiteID }
+            )
+        else { return }
+
+        update(&workspaces[workspaceIndex].sites[siteIndex])
+        WebsiteProjectBuilder.synchronizeVisualProject(
+            &workspaces[workspaceIndex].sites[siteIndex]
+        )
+        markDraftChanged()
+    }
+
+    func addBlock(_ kind: SiteBlockKind) {
+        updateSelectedVisualSite { site in
+            var blocks = site.resolvedBlocks
+            blocks.append(.blank(kind))
+            site.blocks = blocks
+        }
+    }
+
+    func updateBlock(
+        _ blockID: UUID,
+        update: (inout SiteBlock) -> Void
+    ) {
+        updateSelectedVisualSite { site in
+            guard
+                var blocks = site.blocks,
+                let index = blocks.firstIndex(where: { $0.id == blockID })
+            else { return }
+            update(&blocks[index])
+            site.blocks = blocks
+        }
+    }
+
+    func moveBlock(_ blockID: UUID, offset: Int) {
+        updateSelectedVisualSite { site in
+            guard
+                var blocks = site.blocks,
+                let source = blocks.firstIndex(where: { $0.id == blockID })
+            else { return }
+            let destination = source + offset
+            guard blocks.indices.contains(destination) else { return }
+            blocks.swapAt(source, destination)
+            site.blocks = blocks
+        }
+    }
+
+    func deleteBlock(_ blockID: UUID) {
+        updateSelectedVisualSite { site in
+            guard var blocks = site.blocks, blocks.count > 1 else { return }
+            blocks.removeAll(where: { $0.id == blockID })
+            site.blocks = blocks
+        }
+    }
+
+    func addSourceFile(path: String) {
+        let normalized = path
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\", with: "/")
+        guard
+            isSafeProjectPath(normalized),
+            let site = selectedSite,
+            !site.resolvedFiles.contains(where: {
+                $0.path.caseInsensitiveCompare(normalized) == .orderedSame
+            })
+        else {
+            operationError = "Enter a unique relative file path without '..' segments."
+            return
+        }
+        updateSelectedSite { site in
+            var files = site.resolvedFiles
+            files.append(
+                SiteSourceFile(
+                    path: normalized,
+                    mediaType: WebsiteProjectBuilder.mediaType(forPath: normalized),
+                    bytes: Data()
+                )
+            )
+            site.files = files.sorted {
+                $0.path.localizedStandardCompare($1.path) == .orderedAscending
+            }
+            site.projectKind = .imported
+        }
+    }
+
+    func updateSourceFile(_ fileID: UUID, text: String) {
+        updateSelectedSite { site in
+            guard
+                var files = site.files,
+                let index = files.firstIndex(where: { $0.id == fileID })
+            else { return }
+            files[index].text = text
+            site.files = files
+            site.projectKind = .imported
+        }
+    }
+
+    func renameSourceFile(_ fileID: UUID, path: String) {
+        let normalized = path
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\\", with: "/")
+        guard isSafeProjectPath(normalized), let site = selectedSite else {
+            operationError = "Enter a relative file path without '..' segments."
+            return
+        }
+        guard !site.resolvedFiles.contains(where: {
+            $0.id != fileID &&
+                $0.path.caseInsensitiveCompare(normalized) == .orderedSame
+        }) else {
+            operationError = "A file already uses that path."
+            return
+        }
+        updateSelectedSite { site in
+            guard
+                var files = site.files,
+                let index = files.firstIndex(where: { $0.id == fileID })
+            else { return }
+            let previousPath = files[index].path
+            files[index].path = normalized
+            files[index].mediaType =
+                WebsiteProjectBuilder.mediaType(forPath: normalized)
+            site.files = files
+            if site.entryPath == previousPath {
+                site.entryPath = normalized
+            }
+            site.projectKind = .imported
+        }
+    }
+
+    func deleteSourceFile(_ fileID: UUID) {
+        guard
+            let site = selectedSite,
+            let file = site.resolvedFiles.first(where: { $0.id == fileID })
+        else { return }
+        guard file.path != site.resolvedEntryPath else {
+            operationError = "The entry file cannot be deleted. Choose another entry file first."
+            return
+        }
+        updateSelectedSite { site in
+            site.files?.removeAll(where: { $0.id == fileID })
+            site.projectKind = .imported
+        }
+    }
+
+    func clearOperationError() {
+        operationError = nil
+    }
+
+    func reportOperationError(_ message: String) {
+        operationError = message
+    }
+
+    func flushPersistence() {
+        do {
+            try saveWorkspaces()
+        } catch {
+            operationError =
+                "Workspace could not be saved: \(error.localizedDescription)"
+        }
+    }
+
+    private func markDraftChanged() {
+        if publicationInFlight {
+            draftChangedDuringPublication = true
+            publicationMessage =
+                "Publishing the captured revision. Your newer draft changes are saved separately."
+            scheduleWorkspaceSave()
+            return
+        }
         publicationStage = .draft
         publicationOutcome = .ready
         publicationMessage = "Draft changed. Validate before publishing."
         trustEvidence = Self.pendingEvidence()
         inspectorEvidenceID = trustEvidence.first?.id
-        persist()
+        scheduleWorkspaceSave()
     }
 
     func publishSelectedSite() {
         guard
-            publicationOutcome != .running,
+            !publicationInFlight,
             let site = selectedSite,
             let workspaceID = activeWorkspaceID
         else { return }
 
+        publicationInFlight = true
+        draftChangedDuringPublication = false
         publicationOutcome = .running
         Task { [weak self] in
             await self?.executePublication(site, workspaceID: workspaceID)
@@ -198,6 +427,7 @@ final class AppModel: ObservableObject {
     }
 
     func resetPublication() {
+        guard !publicationInFlight else { return }
         publicationStage = .draft
         publicationOutcome = .ready
         publicationMessage = "Draft is ready for validation."
@@ -287,30 +517,405 @@ final class AppModel: ObservableObject {
         persist()
     }
 
+    func importWebsiteDirectory(_ url: URL) {
+        operationError = nil
+        let accessed = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        do {
+            let files = try WebsiteProjectBuilder.importDirectory(at: url)
+            updateSelectedSite { site in
+                site.projectKind = .imported
+                site.entryPath = WebsiteProjectBuilder.entryPath
+                site.files = files
+                site.blocks = nil
+                if site.title == "Untitled publication" {
+                    site.title = url.deletingPathExtension().lastPathComponent
+                }
+                site.subtitle =
+                    "Standard website bundle imported from \(url.lastPathComponent)."
+            }
+        } catch {
+            operationError = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func deleteSite(_ siteID: UUID) -> Bool {
+        operationError = nil
+        guard !publicationInFlight else {
+            operationError = "Wait for the current publication to finish before removing a project."
+            return false
+        }
+        guard identityOperationSiteID != siteID else {
+            operationError =
+                "Wait for publisher-key destruction to finish before removing this project."
+            return false
+        }
+        guard !identityPreparationSiteIDs.contains(siteID) else {
+            operationError =
+                "Wait for publisher-key preparation to finish before removing this project."
+            return false
+        }
+        guard
+            let workspaceIndex = activeWorkspaceIndex,
+            let siteIndex = workspaces[workspaceIndex].sites.firstIndex(
+                where: { $0.id == siteID }
+            )
+        else { return false }
+
+        let previousWorkspaces = workspaces
+        let previousSelectedSiteID = selectedSiteID
+        let previousRuntimeAddress = runtimeAddress
+        let previousRuntimeHistory = runtimeHistory
+        let previousRuntimeHistoryIndex = runtimeHistoryIndex
+        let previousRuntimeResult = runtimeResult
+        let removed = workspaces[workspaceIndex].sites.remove(at: siteIndex)
+
+        if selectedSiteID == siteID {
+            let remaining = workspaces[workspaceIndex].sites
+            if remaining.indices.contains(siteIndex) {
+                selectedSiteID = remaining[siteIndex].id
+            } else {
+                selectedSiteID = remaining.last?.id
+            }
+        }
+        pruneRuntimeState(
+            removingSiteIDs: [siteID],
+            addresses: [removed.address]
+        )
+        runtimeAddress = selectedSite?.address ?? ""
+        refreshRetainedObjectCounts(workspaceIndex: workspaceIndex)
+
+        do {
+            try saveWorkspaces()
+            resetPublication()
+            return true
+        } catch {
+            workspaces = previousWorkspaces
+            selectedSiteID = previousSelectedSiteID
+            runtimeAddress = previousRuntimeAddress
+            runtimeHistory = previousRuntimeHistory
+            runtimeHistoryIndex = previousRuntimeHistoryIndex
+            runtimeResult = previousRuntimeResult
+            operationError = "The project was not removed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    @discardableResult
+    func deleteWorkspace(_ workspaceID: UUID) -> Bool {
+        operationError = nil
+        guard !publicationInFlight else {
+            operationError = "Wait for the current publication to finish before removing a workspace."
+            return false
+        }
+        guard
+            let workspaceIndex = workspaces.firstIndex(
+                where: { $0.id == workspaceID }
+            )
+        else { return false }
+        if
+            let identityOperationSiteID,
+            workspaces[workspaceIndex].sites.contains(
+                where: { $0.id == identityOperationSiteID }
+            )
+        {
+            operationError =
+                "Wait for publisher-key destruction to finish before removing this workspace."
+            return false
+        }
+        let workspaceSiteIDs = Set(
+            workspaces[workspaceIndex].sites.map(\.id)
+        )
+        guard identityPreparationSiteIDs.isDisjoint(with: workspaceSiteIDs) else {
+            operationError =
+                "Wait for publisher-key preparation to finish before removing this workspace."
+            return false
+        }
+
+        let previousWorkspaces = workspaces
+        let previousActiveWorkspaceID = activeWorkspaceID
+        let previousSelectedSiteID = selectedSiteID
+        let previousRuntimeAddress = runtimeAddress
+        let previousRuntimeHistory = runtimeHistory
+        let previousRuntimeHistoryIndex = runtimeHistoryIndex
+        let previousRuntimeResult = runtimeResult
+        let removed = workspaces.remove(at: workspaceIndex)
+
+        if activeWorkspaceID == workspaceID {
+            if workspaces.indices.contains(workspaceIndex) {
+                activeWorkspaceID = workspaces[workspaceIndex].id
+            } else {
+                activeWorkspaceID = workspaces.last?.id
+            }
+            selectedSiteID = activeWorkspace?.sites.first?.id
+        }
+        pruneRuntimeState(
+            removingSiteIDs: Set(removed.sites.map(\.id)),
+            addresses: Set(removed.sites.map(\.address))
+        )
+        runtimeAddress = selectedSite?.address ?? ""
+
+        do {
+            try saveWorkspaces()
+            resetPublication()
+            Task { [weak self] in
+                await self?.applyActiveRelayState()
+            }
+            return true
+        } catch {
+            workspaces = previousWorkspaces
+            activeWorkspaceID = previousActiveWorkspaceID
+            selectedSiteID = previousSelectedSiteID
+            runtimeAddress = previousRuntimeAddress
+            runtimeHistory = previousRuntimeHistory
+            runtimeHistoryIndex = previousRuntimeHistoryIndex
+            runtimeResult = previousRuntimeResult
+            operationError = "The workspace was not removed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func destroyPublisherIdentity(for siteID: UUID) async -> Bool {
+        operationError = nil
+        guard !publicationInFlight else {
+            operationError = "Wait for publishing to finish before destroying a publisher identity."
+            return false
+        }
+        guard identityOperationSiteID == nil else {
+            operationError = "Another publisher-key operation is still running."
+            return false
+        }
+        guard !identityPreparationSiteIDs.contains(siteID) else {
+            operationError =
+                "Wait for this publisher key to finish preparing before destroying it."
+            return false
+        }
+        guard location(of: siteID) != nil else { return false }
+
+        identityOperationSiteID = siteID
+        defer { identityOperationSiteID = nil }
+
+        let tombstone = PublisherIdentityDeletionTombstone(
+            siteID: siteID,
+            publicationID: siteID.uuidString.lowercased(),
+            requestedAt: Date()
+        )
+        do {
+            try recordPublisherIdentityDeletion(tombstone)
+        } catch {
+            operationError =
+                "The publisher key was not destroyed because the deletion request could not be saved: \(error.localizedDescription)"
+            return false
+        }
+
+        do {
+            try await engine.deletePublisherIdentity(
+                for: tombstone.publicationID
+            )
+        } catch {
+            operationError =
+                "The publisher key could not be destroyed yet. The saved deletion request will be retried when Noctweb Lab starts: \(error.localizedDescription)"
+            return false
+        }
+
+        if let location = location(of: siteID) {
+            workspaces[location.workspace].sites[location.site]
+                .publicationIdentity = .unavailable
+            do {
+                try saveWorkspaces()
+            } catch {
+                operationError =
+                    "The publisher key was destroyed, but its local status could not be saved. The pending cleanup will be reconciled when Noctweb Lab starts: \(error.localizedDescription)"
+                return true
+            }
+        }
+
+        do {
+            try clearPublisherIdentityDeletion(for: siteID)
+        } catch {
+            operationError =
+                "The publisher key was destroyed, but its cleanup marker could not be cleared. Noctweb Lab will safely retry the idempotent cleanup when it starts: \(error.localizedDescription)"
+        }
+        return true
+    }
+
+    private func reconcilePendingPublisherIdentityDeletions() async {
+        for tombstone in pendingPublisherIdentityDeletions {
+            identityOperationSiteID = tombstone.siteID
+            await reconcilePublisherIdentityDeletion(tombstone)
+            identityOperationSiteID = nil
+        }
+    }
+
+    private func reconcilePublisherIdentityDeletion(
+        _ tombstone: PublisherIdentityDeletionTombstone
+    ) async {
+        do {
+            try await engine.deletePublisherIdentity(
+                for: tombstone.publicationID
+            )
+        } catch {
+            operationError =
+                "A pending publisher-key deletion could not be completed and will be retried: \(error.localizedDescription)"
+            return
+        }
+
+        if let location = location(of: tombstone.siteID) {
+            workspaces[location.workspace].sites[location.site]
+                .publicationIdentity = .unavailable
+            do {
+                try saveWorkspaces()
+            } catch {
+                operationError =
+                    "A publisher key was destroyed, but its local status could not be saved. Cleanup remains pending: \(error.localizedDescription)"
+                return
+            }
+        }
+
+        do {
+            try clearPublisherIdentityDeletion(
+                for: tombstone.siteID
+            )
+        } catch {
+            operationError =
+                "A publisher key was destroyed, but its cleanup marker could not be cleared. The idempotent cleanup remains pending: \(error.localizedDescription)"
+        }
+    }
+
+    private func prepareMissingPublisherIdentities() async {
+        let pendingSiteIDs = Set(
+            pendingPublisherIdentityDeletions.map(\.siteID)
+        )
+        let siteIDs = workspaces.flatMap(\.sites).compactMap { site in
+            site.publisherID == nil && !pendingSiteIDs.contains(site.id)
+                ? site.id
+                : nil
+        }
+        for siteID in siteIDs {
+            await preparePublisherIdentity(for: siteID)
+        }
+    }
+
+    private func preparePublisherIdentity(for siteID: UUID) async {
+        guard
+            location(of: siteID) != nil,
+            !identityPreparationSiteIDs.contains(siteID),
+            !pendingPublisherIdentityDeletions.contains(
+                where: { $0.siteID == siteID }
+            )
+        else { return }
+
+        identityPreparationSiteIDs.insert(siteID)
+        defer { identityPreparationSiteIDs.remove(siteID) }
+
+        do {
+            let publisherID = try await engine.preparePublisherIdentity(
+                for: siteID.uuidString.lowercased()
+            )
+
+            if pendingPublisherIdentityDeletions.contains(
+                where: { $0.siteID == siteID }
+            ) {
+                do {
+                    try await engine.deletePublisherIdentity(
+                        for: siteID.uuidString.lowercased()
+                    )
+                } catch {
+                    operationError =
+                        "A publisher key was prepared during a pending deletion and could not be cleaned up yet: \(error.localizedDescription)"
+                }
+                return
+            }
+
+            guard
+                let location = location(of: siteID)
+            else { return }
+            workspaces[location.workspace].sites[location.site].publisherID =
+                publisherID
+            workspaces[location.workspace].sites[location.site].publicationIdentity =
+                .ready
+            persist()
+        } catch {
+            guard
+                !pendingPublisherIdentityDeletions.contains(
+                    where: { $0.siteID == siteID }
+                ),
+                let location = location(of: siteID)
+            else { return }
+            workspaces[location.workspace].sites[location.site].publicationIdentity =
+                .unavailable
+            operationError =
+                "The publisher identity could not be prepared: \(error.localizedDescription)"
+            persist()
+        }
+    }
+
     private var activeWorkspaceIndex: Int? {
         guard let activeWorkspaceID else { return nil }
         return workspaces.firstIndex(where: { $0.id == activeWorkspaceID })
+    }
+
+    private func pruneRuntimeState(
+        removingSiteIDs: Set<UUID>,
+        addresses: Set<String>
+    ) {
+        runtimeHistory.removeAll(where: addresses.contains)
+        if runtimeHistory.isEmpty {
+            runtimeHistoryIndex = -1
+        } else {
+            runtimeHistoryIndex = min(
+                max(runtimeHistoryIndex, 0),
+                runtimeHistory.count - 1
+            )
+        }
+        if
+            case let .resolved(snapshot, _) = runtimeResult,
+            removingSiteIDs.contains(snapshot.sourceSiteID)
+        {
+            runtimeResult = .idle
+        }
+    }
+
+    private func isSafeProjectPath(_ path: String) -> Bool {
+        guard
+            !path.isEmpty,
+            !path.hasPrefix("/"),
+            !path.hasSuffix("/"),
+            !path.contains("\0")
+        else { return false }
+        return !path
+            .split(separator: "/", omittingEmptySubsequences: false)
+            .contains("..")
     }
 
     private func executePublication(
         _ initialSite: SiteProject,
         workspaceID: UUID
     ) async {
+        defer {
+            publicationInFlight = false
+        }
         transition(
             to: .validate,
-            message: "Validating the address, structured fields, and bounded manifest."
+            message: "Validating the address, entry point, file paths, media types, and bounded website bundle."
         )
         guard
             initialSite.address.hasPrefix("noct://"),
             !initialSite.title.trimmingCharacters(
                 in: .whitespacesAndNewlines
             ).isEmpty,
-            !initialSite.body.trimmingCharacters(
-                in: .whitespacesAndNewlines
-            ).isEmpty
+            !initialSite.resolvedFiles.isEmpty,
+            initialSite.resolvedFiles.contains(
+                where: { $0.path == initialSite.resolvedEntryPath }
+            )
         else {
             failPublication(
-                "Validation failed. Title, body, and a noct:// address are required."
+                "Validation failed. A title, noct:// address, and existing website entry file are required."
             )
             return
         }
@@ -322,7 +927,7 @@ final class AppModel: ObservableObject {
 
         do {
             let publication = try await engine.publish(
-                draft: coreDraft(from: initialSite),
+                draft: try coreDraft(from: initialSite),
                 expectedPublisherID: initialSite.publisherID
             )
             transition(
@@ -378,9 +983,17 @@ final class AppModel: ObservableObject {
                 publication: publication
             )
             inspectorEvidenceID = trustEvidence.first?.id
-            publicationOutcome = .succeeded
-            publicationMessage =
-                "Revision \(publication.object.revision) published and independently verified."
+            if draftChangedDuringPublication {
+                publicationStage = .draft
+                publicationOutcome = .ready
+                publicationMessage =
+                    "Revision \(publication.object.revision) published. Your newer draft changes are ready for another revision."
+                draftChangedDuringPublication = false
+            } else {
+                publicationOutcome = .succeeded
+                publicationMessage =
+                    "Revision \(publication.object.revision) published and independently verified."
+            }
             persist()
 
             runtimeAddress = publication.object.address
@@ -398,7 +1011,7 @@ final class AppModel: ObservableObject {
                     workspaceID: workspaceID,
                     siteID: initialSite.id
                 ),
-                error is NoctwebLabError
+                Self.isPublisherIdentityFailure(error)
             {
                 workspaces[location.workspace].sites[location.site]
                     .publicationIdentity = .unavailable
@@ -465,7 +1078,8 @@ final class AppModel: ObservableObject {
             accentHex: object.accentHex,
             revision: object.revision,
             objectID: result.head.claims.objectID,
-            publisherID: object.publisherID
+            publisherID: object.publisherID,
+            bundle: object.bundle ?? legacyBundle(from: object)
         )
         runtimeResult = .resolved(
             snapshot: snapshot,
@@ -667,14 +1281,52 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func coreDraft(from site: SiteProject) -> CapsuleSiteDraft {
+    private func coreDraft(from site: SiteProject) throws -> CapsuleSiteDraft {
         CapsuleSiteDraft(
             publicationID: site.id.uuidString.lowercased(),
             address: site.address,
             title: site.title,
             subtitle: site.subtitle,
             body: site.body,
-            accentHex: site.accentHex
+            accentHex: site.accentHex,
+            bundle: try WebsiteProjectBuilder.makeBundle(from: site)
+        )
+    }
+
+    private func legacyBundle(from object: CapsuleObject) -> WebsiteBundle {
+        let title = Self.escapeHTML(object.title)
+        let subtitle = Self.escapeHTML(object.subtitle)
+        let body = Self.escapeHTML(object.body)
+            .replacingOccurrences(of: "\n", with: "<br>")
+        let html = """
+        <!doctype html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>\(title)</title>
+          <style>
+            body { font: 18px/1.65 -apple-system, sans-serif; max-width: 760px; margin: auto; padding: 10vw 2rem; }
+            h1 { color: \(object.accentHex); font: 700 clamp(3rem, 8vw, 6rem)/.96 Georgia, serif; }
+            .subtitle { color: #66736e; font-size: 1.3rem; }
+          </style>
+        </head>
+        <body>
+          <h1>\(title)</h1>
+          <p class="subtitle">\(subtitle)</p>
+          <p>\(body)</p>
+        </body>
+        </html>
+        """
+        return WebsiteBundle(
+            entryPath: "index.html",
+            files: [
+                WebsiteFile(
+                    path: "index.html",
+                    mediaType: "text/html",
+                    bytes: Data(html.utf8)
+                )
+            ]
         )
     }
 
@@ -805,21 +1457,141 @@ final class AppModel: ObservableObject {
         return (workspace, site)
     }
 
+    private func location(of siteID: UUID) -> (workspace: Int, site: Int)? {
+        for workspaceIndex in workspaces.indices {
+            if let siteIndex = workspaces[workspaceIndex].sites.firstIndex(
+                where: { $0.id == siteID }
+            ) {
+                return (workspaceIndex, siteIndex)
+            }
+        }
+        return nil
+    }
+
+    private func saveWorkspaces() throws {
+        scheduledPersistence?.cancel()
+        scheduledPersistence = nil
+        let snapshot = workspaces
+        let url = workspaceFileURL
+        try persistenceQueue.sync {
+            try Self.writeWorkspaces(snapshot, to: url)
+        }
+    }
+
+    private func recordPublisherIdentityDeletion(
+        _ tombstone: PublisherIdentityDeletionTombstone
+    ) throws {
+        let previous = pendingPublisherIdentityDeletions
+        pendingPublisherIdentityDeletions.removeAll {
+            $0.siteID == tombstone.siteID
+        }
+        pendingPublisherIdentityDeletions.append(tombstone)
+        do {
+            try savePublisherIdentityDeletionJournal()
+        } catch {
+            pendingPublisherIdentityDeletions = previous
+            throw error
+        }
+    }
+
+    private func clearPublisherIdentityDeletion(
+        for siteID: UUID
+    ) throws {
+        let previous = pendingPublisherIdentityDeletions
+        pendingPublisherIdentityDeletions.removeAll {
+            $0.siteID == siteID
+        }
+        do {
+            try savePublisherIdentityDeletionJournal()
+        } catch {
+            pendingPublisherIdentityDeletions = previous
+            throw error
+        }
+    }
+
+    private func savePublisherIdentityDeletionJournal() throws {
+        let snapshot = PublisherIdentityDeletionJournal(
+            pending: pendingPublisherIdentityDeletions.sorted {
+                $0.siteID.uuidString < $1.siteID.uuidString
+            }
+        )
+        let url = identityDeletionJournalFileURL
+        try persistenceQueue.sync {
+            try Self.writePublisherIdentityDeletionJournal(
+                snapshot,
+                to: url
+            )
+        }
+    }
+
+    private func scheduleWorkspaceSave() {
+        scheduledPersistence?.cancel()
+
+        let snapshot = workspaces
+        let url = workspaceFileURL
+        let item = DispatchWorkItem { [weak self] in
+            do {
+                try Self.writeWorkspaces(snapshot, to: url)
+            } catch {
+                Task { @MainActor [weak self] in
+                    self?.operationError =
+                        "Workspace could not be saved: \(error.localizedDescription)"
+                }
+            }
+        }
+        scheduledPersistence = item
+        persistenceQueue.asyncAfter(
+            deadline: .now() + .milliseconds(350),
+            execute: item
+        )
+    }
+
     private func persist() {
         do {
-            try FileManager.default.createDirectory(
-                at: workspaceFileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            let encoded = try JSONEncoder().encode(workspaces)
-            try encoded.write(
-                to: workspaceFileURL,
-                options: [.atomic, .completeFileProtection]
-            )
+            try saveWorkspaces()
         } catch {
+            operationError = error.localizedDescription
             publicationMessage =
                 "Workspace could not be saved: \(error.localizedDescription)"
         }
+    }
+
+    nonisolated private static func writeWorkspaces(
+        _ workspaces: [Workspace],
+        to workspaceFileURL: URL
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: workspaceFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoded = try JSONEncoder().encode(workspaces)
+        try encoded.write(
+            to: workspaceFileURL,
+            options: [.atomic, .completeFileProtection]
+        )
+    }
+
+    nonisolated private static func writePublisherIdentityDeletionJournal(
+        _ journal: PublisherIdentityDeletionJournal,
+        to journalFileURL: URL
+    ) throws {
+        try FileManager.default.createDirectory(
+            at: journalFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoded = try JSONEncoder().encode(journal)
+        try encoded.write(
+            to: journalFileURL,
+            options: [.atomic, .completeFileProtection]
+        )
+    }
+
+    nonisolated static func publisherIdentityDeletionJournalURL(
+        for workspaceFileURL: URL
+    ) -> URL {
+        workspaceFileURL.appendingPathExtension(
+            "publisher-key-deletions-v1.json"
+        )
     }
 
     private static func defaultWorkspaceFileURL() -> URL {
@@ -879,5 +1651,26 @@ final class AppModel: ObservableObject {
         default:
             return false
         }
+    }
+
+    private static func isPublisherIdentityFailure(
+        _ error: any Error
+    ) -> Bool {
+        guard let error = error as? NoctwebLabError else { return false }
+        switch error {
+        case .identityMissing, .invalidPrivateKey, .keychainFailure:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func escapeHTML(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 }

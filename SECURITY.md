@@ -23,6 +23,28 @@ addresses, timing, traffic sizes, request frequency, host selection, storage
 tenancy, retention, and topology. Noctweave Net does not currently provide cover
 traffic, a mix network, or a global anonymity claim.
 
+## Noctweb Lab active-content boundary
+
+The experimental Lab executes publisher-authenticated client-side JavaScript,
+but a valid publisher signature does not make that code safe. Before WebKit
+receives any bytes, the Lab canonicalizes and verifies the complete bounded
+website bundle and assigns it a publication-scoped custom origin. The runtime
+uses a non-persistent data store, exposes no native message bridge, and applies
+a content security policy, navigation policy, and WebRTC guard that deny
+website access to external network resources.
+
+The packaged app uses the macOS App Sandbox and grants read-only access only to
+a build directory chosen through the system import panel. WebKit requires the
+network-client entitlement for its separate networking process, so the
+website-level denial is a runtime boundary, not a claim that the process lacks
+network authority. This profile remains an unaudited test platform and is not a
+production sandbox for hostile code.
+
+Build imports reject symbolic links, non-regular files, ambiguous paths, more
+than 512 files, and more than 16 MiB before unbounded allocation. Publisher-key
+destruction is journaled before the irreversible Keychain deletion and retried
+after restart when interrupted.
+
 ## Mandatory implementation properties
 
 - canonical and domain-separated hashes and signatures;

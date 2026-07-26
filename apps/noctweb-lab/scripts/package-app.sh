@@ -29,6 +29,7 @@ chmod 755 "$MACOS_ROOT/NoctwebLab"
 codesign \
   --force \
   --deep \
+  --entitlements "$PACKAGE_ROOT/Packaging/NoctwebLab.entitlements" \
   --sign "$SIGNING_IDENTITY" \
   "$APP_ROOT"
 

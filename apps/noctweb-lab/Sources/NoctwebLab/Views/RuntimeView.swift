@@ -3,6 +3,7 @@ import SwiftUI
 struct RuntimeView: View {
     @EnvironmentObject private var model: AppModel
     @State private var evidenceExpanded = false
+    @State private var websiteReloadToken = UUID()
 
     var body: some View {
         GeometryReader { proxy in
@@ -62,7 +63,7 @@ struct RuntimeView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Noctweb Runtime")
                 .font(compact ? .title.weight(.semibold) : .largeTitle.weight(.semibold))
-            Text("Resolve publication addresses and render accepted content directly with SwiftUI.")
+            Text("Resolve, verify, and run signed website bundles in an isolated native web runtime.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -78,6 +79,7 @@ struct RuntimeView: View {
         }
         .pickerStyle(.segmented)
         .onChange(of: model.routeMode) {
+            websiteReloadToken = UUID()
             model.reloadRuntime()
         }
     }
@@ -100,6 +102,7 @@ struct RuntimeView: View {
     private var navigationButtons: some View {
         HStack(spacing: 6) {
             Button {
+                websiteReloadToken = UUID()
                 model.goBack()
             } label: {
                 Image(systemName: "chevron.left")
@@ -108,6 +111,7 @@ struct RuntimeView: View {
             .help("Back")
 
             Button {
+                websiteReloadToken = UUID()
                 model.goForward()
             } label: {
                 Image(systemName: "chevron.right")
@@ -116,6 +120,7 @@ struct RuntimeView: View {
             .help("Forward")
 
             Button {
+                websiteReloadToken = UUID()
                 model.reloadRuntime()
             } label: {
                 Image(systemName: "arrow.clockwise")
@@ -130,10 +135,12 @@ struct RuntimeView: View {
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onSubmit {
+                    websiteReloadToken = UUID()
                     model.navigateRuntime()
                 }
 
             Button("Resolve") {
+                websiteReloadToken = UUID()
                 model.navigateRuntime()
             }
             .buttonStyle(.borderedProminent)
@@ -163,7 +170,12 @@ struct RuntimeView: View {
                     .padding(12)
                     .background(.bar)
                     Divider()
-                    RenderedSiteView(snapshot: snapshot)
+                    VerifiedWebsiteWebView(
+                        bundle: snapshot.bundle,
+                        origin: snapshot.publisherID,
+                        reloadToken: websiteReloadToken
+                    )
+                    .id(snapshot.objectID)
                 }
             } else {
                 unavailableView(

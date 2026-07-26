@@ -15,9 +15,9 @@ struct SettingsView: View {
 
             Section("Publication Security") {
                 LabeledContent("Identity scope", value: "Per publication")
-                LabeledContent("Renderer", value: "Native SwiftUI")
-                LabeledContent("WebKit and scripts", value: "Unavailable")
-                Text("Site content is rendered as bounded native fields. The runtime never evaluates HTML, Markdown, JavaScript, or same-origin capabilities.")
+                LabeledContent("Renderer", value: "Isolated WebKit")
+                LabeledContent("Website scripts", value: "Same-publication only")
+                Text("Every site has a publisher-scoped Keychain identity. Only verified bundle bytes run, with no native bridge and website access to external network resources blocked by runtime policy.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -30,7 +30,8 @@ struct SettingsView: View {
             }
 
             Section("Experimental Profile") {
-                LabeledContent("Profile", value: "noctweb-lab-v0")
+                LabeledContent("Profile", value: "noctweb-lab-v1")
+                LabeledContent("Bundle limit", value: "512 files · 16 MB")
                 LabeledContent("Consensus", value: "Deterministic test adapter")
                 Text("This profile is a development surface and is not a stable Noctweave Net wire format.")
                     .font(.caption)

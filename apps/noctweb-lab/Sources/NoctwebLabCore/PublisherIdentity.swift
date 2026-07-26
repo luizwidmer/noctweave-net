@@ -5,6 +5,7 @@ import Security
 public protocol PublicationPrivateKeyStore: Sendable {
     func loadPrivateKey(for publicationID: String) throws -> Data?
     func insertPrivateKey(_ privateKey: Data, for publicationID: String) throws
+    func deletePrivateKey(for publicationID: String) throws
 }
 
 public struct PublicationSigningIdentity: Sendable {
@@ -97,6 +98,20 @@ public actor PublicationIdentityManager {
         }
     }
 
+    public func loadOrCreateIdentity(
+        for publicationID: String
+    ) throws -> PublicationSigningIdentity {
+        try PublicationValidation.validateID(publicationID)
+
+        if let stored = try store.loadPrivateKey(for: publicationID) {
+            return try PublicationSigningIdentity(
+                publicationID: publicationID,
+                rawPrivateKey: stored
+            )
+        }
+        return try createIdentity(for: publicationID)
+    }
+
     public func loadIdentity(
         for publicationID: String,
         expectedPublisherID: String
@@ -116,6 +131,11 @@ public actor PublicationIdentityManager {
             )
         }
         return identity
+    }
+
+    public func deleteIdentity(for publicationID: String) throws {
+        try PublicationValidation.validateID(publicationID)
+        try store.deletePrivateKey(for: publicationID)
     }
 }
 
@@ -147,6 +167,12 @@ public final class InMemoryPublicationPrivateKeyStore:
         }
         keys[publicationID] = privateKey
     }
+
+    public func deletePrivateKey(for publicationID: String) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        keys.removeValue(forKey: publicationID)
+    }
 }
 
 public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
@@ -167,7 +193,6 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecAttrGeneric as String: Data("ed25519-v1".utf8),
-            kSecUseDataProtectionKeychain as String: kCFBooleanTrue as Any,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecReturnData as String: kCFBooleanTrue as Any,
             kSecMatchLimit as String: kSecMatchLimitOne,
@@ -204,7 +229,6 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
             kSecAttrDescription as String:
                 "Ed25519 private key for publication \(account)",
             kSecAttrGeneric as String: Data("ed25519-v1".utf8),
-            kSecUseDataProtectionKeychain as String: kCFBooleanTrue as Any,
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecAttrAccessible as String:
                 kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
@@ -216,6 +240,21 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
             throw NoctwebLabError.identityAlreadyExists(publicationID)
         }
         guard status == errSecSuccess else {
+            throw NoctwebLabError.keychainFailure(status)
+        }
+    }
+
+    public func deletePrivateKey(for publicationID: String) throws {
+        try PublicationValidation.validateID(publicationID)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: publicationID.lowercased(),
+            kSecAttrGeneric as String: Data("ed25519-v1".utf8),
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             throw NoctwebLabError.keychainFailure(status)
         }
     }
@@ -241,10 +280,10 @@ enum PublicationValidation {
         else {
             throw NoctwebLabError.invalidAddress(draft.address)
         }
-        guard
-            !draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-            !draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
+        if draft.bundle == nil, (
+            draft.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            draft.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ) {
             throw NoctwebLabError.canonicalEncoding(
                 "title and body must not be empty"
             )
@@ -259,5 +298,74 @@ enum PublicationValidation {
                 "accentHex must contain exactly six hexadecimal digits"
             )
         }
+
+        if let bundle = draft.bundle {
+            _ = try WebsiteBundleValidation.canonicalized(bundle)
+        }
+    }
+
+    static func canonicalBundle(for draft: CapsuleSiteDraft) throws -> WebsiteBundle {
+        if let bundle = draft.bundle {
+            return try WebsiteBundleValidation.canonicalized(bundle)
+        }
+
+        let html = """
+        <!doctype html>
+        <html lang="en">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>\(escapeHTML(draft.title))</title>
+          <style>:root { color-scheme: light dark; --accent: \(draft.accentHex); } body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 4rem auto; padding: 0 1.5rem; } h1 { color: var(--accent); }</style>
+        </head>
+        <body>
+          <main>
+            <h1>\(escapeHTML(draft.title))</h1>
+            <p>\(escapeHTML(draft.subtitle))</p>
+            <p>\(escapeHTML(draft.body))</p>
+          </main>
+        </body>
+        </html>
+        """
+        return WebsiteBundle(
+            entryPath: "index.html",
+            files: [
+                WebsiteFile(
+                    path: "index.html",
+                    mediaType: "text/html; charset=utf-8",
+                    bytes: Data(html.utf8)
+                ),
+            ]
+        )
+    }
+
+    static func validateObject(_ object: CapsuleObject) throws {
+        if object.protocolVersion == CapsuleObject.currentProtocolVersion {
+            guard let bundle = object.bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "noctweb-lab-v1 objects require a website bundle"
+                )
+            }
+            guard try WebsiteBundleValidation.canonicalized(bundle) == bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "website files are not in canonical path order"
+                )
+            }
+        } else if let bundle = object.bundle {
+            guard try WebsiteBundleValidation.canonicalized(bundle) == bundle else {
+                throw NoctwebLabError.invalidWebsiteBundle(
+                    "website files are not in canonical path order"
+                )
+            }
+        }
+    }
+
+    private static func escapeHTML(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 }

@@ -71,6 +71,7 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
     public var subtitle: String
     public var body: String
     public var accentHex: String
+    public var bundle: WebsiteBundle?
 
     public init(
         publicationID: String,
@@ -78,7 +79,8 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
         title: String,
         subtitle: String,
         body: String,
-        accentHex: String
+        accentHex: String,
+        bundle: WebsiteBundle? = nil
     ) {
         self.publicationID = publicationID
         self.address = address
@@ -86,11 +88,12 @@ public struct CapsuleSiteDraft: Codable, Equatable, Sendable {
         self.subtitle = subtitle
         self.body = body
         self.accentHex = accentHex
+        self.bundle = bundle
     }
 }
 
 public struct CapsuleObject: Codable, Equatable, Sendable {
-    public static let currentProtocolVersion = "noctweb-lab-v0"
+    public static let currentProtocolVersion = "noctweb-lab-v1"
 
     public let protocolVersion: String
     public let publicationID: String
@@ -102,6 +105,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
     public let subtitle: String
     public let body: String
     public let accentHex: String
+    public let bundle: WebsiteBundle?
 
     public init(
         protocolVersion: String = CapsuleObject.currentProtocolVersion,
@@ -113,7 +117,8 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         title: String,
         subtitle: String,
         body: String,
-        accentHex: String
+        accentHex: String,
+        bundle: WebsiteBundle? = nil
     ) {
         self.protocolVersion = protocolVersion
         self.publicationID = publicationID
@@ -125,6 +130,7 @@ public struct CapsuleObject: Codable, Equatable, Sendable {
         self.subtitle = subtitle
         self.body = body
         self.accentHex = accentHex
+        self.bundle = bundle
     }
 }
 
@@ -419,6 +425,7 @@ public enum NoctwebLabError: Error, Equatable, Sendable {
     case invalidPrivateKey(String)
     case keychainFailure(Int32)
     case canonicalEncoding(String)
+    case invalidWebsiteBundle(String)
     case invalidRoute(String)
     case relayUnavailable(String)
     case noHostReplica(String)
@@ -451,6 +458,8 @@ extension NoctwebLabError: LocalizedError {
             return "Keychain operation failed with OSStatus \(status)."
         case let .canonicalEncoding(reason):
             return "Canonical encoding failed: \(reason)"
+        case let .invalidWebsiteBundle(reason):
+            return "Invalid website bundle: \(reason)"
         case let .invalidRoute(reason):
             return "Invalid relay route: \(reason)"
         case let .relayUnavailable(relayID):

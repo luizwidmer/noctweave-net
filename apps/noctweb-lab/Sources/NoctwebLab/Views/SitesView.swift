@@ -1,31 +1,50 @@
 import SwiftUI
 
-private enum SiteWorkspacePane: String, CaseIterable, Identifiable {
-    case editor
-    case preview
+private enum SiteDestructiveAction {
+    case removeProject(SiteProject)
+    case destroyIdentity(SiteProject)
 
-    var id: Self { self }
+    var site: SiteProject {
+        switch self {
+        case let .removeProject(site), let .destroyIdentity(site):
+            site
+        }
+    }
 
     var title: String {
         switch self {
-        case .editor: "Editor"
-        case .preview: "Preview"
+        case let .removeProject(site):
+            "Remove \(site.title) from this Mac?"
+        case .destroyIdentity:
+            "Destroy the publisher key?"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case let .removeProject(site):
+            "This deletes the local editor project and its \(site.resolvedFiles.count) files. Published revisions are immutable and may remain on host relays. Choose whether to retain the publisher key or destroy it permanently with the project."
+        case let .destroyIdentity(site):
+            "This permanently removes the local signing authority for \(site.address). Existing published revisions remain verifiable, but this Lab will no longer be able to publish updates under that identity."
         }
     }
 }
 
 struct SitesView: View {
     @EnvironmentObject private var model: AppModel
-    @State private var compactPane: SiteWorkspacePane = .editor
+
+    @State private var destructiveAction: SiteDestructiveAction?
 
     var body: some View {
         GeometryReader { proxy in
-            if proxy.size.width >= siteLibraryBreakpoint {
+            if model.activeWorkspace == nil {
+                selectedWorkspace(width: proxy.size.width)
+            } else if proxy.size.width >= siteLibraryBreakpoint {
                 HStack(spacing: 0) {
-                    siteList
-                        .frame(width: 240)
+                    siteLibrary
+                        .frame(width: 244)
                     Divider()
-                    selectedWorkspace(width: proxy.size.width - 241)
+                    selectedWorkspace(width: proxy.size.width - 245)
                 }
             } else {
                 VStack(spacing: 0) {
@@ -35,27 +54,95 @@ struct SitesView: View {
                 }
             }
         }
+        .confirmationDialog(
+            destructiveAction?.title ?? "Confirm action",
+            isPresented: destructiveActionBinding,
+            titleVisibility: .visible,
+            presenting: destructiveAction
+        ) { action in
+            switch action {
+            case let .removeProject(site):
+                Button("Remove Project, Keep Key", role: .destructive) {
+                    _ = model.deleteSite(site.id)
+                    destructiveAction = nil
+                }
+                .disabled(
+                    model.identityPreparationSiteIDs.contains(site.id)
+                )
+                if site.publicationIdentity != .unavailable {
+                    Button("Destroy Key & Remove Project", role: .destructive) {
+                        destructiveAction = nil
+                        Task {
+                            if await model.destroyPublisherIdentity(for: site.id) {
+                                _ = model.deleteSite(site.id)
+                            }
+                        }
+                    }
+                    .disabled(
+                        model.identityPreparationSiteIDs.contains(site.id)
+                    )
+                }
+            case let .destroyIdentity(site):
+                Button("Destroy Key Permanently", role: .destructive) {
+                    destructiveAction = nil
+                    Task {
+                        _ = await model.destroyPublisherIdentity(for: site.id)
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                destructiveAction = nil
+            }
+        } message: { action in
+            Text(action.message)
+        }
     }
 
     @ViewBuilder
     private func selectedWorkspace(width: CGFloat) -> some View {
-        if let site = model.selectedSite {
+        if model.activeWorkspace == nil {
+            VStack(spacing: 14) {
+                ContentUnavailableView(
+                    "No Workspace",
+                    systemImage: "square.stack.3d.up.slash",
+                    description: Text("Create a local workspace to begin building Noctweb sites.")
+                )
+                Button("Create Workspace") {
+                    model.createWorkspace()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let site = model.selectedSite {
             siteWorkspace(site, width: width)
         } else {
-            ContentUnavailableView(
-                "No Site Selected",
-                systemImage: "rectangle.stack.badge.plus",
-                description: Text("Create a site in this workspace to begin.")
-            )
+            VStack(spacing: 14) {
+                ContentUnavailableView(
+                    "No Sites Yet",
+                    systemImage: "rectangle.stack.badge.plus",
+                    description: Text(
+                        "Start visually or create a site and import an agent-built production bundle."
+                    )
+                )
+                Button("Create Site") {
+                    model.createSite()
+                }
+                .buttonStyle(.borderedProminent)
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var siteList: some View {
+    private var siteLibrary: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Sites")
-                    .font(.title2.weight(.semibold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sites")
+                        .font(.title2.weight(.semibold))
+                    Text("\(model.activeWorkspace?.sites.count ?? 0) local projects")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button {
                     model.createSite()
@@ -65,26 +152,44 @@ struct SitesView: View {
                 .buttonStyle(.borderless)
                 .help("Create a site")
             }
-            .padding(16)
+            .padding(14)
 
             Divider()
 
             List(selection: siteSelection) {
                 ForEach(model.activeWorkspace?.sites ?? []) { site in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(site.title)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        Text(site.address)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text(site.lastPublishedAt == nil ? "Draft" : "Revision \(site.revision)")
-                            .font(.caption2)
-                            .foregroundStyle(site.lastPublishedAt == nil ? .orange : .green)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(site.title)
+                                .font(.subheadline.weight(.medium))
+                                .lineLimit(1)
+                            Text(site.address)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                Circle()
+                                    .fill(site.lastPublishedAt == nil ? .orange : .green)
+                                    .frame(width: 6, height: 6)
+                                Text(
+                                    site.lastPublishedAt == nil
+                                        ? "Draft"
+                                        : "Revision \(site.revision)"
+                                )
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Spacer(minLength: 2)
+
+                        siteActionMenu(site, iconOnly: true)
                     }
                     .padding(.vertical, 5)
                     .tag(Optional(site.id))
+                    .contextMenu {
+                        siteContextActions(site)
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -93,7 +198,7 @@ struct SitesView: View {
     }
 
     private var compactSiteSelector: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Picker("Site", selection: siteSelection) {
                 if model.selectedSiteID == nil {
                     Text("Select a site")
@@ -105,9 +210,9 @@ struct SitesView: View {
                 }
             }
             .labelsHidden()
-            .frame(maxWidth: 360, alignment: .leading)
+            .frame(maxWidth: 330, alignment: .leading)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
 
             Button {
                 model.createSite()
@@ -116,80 +221,84 @@ struct SitesView: View {
             }
             .help("Create a site")
         }
-        .padding(.horizontal, 16)
-        .frame(minHeight: 52)
+        .padding(.horizontal, 14)
+        .frame(minHeight: 48)
         .background(.regularMaterial)
     }
 
     private func siteWorkspace(_ site: SiteProject, width: CGFloat) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 18) {
-                publicationHeader(site, compact: width < headerBreakpoint)
-
-                PublicationPipeline(
-                    activeStage: model.publicationStage,
-                    outcome: model.publicationOutcome
-                )
-                .frame(maxWidth: 700)
-
-                HStack(spacing: 8) {
-                    Image(systemName: outcomeImage)
-                        .foregroundStyle(outcomeColor)
-                    Text(model.publicationMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(width < headerBreakpoint ? 16 : 24)
-
+            publicationHeader(site, compact: width < headerBreakpoint)
             Divider()
-
-            if width >= editorPreviewBreakpoint {
-                HStack(spacing: 0) {
-                    editor(site)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Divider()
-                    preview(site)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            } else {
-                compactWorkspace(site)
-            }
+            WebsiteProjectEditorView(site: site)
         }
     }
 
-    @ViewBuilder
     private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {
-        if compact {
-            VStack(alignment: .leading, spacing: 14) {
-                headerCopy(site, compact: true)
-                publishControls
+        VStack(alignment: .leading, spacing: 11) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 16) {
+                    siteIdentity(site, compact: compact)
+                    Spacer(minLength: 12)
+                    publicationActions(site)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    siteIdentity(site, compact: true)
+                    publicationActions(site)
+                }
             }
-        } else {
-            HStack(alignment: .top, spacing: 20) {
-                headerCopy(site, compact: false)
-                Spacer(minLength: 20)
-                publishControls
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 14) {
+                    PublicationPipeline(
+                        activeStage: model.publicationStage,
+                        outcome: model.publicationOutcome
+                    )
+                    .frame(maxWidth: 610, alignment: .leading)
+                    Spacer(minLength: 8)
+                    publicationStatus
+                        .frame(maxWidth: 360, alignment: .trailing)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    PublicationPipeline(
+                        activeStage: model.publicationStage,
+                        outcome: model.publicationOutcome
+                    )
+                    publicationStatus
+                }
             }
         }
+        .padding(.horizontal, compact ? 14 : 20)
+        .padding(.vertical, compact ? 12 : 15)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func headerCopy(_ site: SiteProject, compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+    private func siteIdentity(_ site: SiteProject, compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
             Text(site.title)
-                .font(compact ? .title.weight(.semibold) : .largeTitle.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Edit the publication, review its native preview, then publish a verified revision.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .font(compact ? .title2.weight(.semibold) : .title.weight(.semibold))
+                .lineLimit(1)
+            HStack(spacing: 8) {
+                Text(site.address)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                StatusPill(
+                    title: site.publicationIdentity == .ready
+                        ? "Publisher secured"
+                        : site.publicationIdentity.title,
+                    systemImage: site.publicationIdentity.systemImage,
+                    color: site.publicationIdentity == .ready ? .green : .orange
+                )
+            }
         }
     }
 
-    private var publishControls: some View {
-        HStack(spacing: 10) {
-            if model.publicationOutcome == .running {
+    private func publicationActions(_ site: SiteProject) -> some View {
+        HStack(spacing: 8) {
+            if model.publicationInFlight {
                 ProgressView()
                     .controlSize(.small)
             }
@@ -197,125 +306,86 @@ struct SitesView: View {
                 model.publishSelectedSite()
             } label: {
                 Label(
-                    model.publicationOutcome == .running ? "Publishing…" : "Publish Revision",
+                    model.publicationInFlight
+                        ? "Publishing…"
+                        : "Publish Revision",
                     systemImage: "paperplane.fill"
                 )
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.publicationOutcome == .running)
+            .disabled(
+                model.publicationInFlight ||
+                    site.publicationIdentity != .ready
+            )
+
+            siteActionMenu(site, iconOnly: false)
         }
     }
 
-    private func compactWorkspace(_ site: SiteProject) -> some View {
-        VStack(spacing: 0) {
-            Picker("Workspace pane", selection: $compactPane) {
-                ForEach(SiteWorkspacePane.allCases) { pane in
-                    Text(pane.title)
-                        .tag(pane)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 320)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-
-            Divider()
-
-            Group {
-                switch compactPane {
-                case .editor:
-                    editor(site)
-                case .preview:
-                    preview(site)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    private var publicationStatus: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: outcomeImage)
+                .foregroundStyle(outcomeColor)
+            Text(model.publicationMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private func editor(_ site: SiteProject) -> some View {
-        ScrollView {
-            Form {
-                Section("Publication") {
-                    TextField("Noctweb address", text: binding(\.address))
-                        .font(.system(.body, design: .monospaced))
-                    LabeledContent("Identity") {
-                        StatusPill(
-                            title: site.publicationIdentity.title,
-                            systemImage: site.publicationIdentity.systemImage,
-                            color: site.publicationIdentity == .ready ? .green : .orange
-                        )
-                    }
-                    LabeledContent("Current revision") {
-                        Text(site.revision == 0 ? "Unpublished" : "\(site.revision)")
-                    }
-                }
-
-                Section("Content") {
-                    TextField("Title", text: binding(\.title))
-                    TextField("Subtitle", text: binding(\.subtitle), axis: .vertical)
-                        .lineLimit(2...4)
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Body")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        TextEditor(text: binding(\.body))
-                            .font(.body)
-                            .scrollContentBackground(.hidden)
-                            .frame(minHeight: 220)
-                            .padding(7)
-                            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-                    }
-                }
-
-                Section("Appearance") {
-                    LabeledContent("Accent") {
-                        HStack(spacing: 8) {
-                            ForEach(accentChoices, id: \.self) { hex in
-                                Button {
-                                    model.updateSelectedSite { $0.accentHex = hex }
-                                } label: {
-                                    Circle()
-                                        .fill(Color(hex: hex))
-                                        .frame(width: 22, height: 22)
-                                        .overlay {
-                                            if site.accentHex == hex {
-                                                Circle()
-                                                    .stroke(.white, lineWidth: 2)
-                                                    .padding(3)
-                                            }
-                                        }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel("Use accent \(hex)")
-                            }
-                        }
-                    }
-                }
+    private func siteActionMenu(_ site: SiteProject, iconOnly: Bool) -> some View {
+        Menu {
+            siteContextActions(site)
+        } label: {
+            if iconOnly {
+                Image(systemName: "ellipsis")
+                    .frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "ellipsis.circle")
             }
-            .formStyle(.grouped)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 18)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Site actions")
     }
 
-    private func preview(_ site: SiteProject) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label("Native Preview", systemImage: "macwindow")
-                    .font(.headline)
-                Spacer()
-                Text("SwiftUI · No WebKit")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 46)
-            .background(.bar)
-            Divider()
-            RenderedSiteView(site: site)
+    @ViewBuilder
+    private func siteContextActions(_ site: SiteProject) -> some View {
+        Button {
+            model.runtimeAddress = site.address
+            model.selection = .runtime
+            model.navigateRuntime()
+        } label: {
+            Label("Open Published Site", systemImage: "safari")
         }
+        .disabled(site.lastPublishedAt == nil)
+
+        Divider()
+
+        Button(role: .destructive) {
+            destructiveAction = .removeProject(site)
+        } label: {
+            Label("Remove Local Project…", systemImage: "trash")
+        }
+        .disabled(
+            model.publicationInFlight ||
+                model.identityOperationSiteID == site.id ||
+                model.identityPreparationSiteIDs.contains(site.id)
+        )
+
+        Button(role: .destructive) {
+            destructiveAction = .destroyIdentity(site)
+        } label: {
+            Label("Destroy Publisher Key…", systemImage: "key.slash")
+        }
+        .disabled(
+            site.publisherID == nil ||
+                site.publicationIdentity == .unavailable ||
+                model.publicationInFlight ||
+                model.identityOperationSiteID != nil ||
+                model.identityPreparationSiteIDs.contains(site.id)
+        )
     }
 
     private var siteSelection: Binding<UUID?> {
@@ -325,12 +395,10 @@ struct SitesView: View {
         )
     }
 
-    private func binding(_ keyPath: WritableKeyPath<SiteProject, String>) -> Binding<String> {
+    private var destructiveActionBinding: Binding<Bool> {
         Binding(
-            get: { model.selectedSite?[keyPath: keyPath] ?? "" },
-            set: { value in
-                model.updateSelectedSite { $0[keyPath: keyPath] = value }
-            }
+            get: { destructiveAction != nil },
+            set: { if !$0 { destructiveAction = nil } }
         )
     }
 
@@ -352,15 +420,6 @@ struct SitesView: View {
         }
     }
 
-    private let accentChoices = [
-        "#4F8F77",
-        "#4B78A8",
-        "#7866A6",
-        "#AD7748",
-        "#A65D69"
-    ]
-
-    private let siteLibraryBreakpoint: CGFloat = 1_080
-    private let editorPreviewBreakpoint: CGFloat = 840
+    private let siteLibraryBreakpoint: CGFloat = 1_220
     private let headerBreakpoint: CGFloat = 760
 }

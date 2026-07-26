@@ -72,9 +72,9 @@ struct OverviewView: View {
             )
             MetricCard(
                 title: "Profile",
-                value: "Native",
-                detail: "SwiftUI static site runtime",
-                systemImage: "swift",
+                value: "Website",
+                detail: "Signed JS and React-ready bundles",
+                systemImage: "globe",
                 tint: .orange
             )
         }
