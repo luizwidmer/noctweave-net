@@ -1,3 +1,4 @@
+import NoctwebUI
 import SwiftUI
 
 struct ContentView: View {
@@ -110,7 +111,9 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .tint(Color(hex: "#4F8F77"))
+        .tint(NoctwebTheme.coral)
+        .background(NoctwebTheme.canvas)
+        .noctwebChrome()
         .confirmationDialog(
             "Remove \(workspacePendingDeletion?.name ?? "workspace") from this Mac?",
             isPresented: workspaceDeletionBinding,

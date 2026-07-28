@@ -1492,6 +1492,7 @@ final class AppModel: ObservableObject {
         let subtitle = Self.escapeHTML(object.subtitle)
         let body = Self.escapeHTML(object.body)
             .replacingOccurrences(of: "\n", with: "<br>")
+        let css = WebsiteProjectBuilder.legacyCSS(accentHex: object.accentHex)
         let html = """
         <!doctype html>
         <html>
@@ -1499,11 +1500,7 @@ final class AppModel: ObservableObject {
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1">
           <title>\(title)</title>
-          <style>
-            body { font: 18px/1.65 -apple-system, sans-serif; max-width: 760px; margin: auto; padding: 10vw 2rem; }
-            h1 { color: \(object.accentHex); font: 700 clamp(3rem, 8vw, 6rem)/.96 Georgia, serif; }
-            .subtitle { color: #66736e; font-size: 1.3rem; }
-          </style>
+          <style>\(css)</style>
         </head>
         <body>
           <h1>\(title)</h1>

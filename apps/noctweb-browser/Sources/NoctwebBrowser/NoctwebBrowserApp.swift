@@ -1,15 +1,19 @@
 import AppKit
+import NoctwebUI
 import SwiftUI
 
 @main
 struct NoctwebBrowserApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = BrowserAppModel()
+    @StateObject private var appearance = NoctwebAppearanceStore()
 
     var body: some Scene {
         WindowGroup {
             BrowserWindowView()
                 .environmentObject(model)
+                .environmentObject(appearance)
+                .noctwebAppearance(appearance.selection)
                 .onOpenURL(perform: model.handleOpenURL)
                 .onChange(of: scenePhase) {
                     if scenePhase != .active {
@@ -75,15 +79,29 @@ struct NoctwebBrowserApp: App {
         Settings {
             BrowserSettingsView()
                 .environmentObject(model)
+                .environmentObject(appearance)
         }
     }
 }
 
 private struct BrowserSettingsView: View {
     @EnvironmentObject private var model: BrowserAppModel
+    @EnvironmentObject private var appearance: NoctwebAppearanceStore
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance.selection) {
+                    ForEach(NoctwebAppearance.allCases) { option in
+                        Label(option.title, systemImage: option.systemImage)
+                            .tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("System follows macOS. An explicit Light or Dark choice is remembered by this app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Network profile") {
                 LabeledContent(
                     "Selected",

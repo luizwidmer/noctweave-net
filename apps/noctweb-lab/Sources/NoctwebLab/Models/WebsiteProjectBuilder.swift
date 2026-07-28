@@ -190,6 +190,18 @@ enum WebsiteProjectBuilder {
         mediaType(for: URL(fileURLWithPath: path))
     }
 
+    static func legacyCSS(accentHex: String) -> String {
+        """
+        :root { color-scheme: light dark; --accent: \(accentHex); --coral: #e86f5a; --wine: #46141f; --ivory: #fbf6ec; --ink: var(--wine); --muted: #75545a; }
+        body { font: 18px/1.65 -apple-system, sans-serif; max-width: 760px; margin: auto; padding: 10vw 2rem; color: var(--ink); background: var(--ivory); }
+        h1 { color: var(--accent); font: 700 clamp(3rem, 8vw, 6rem)/.96 Georgia, serif; }
+        .subtitle { color: var(--muted); font-size: 1.3rem; }
+        @media (prefers-color-scheme: dark) {
+          :root { --ink: #fff4e9; --muted: #d0afb0; --ivory: #241019; }
+        }
+        """
+    }
+
     private static func legacyBlocks(for site: SiteProject) -> [SiteBlock] {
         [
             SiteBlock(
@@ -431,9 +443,12 @@ enum WebsiteProjectBuilder {
         :root {
           color-scheme: light dark;
           --accent: \(accentHex);
-          --ink: #17201d;
-          --muted: #5f6c67;
-          --paper: #f6f8f7;
+          --coral: #e86f5a;
+          --wine: #46141f;
+          --ivory: #fbf6ec;
+          --ink: var(--wine);
+          --muted: #75545a;
+          --paper: var(--ivory);
           --card: rgba(255,255,255,.82);
           font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         }
@@ -476,9 +491,9 @@ enum WebsiteProjectBuilder {
           .block { padding-inline: 1.25rem; }
         }
         @media (prefers-color-scheme: dark) {
-          :root { --ink: #edf3f0; --muted: #aab7b1; --paper: #111614; --card: rgba(255,255,255,.045); }
-          .callout { background: #e7eeeb; color: #15201b; }
-          .callout p { color: #51605a; }
+          :root { --ink: #fff4e9; --muted: #d0afb0; --paper: #241019; --card: rgba(255,255,255,.07); }
+          .callout { background: #fbf6ec; color: #46141f; }
+          .callout p { color: #75545a; }
         }
         """
     }

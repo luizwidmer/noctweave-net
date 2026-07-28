@@ -1,4 +1,5 @@
 import NoctwebBrowserCore
+import NoctwebUI
 import SwiftUI
 
 struct BrowserWindowView: View {
@@ -25,7 +26,7 @@ struct BrowserWindowView: View {
             }
         }
         .frame(minWidth: 780, minHeight: 540)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(NoctwebTheme.canvas)
         .task {
             model.startIfNeeded()
         }
@@ -102,7 +103,7 @@ struct BrowserWindowView: View {
             .frame(height: 32)
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .fill(NoctwebTheme.input)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -179,7 +180,7 @@ struct BrowserWindowView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(NoctwebTheme.navigation)
     }
 
     private var tabStrip: some View {
@@ -199,7 +200,7 @@ struct BrowserWindowView: View {
             .padding(.vertical, 5)
         }
         .scrollIndicators(.hidden)
-        .background(Color(nsColor: .underPageBackgroundColor))
+        .background(NoctwebTheme.navigation)
     }
 
     @ViewBuilder
@@ -465,7 +466,7 @@ private struct BrowserSidebar: View {
             }
         }
         .frame(width: 230)
-        .background(.regularMaterial)
+        .background(NoctwebTheme.surface)
     }
 
     @ViewBuilder
@@ -685,7 +686,7 @@ private struct TrustInspector: View {
             .padding(16)
         }
         .frame(width: 286)
-        .background(.regularMaterial)
+        .background(NoctwebTheme.surface)
     }
 
     private var trustTitle: String {
@@ -752,7 +753,7 @@ private struct InspectorNotice: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(Color.indigo.opacity(0.1))
+                .fill(NoctwebTheme.status)
         )
     }
 }

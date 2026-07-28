@@ -1,3 +1,4 @@
+import NoctwebUI
 import SwiftUI
 
 struct PageHeader<Actions: View>: View {
@@ -73,7 +74,7 @@ struct SectionCard<Content: View>: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(NoctwebTheme.card, in: RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color(nsColor: .separatorColor).opacity(0.55), lineWidth: 1)
@@ -126,7 +127,7 @@ struct StatusPill: View {
             .foregroundStyle(color)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(color.opacity(0.12), in: Capsule())
+            .background(NoctwebTheme.status, in: Capsule())
     }
 }
 
@@ -139,7 +140,7 @@ struct RelayRoleBadge: View {
             .foregroundStyle(role.tint)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(role.tint.opacity(0.1), in: Capsule())
+            .background(NoctwebTheme.status, in: Capsule())
     }
 }
 
@@ -177,7 +178,7 @@ struct PublicationPipeline: View {
 
                     if stage != PublicationStage.allCases.last {
                         Rectangle()
-                            .fill(stage.rawValue < activeStage.rawValue ? Color.accentColor : Color.secondary.opacity(0.25))
+                            .fill(stage.rawValue < activeStage.rawValue ? NoctwebTheme.coral : Color.secondary.opacity(0.25))
                             .frame(width: 34, height: 1)
                             .padding(.bottom, 21)
                 }
@@ -191,7 +192,7 @@ struct PublicationPipeline: View {
             HStack(spacing: 8) {
                 Label(activeStage.title, systemImage: activeStage.systemImage)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(outcome == .failed ? .red : Color.accentColor)
+                    .foregroundStyle(outcome == .failed ? .red : NoctwebTheme.coral)
                 Spacer(minLength: 8)
                 Text("\(activeStage.rawValue + 1) of \(PublicationStage.allCases.count)")
                     .font(.caption.monospacedDigit())
@@ -201,26 +202,26 @@ struct PublicationPipeline: View {
                 value: Double(activeStage.rawValue + 1),
                 total: Double(PublicationStage.allCases.count)
             )
-            .tint(outcome == .failed ? .red : Color.accentColor)
+            .tint(outcome == .failed ? .red : NoctwebTheme.coral)
         }
         .frame(maxWidth: .infinity)
     }
 
     private func foreground(for stage: PublicationStage) -> Color {
         if outcome == .failed && stage == activeStage { return .red }
-        if stage.rawValue <= activeStage.rawValue { return .accentColor }
+        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.coral }
         return .secondary
     }
 
     private func background(for stage: PublicationStage) -> Color {
         if outcome == .failed && stage == activeStage { return .red.opacity(0.12) }
-        if stage.rawValue <= activeStage.rawValue { return .accentColor.opacity(0.12) }
+        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.status }
         return .secondary.opacity(0.08)
     }
 
     private func border(for stage: PublicationStage) -> Color {
         if outcome == .failed && stage == activeStage { return .red.opacity(0.45) }
-        if stage.rawValue <= activeStage.rawValue { return .accentColor.opacity(0.45) }
+        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.coral.opacity(0.45) }
         return .secondary.opacity(0.2)
     }
 }

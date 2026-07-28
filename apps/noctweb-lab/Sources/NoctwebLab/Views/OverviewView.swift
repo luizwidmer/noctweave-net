@@ -1,3 +1,4 @@
+import NoctwebUI
 import SwiftUI
 
 struct OverviewView: View {
@@ -31,7 +32,7 @@ struct OverviewView: View {
             .padding(24)
             .frame(maxWidth: 1_280, alignment: .leading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(NoctwebTheme.canvas)
     }
 
     private var metricColumns: [GridItem] {

@@ -311,18 +311,26 @@ public actor DeterministicNoctwebResolver: NoctwebResolving {
                     mediaType: "text/css; charset=utf-8",
                     bytes: Data(
                         """
-                        :root { color-scheme: dark; font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: #07080d; color: #f7f6ff; }
+                        :root { color-scheme: light dark; --coral: #e86f5a; --wine: #46141f; --ivory: #fbf6ec; --ink: #46141f; --muted: #75545a; --surface: rgba(255,255,255,.78); font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: var(--ivory); color: var(--ink); }
                         * { box-sizing: border-box; }
-                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #6d5dfb35, transparent 38rem), #07080d; }
+                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #e86f5a35, transparent 38rem), var(--ivory); }
                         main { width: min(780px, 100%); }
-                        .eyebrow { color: #988cff; font-size: 12px; font-weight: 800; letter-spacing: .2em; }
+                        .eyebrow { color: var(--coral); font-size: 12px; font-weight: 800; letter-spacing: .2em; }
                         h1 { margin: 14px 0 20px; max-width: 760px; font-size: clamp(42px, 8vw, 82px); line-height: .98; letter-spacing: -.055em; }
-                        .lede { max-width: 660px; color: #bbb9c9; font-size: 20px; }
-                        section { margin-top: 42px; padding: 18px 20px; display: grid; gap: 3px; border: 1px solid #ffffff16; border-radius: 14px; background: #ffffff08; }
-                        section strong { color: #b7afff; }
-                        section span { color: #9a98a8; }
-                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #ffffff20; border-radius: 9px; background: #ffffff0c; color: #d8d4ff; font: inherit; font-weight: 650; cursor: pointer; }
-                        button:hover { background: #ffffff16; }
+                        .lede { max-width: 660px; color: var(--muted); font-size: 20px; }
+                        section { margin-top: 42px; padding: 18px 20px; display: grid; gap: 3px; border: 1px solid #46141f22; border-radius: 14px; background: var(--surface); }
+                        section strong { color: var(--wine); }
+                        section span { color: var(--muted); }
+                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #46141f30; border-radius: 9px; background: #ffffff80; color: var(--wine); font: inherit; font-weight: 650; cursor: pointer; }
+                        button:hover { background: #ffffffcc; }
+                        @media (prefers-color-scheme: dark) {
+                          :root { --ink: #fff4e9; --muted: #d0afb0; --ivory: #241019; --surface: rgba(255,255,255,.07); }
+                          body { background: radial-gradient(circle at 20% 0%, #e86f5a35, transparent 38rem), var(--ivory); }
+                          section { border-color: #ffffff20; }
+                          section strong { color: #ffab91; }
+                          button { border-color: #ffffff25; background: #ffffff0c; color: #ffd1c3; }
+                          button:hover { background: #ffffff18; }
+                        }
                         """.utf8
                     )
                 ),

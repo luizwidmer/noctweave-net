@@ -1,14 +1,18 @@
+import NoctwebUI
 import SwiftUI
 
 @main
 struct NoctwebLabApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model = AppModel()
+    @StateObject private var appearance = NoctwebAppearanceStore()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                .environmentObject(appearance)
+                .noctwebAppearance(appearance.selection)
                 .frame(minWidth: 900, minHeight: 650)
                 .onChange(of: scenePhase) {
                     if scenePhase != .active {
@@ -31,6 +35,7 @@ struct NoctwebLabApp: App {
         Settings {
             SettingsView()
                 .environmentObject(model)
+                .environmentObject(appearance)
                 .frame(width: 620, height: 460)
         }
     }

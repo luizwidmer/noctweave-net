@@ -1,4 +1,5 @@
 import NoctwebLabCore
+import NoctwebUI
 import SwiftUI
 
 struct NetworkView: View {
@@ -26,7 +27,7 @@ struct NetworkView: View {
             .padding(24)
             .frame(maxWidth: 1_220, alignment: .leading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(NoctwebTheme.canvas)
     }
 
     private var roleColumns: [GridItem] {

@@ -1,10 +1,24 @@
+import NoctwebUI
 import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var appearance: NoctwebAppearanceStore
 
     var body: some View {
         Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $appearance.selection) {
+                    ForEach(NoctwebAppearance.allCases) { option in
+                        Label(option.title, systemImage: option.systemImage)
+                            .tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("System follows macOS. An explicit Light or Dark choice is remembered by this app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Workspace Storage") {
                 LabeledContent("Mode", value: "Local persistent workspace")
                 LabeledContent("Saved workspaces", value: "\(model.workspaces.count)")
