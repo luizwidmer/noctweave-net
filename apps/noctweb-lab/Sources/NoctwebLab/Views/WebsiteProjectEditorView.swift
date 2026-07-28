@@ -110,10 +110,15 @@ struct WebsiteProjectEditorView: View {
     @State private var viewport: PreviewViewport = .desktop
     @State private var reloadToken = UUID()
     @State private var previewRefreshTask: Task<Void, Never>?
+    @State private var sourceSaveTask: Task<Void, Never>?
+    @State private var sourceDraft = ""
+    @State private var sourceDraftFileID: UUID?
+    @State private var sourceSaveStatus = "Saved locally"
     @State private var showingImporter = false
     @State private var pathPrompt: EditorPathPrompt?
     @State private var destructiveAction: EditorDestructiveAction?
     @State private var pathDraft = ""
+    @FocusState private var focusedSourceFileID: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -136,13 +141,23 @@ struct WebsiteProjectEditorView: View {
             resetSelectionForCurrentSite()
         }
         .onChange(of: site.id) {
+            flushSourceDraft()
             resetSelectionForCurrentSite()
         }
         .onChange(of: site.resolvedFiles.count) {
             repairFileSelection()
         }
+        .onChange(of: selectedFileID) {
+            loadSelectedSourceDraft()
+        }
+        .onChange(of: focusedSourceFileID) {
+            if focusedSourceFileID == nil {
+                flushSourceDraft()
+            }
+        }
         .onDisappear {
             previewRefreshTask?.cancel()
+            flushSourceDraft()
         }
         .fileImporter(
             isPresented: $showingImporter,
@@ -224,15 +239,36 @@ struct WebsiteProjectEditorView: View {
 
     private var editorToolbar: some View {
         HStack(spacing: 12) {
-            Picker("Editor mode", selection: $mode) {
+            HStack(spacing: 4) {
                 ForEach(WebsiteEditorMode.allCases) { editorMode in
-                    Label(editorMode.title, systemImage: editorMode.systemImage)
-                        .tag(editorMode)
+                    Button {
+                        mode = editorMode
+                    } label: {
+                        Label(editorMode.title, systemImage: editorMode.systemImage)
+                            .font(.callout.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(mode == editorMode ? Color.white : Color.primary)
+                    .background {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(mode == editorMode ? Color.accentColor : Color.clear)
+                    }
+                    .accessibilityLabel(editorMode.title)
+                    .accessibilityValue(mode == editorMode ? "Selected" : "Not selected")
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 310)
+            .padding(4)
+            .frame(width: 340)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1))
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Editor mode")
 
             Spacer(minLength: 8)
 
@@ -656,7 +692,7 @@ struct WebsiteProjectEditorView: View {
                     pathDraft = ""
                     pathPrompt = .newFile
                 } label: {
-                    Image(systemName: "doc.badge.plus")
+                    Label("New", systemImage: "doc.badge.plus")
                 }
                 .buttonStyle(.borderless)
                 .help("New website file")
@@ -762,6 +798,14 @@ struct WebsiteProjectEditorView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
+                        Label(
+                            sourceSaveStatus,
+                            systemImage: sourceSaveStatus == "Saving…"
+                                ? "arrow.triangle.2.circlepath"
+                                : "checkmark.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         Button {
                             pathDraft = file.path
                             pathPrompt = .renameFile(
@@ -795,11 +839,18 @@ struct WebsiteProjectEditorView: View {
                     Divider()
 
                     if file.isText, file.text != nil {
-                        TextEditor(text: sourceBinding(file.id))
+                        TextEditor(text: $sourceDraft)
                             .font(.system(.body, design: .monospaced))
                             .scrollContentBackground(.hidden)
                             .padding(12)
                             .background(Color(nsColor: .textBackgroundColor))
+                            .focused($focusedSourceFileID, equals: file.id)
+                            .onAppear {
+                                loadSourceDraft(file)
+                            }
+                            .onChange(of: sourceDraft) {
+                                scheduleSourceSave(fileID: file.id)
+                            }
                     } else {
                         ContentUnavailableView {
                             Label("Binary Asset", systemImage: "doc.zipper")
@@ -932,7 +983,8 @@ struct WebsiteProjectEditorView: View {
 
     private var selectedFile: SiteSourceFile? {
         guard let selectedFileID else { return nil }
-        return site.resolvedFiles.first(where: { $0.id == selectedFileID })
+        return (model.selectedSite?.resolvedFiles ?? site.resolvedFiles)
+            .first(where: { $0.id == selectedFileID })
     }
 
     private var isFirstSelectedBlock: Bool {
@@ -957,8 +1009,11 @@ struct WebsiteProjectEditorView: View {
         Binding(
             get: { model.selectedSite?[keyPath: keyPath] ?? "" },
             set: { value in
-                model.updateSelectedSite { $0[keyPath: keyPath] = value }
-                refreshPreview(debounced: true)
+                Task { @MainActor in
+                    await Task.yield()
+                    model.updateSelectedSite { $0[keyPath: keyPath] = value }
+                    refreshPreview(debounced: true)
+                }
             }
         )
     }
@@ -990,8 +1045,11 @@ struct WebsiteProjectEditorView: View {
                 )?[keyPath: keyPath] ?? ""
             },
             set: { value in
-                model.updateBlock(blockID) { $0[keyPath: keyPath] = value }
-                refreshPreview(debounced: true)
+                Task { @MainActor in
+                    await Task.yield()
+                    model.updateBlock(blockID) { $0[keyPath: keyPath] = value }
+                    refreshPreview(debounced: true)
+                }
             }
         )
     }
@@ -1006,20 +1064,6 @@ struct WebsiteProjectEditorView: View {
             set: { kind in
                 model.updateBlock(blockID) { $0.kind = kind }
                 refreshPreview()
-            }
-        )
-    }
-
-    private func sourceBinding(_ fileID: UUID) -> Binding<String> {
-        Binding(
-            get: {
-                model.selectedSite?.resolvedFiles.first(
-                    where: { $0.id == fileID }
-                )?.text ?? ""
-            },
-            set: { value in
-                model.updateSourceFile(fileID, text: value)
-                refreshPreview(debounced: true)
             }
         )
     }
@@ -1083,6 +1127,7 @@ struct WebsiteProjectEditorView: View {
         selectedFileID = site.resolvedFiles.first(
             where: { $0.path == site.resolvedEntryPath }
         )?.id ?? site.resolvedFiles.first?.id
+        loadSelectedSourceDraft()
         refreshPreview()
     }
 
@@ -1098,6 +1143,66 @@ struct WebsiteProjectEditorView: View {
         self.selectedFileID = files.first(
             where: { $0.path == entryPath }
         )?.id ?? files.first?.id
+        loadSelectedSourceDraft()
+    }
+
+    private func loadSelectedSourceDraft() {
+        guard let selectedFile else {
+            sourceSaveTask?.cancel()
+            sourceDraftFileID = nil
+            sourceDraft = ""
+            sourceSaveStatus = "Saved locally"
+            return
+        }
+        loadSourceDraft(selectedFile)
+    }
+
+    private func loadSourceDraft(_ file: SiteSourceFile) {
+        guard sourceDraftFileID != file.id else { return }
+        sourceSaveTask?.cancel()
+        sourceDraftFileID = file.id
+        sourceDraft = file.text ?? ""
+        sourceSaveStatus = "Saved locally"
+    }
+
+    private func scheduleSourceSave(fileID: UUID) {
+        guard sourceDraftFileID == fileID else { return }
+        let currentText = model.selectedSite?.resolvedFiles.first(
+            where: { $0.id == fileID }
+        )?.text
+        guard currentText != sourceDraft else {
+            sourceSaveStatus = "Saved locally"
+            return
+        }
+        sourceSaveTask?.cancel()
+        sourceSaveStatus = "Saving…"
+        let value = sourceDraft
+        sourceSaveTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(450))
+            } catch {
+                return
+            }
+            guard sourceDraftFileID == fileID else { return }
+            model.updateSourceFile(fileID, text: value)
+            sourceSaveStatus = "Saved locally"
+            refreshPreview()
+        }
+    }
+
+    private func flushSourceDraft() {
+        sourceSaveTask?.cancel()
+        guard let fileID = sourceDraftFileID else { return }
+        let currentText = model.selectedSite?.resolvedFiles.first(
+            where: { $0.id == fileID }
+        )?.text
+        guard currentText != sourceDraft else {
+            sourceSaveStatus = "Saved locally"
+            return
+        }
+        model.updateSourceFile(fileID, text: sourceDraft)
+        sourceSaveStatus = "Saved locally"
+        refreshPreview()
     }
 
     private func refreshPreview(debounced: Bool = false) {

@@ -17,6 +17,7 @@ let package = Package(
         ),
     ],
     dependencies: [
+        .package(path: "../noctweb-lab"),
         .package(path: "../noctweb-ui"),
     ],
     targets: [
@@ -25,7 +26,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "NoctwebBrowser",
-            dependencies: ["NoctwebBrowserCore", .product(name: "NoctwebUI", package: "noctweb-ui")],
+            dependencies: [
+                "NoctwebBrowserCore",
+                .product(name: "NoctwebLabCore", package: "noctweb-lab"),
+                .product(name: "NoctwebUI", package: "noctweb-ui"),
+            ],
             linkerSettings: [
                 .linkedFramework("WebKit"),
             ]

@@ -64,7 +64,7 @@ final class AppModel: ObservableObject {
         label: "org.noctweave.noctweb-lab.workspace-persistence",
         qos: .utility
     )
-    private var scheduledPersistence: DispatchWorkItem?
+    private var scheduledPersistence: Task<Void, Never>?
     private var draftChangedDuringPublication = false
     private var pendingPublisherIdentityDeletions:
         [PublisherIdentityDeletionTombstone] = []
@@ -140,6 +140,14 @@ final class AppModel: ObservableObject {
     var selectedSite: SiteProject? {
         guard let selectedSiteID else { return nil }
         return activeWorkspace?.sites.first(where: { $0.id == selectedSiteID })
+    }
+
+    func publishedEnvelope(for address: String) -> Data? {
+        workspaces
+            .lazy
+            .flatMap(\.sites)
+            .first(where: { $0.address == address })?
+            .publishedEnvelope
     }
 
     var selectedWebsiteRoutingContext: WebsiteRoutingContext {
@@ -1892,23 +1900,33 @@ final class AppModel: ObservableObject {
     private func scheduleWorkspaceSave() {
         scheduledPersistence?.cancel()
 
-        let snapshot = workspaces
+        let encoded: Data
+        do {
+            encoded = try JSONEncoder().encode(workspaces)
+        } catch {
+            operationError =
+                "Workspace could not be saved: \(error.localizedDescription)"
+            return
+        }
+
         let url = workspaceFileURL
-        let item = DispatchWorkItem { [weak self] in
+        let queue = persistenceQueue
+        scheduledPersistence = Task { [weak self] in
             do {
-                try Self.writeWorkspaces(snapshot, to: url)
+                try await Task.sleep(for: .milliseconds(350))
+                try Task.checkCancellation()
+                try await Self.writeWorkspaceData(
+                    encoded,
+                    to: url,
+                    on: queue
+                )
+            } catch is CancellationError {
+                return
             } catch {
-                Task { @MainActor [weak self] in
-                    self?.operationError =
-                        "Workspace could not be saved: \(error.localizedDescription)"
-                }
+                self?.operationError =
+                    "Workspace could not be saved: \(error.localizedDescription)"
             }
         }
-        scheduledPersistence = item
-        persistenceQueue.asyncAfter(
-            deadline: .now() + .milliseconds(350),
-            execute: item
-        )
     }
 
     private func persist() {
@@ -1925,15 +1943,39 @@ final class AppModel: ObservableObject {
         _ workspaces: [Workspace],
         to workspaceFileURL: URL
     ) throws {
+        let encoded = try JSONEncoder().encode(workspaces)
+        try writeWorkspaceData(encoded, to: workspaceFileURL)
+    }
+
+    nonisolated private static func writeWorkspaceData(
+        _ encoded: Data,
+        to workspaceFileURL: URL
+    ) throws {
         try FileManager.default.createDirectory(
             at: workspaceFileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        let encoded = try JSONEncoder().encode(workspaces)
         try encoded.write(
             to: workspaceFileURL,
             options: [.atomic, .completeFileProtection]
         )
+    }
+
+    nonisolated private static func writeWorkspaceData(
+        _ encoded: Data,
+        to workspaceFileURL: URL,
+        on queue: DispatchQueue
+    ) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async {
+                do {
+                    try writeWorkspaceData(encoded, to: workspaceFileURL)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     nonisolated private static func writePublisherIdentityDeletionJournal(

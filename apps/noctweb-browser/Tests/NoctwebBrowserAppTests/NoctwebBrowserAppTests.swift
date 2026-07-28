@@ -1,5 +1,6 @@
 import Foundation
 import NoctwebBrowserCore
+import NoctwebLabCore
 @testable import NoctwebBrowser
 import XCTest
 
@@ -60,6 +61,87 @@ final class NoctwebBrowserAppTests: XCTestCase {
         XCTAssertEqual(snapshot.rootURL.scheme, "noctweb-site")
         XCTAssertEqual(snapshot.rootURL.host, snapshot.host)
         XCTAssertEqual(snapshot.files.count, site.bundle.files.count)
+    }
+
+    func testDevelopmentResolverReverifiesNativeLabPublication() async throws {
+        let namespace = try XCTUnwrap(
+            RelayTopology.labDefault.nodes
+                .first(where: { $0.id == "host-lisbon" })?
+                .relayNamespace()
+        )
+        let sourceBundle = NoctwebLabCore.WebsiteBundle(
+            entryPath: "index.html",
+            files: [
+                NoctwebLabCore.WebsiteFile(
+                    path: "index.html",
+                    mediaType: "text/html; charset=utf-8",
+                    bytes: Data(
+                        "<!doctype html><title>Lab bridge proof</title>".utf8
+                    )
+                ),
+            ]
+        )
+        let engine = try NoctwebLabEngine(
+            identityStore: InMemoryPublicationPrivateKeyStore()
+        )
+        let address = "noct://browser-lab.\(namespace.suffix)/"
+        let publication = try await engine.publish(
+            draft: CapsuleSiteDraft(
+                publicationID: UUID().uuidString.lowercased(),
+                address: address,
+                relayNamespaceID: namespace.id,
+                routeDirective: NoctwebLabCore.RouteDirective.open,
+                title: "Lab bridge proof",
+                subtitle: "Native authoring",
+                body: "Signed local publication",
+                accentHex: "#4F8F77",
+                bundle: sourceBundle
+            )
+        )
+        let envelope = try CanonicalJSON.encode(publication)
+        let workspaceData = try JSONSerialization.data(
+            withJSONObject: [
+                [
+                    "sites": [
+                        [
+                            "address": address,
+                            "publishedEnvelope": envelope.base64EncodedString(),
+                        ],
+                    ],
+                ],
+            ]
+        )
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "NoctwebBrowserLabResolverTests-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspaceURL = root.appending(path: "workspaces.json")
+        try workspaceData.write(to: workspaceURL, options: .atomic)
+
+        let environment = try DeterministicNoctwebResolver
+            .developmentEnvironment()
+        let resolver = DevelopmentNoctwebResolver(
+            fixtureResolver: environment.resolver,
+            labWorkspaceURL: workspaceURL
+        )
+        let site = try await resolver.resolve(
+            NoctwebNavigationURL(parsing: address),
+            profile: environment.profile,
+            visitorDirective: NoctwebBrowserCore.RouteDirective.open
+        )
+
+        XCTAssertEqual(site.title, "Lab bridge proof")
+        XCTAssertEqual(site.state, .fixtureVerified)
+        XCTAssertEqual(site.evidence.publisherID, publication.object.publisherID)
+        XCTAssertEqual(
+            site.bundle.files.first?.bytes,
+            sourceBundle.files.first?.bytes
+        )
     }
 
     func testRendererSourceKeepsWebsiteOutsideNativeAndNetworkBoundaries()

@@ -92,7 +92,9 @@ final class BrowserAppModel: ObservableObject {
         }
 
         self.persistenceStore = persistenceStore
-        resolver = environment.resolver
+        resolver = DevelopmentNoctwebResolver(
+            fixtureResolver: environment.resolver
+        )
 
         let persisted = persistenceStore.load()
         let initialProfileID: String

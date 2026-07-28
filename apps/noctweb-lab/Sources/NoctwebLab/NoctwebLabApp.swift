@@ -4,8 +4,19 @@ import SwiftUI
 @main
 struct NoctwebLabApp: App {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = AppModel()
+    @StateObject private var model: AppModel
     @StateObject private var appearance = NoctwebAppearanceStore()
+    private let publicationBridge: LocalPublicationBridge
+
+    init() {
+        let model = AppModel()
+        _model = StateObject(wrappedValue: model)
+        publicationBridge = LocalPublicationBridge { [weak model] address in
+            await MainActor.run {
+                model?.publishedEnvelope(for: address)
+            }
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +25,9 @@ struct NoctwebLabApp: App {
                 .environmentObject(appearance)
                 .noctwebAppearance(appearance.selection)
                 .frame(minWidth: 900, minHeight: 650)
+                .task {
+                    publicationBridge.start()
+                }
                 .onChange(of: scenePhase) {
                     if scenePhase != .active {
                         model.flushPersistence()

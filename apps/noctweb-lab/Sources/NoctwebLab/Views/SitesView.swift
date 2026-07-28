@@ -42,9 +42,9 @@ struct SitesView: View {
             } else if proxy.size.width >= siteLibraryBreakpoint {
                 HStack(spacing: 0) {
                     siteLibrary
-                        .frame(width: 244)
+                        .frame(width: 264)
                     Divider()
-                    selectedWorkspace(width: proxy.size.width - 245)
+                    selectedWorkspace(width: proxy.size.width - 265)
                 }
             } else {
                 VStack(spacing: 0) {
@@ -115,6 +115,7 @@ struct SitesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let site = model.selectedSite {
             siteWorkspace(site, width: width)
+                .id(site.id)
         } else {
             VStack(spacing: 14) {
                 ContentUnavailableView(
@@ -147,12 +148,14 @@ struct SitesView: View {
                 Button {
                     model.createSite()
                 } label: {
-                    Image(systemName: "plus")
+                    Label("New", systemImage: "plus")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .help("Create a site")
             }
-            .padding(14)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
 
             Divider()
 
@@ -194,23 +197,47 @@ struct SitesView: View {
             }
             .listStyle(.sidebar)
         }
-        .background(.regularMaterial)
+        .background(.ultraThinMaterial)
     }
 
     private var compactSiteSelector: some View {
         HStack(spacing: 10) {
-            Picker("Site", selection: siteSelection) {
-                if model.selectedSiteID == nil {
-                    Text("Select a site")
-                        .tag(UUID?.none)
-                }
+            Menu {
                 ForEach(model.activeWorkspace?.sites ?? []) { site in
-                    Text(site.title)
-                        .tag(Optional(site.id))
+                    Button {
+                        selectSiteAfterInteraction(site.id)
+                    } label: {
+                        if site.id == model.selectedSiteID {
+                            Label(site.title, systemImage: "checkmark")
+                        } else {
+                            Text(site.title)
+                        }
+                    }
                 }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.stack")
+                        .foregroundStyle(.secondary)
+                    Text(model.selectedSite?.title ?? "Select a site")
+                        .lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 11)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
             }
-            .labelsHidden()
+            .menuStyle(.borderlessButton)
+            .buttonStyle(.plain)
             .frame(maxWidth: 330, alignment: .leading)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.1))
+            }
+            .accessibilityLabel("Site")
+            .accessibilityValue(model.selectedSite?.title ?? "No site selected")
 
             Spacer(minLength: 6)
 
@@ -272,7 +299,7 @@ struct SitesView: View {
         }
         .padding(.horizontal, compact ? 14 : 20)
         .padding(.vertical, compact ? 12 : 15)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.regularMaterial)
     }
 
     private func siteIdentity(_ site: SiteProject, compact: Bool) -> some View {
@@ -391,8 +418,17 @@ struct SitesView: View {
     private var siteSelection: Binding<UUID?> {
         Binding(
             get: { model.selectedSiteID },
-            set: { model.selectSite($0) }
+            set: { selectSiteAfterInteraction($0) }
         )
+    }
+
+    private func selectSiteAfterInteraction(_ siteID: UUID?) {
+        // Let AppKit finish dismissing a menu or settling a list selection
+        // before replacing the complete editor hierarchy.
+        Task { @MainActor in
+            await Task.yield()
+            model.selectSite(siteID)
+        }
     }
 
     private var destructiveActionBinding: Binding<Bool> {

@@ -30,6 +30,7 @@ let package = Package(
             name: "NoctwebLab",
             dependencies: ["NoctwebLabCore", .product(name: "NoctwebUI", package: "noctweb-ui")],
             linkerSettings: [
+                .linkedFramework("Network"),
                 .linkedFramework("WebKit")
             ]
         ),
