@@ -1,11 +1,33 @@
 # Consensus Boundary
 
-Noctweave Net delegates shared coordination to a consensus system but does not
-select or implement that system in the first milestone.
+Noctweave Net separates the implemented federation namespace quorum from the
+broader publication consensus boundary. The former allocates relay suffixes;
+the latter remains replaceable and is not selected here.
+
+## Implemented federation namespace
+
+Each relay has a persistent ML-DSA-65 identity. Federation members maintain a
+durable suffix ledger and sign deterministic snapshots of it. A local Browser
+profile pins eligible relay IDs and keys plus a threshold. Only byte-identical,
+cryptographically valid snapshots satisfying that threshold are accepted.
+
+- Manual federation defaults to all configured signers.
+- Curated federation uses the configured coordinator signer quorum.
+- Open federation uses an explicit threshold signer set.
+- DHT and PEX discover candidate endpoints only; they confer no voting power.
+
+The ledger is append-only for ownership: offline relays retain their suffix,
+double-signed key rotation retains it, and signed release permanently
+tombstones it. Competing partition snapshots do not produce two accepted
+owners; resolution fails closed until the configured authorities agree.
+
+This is signed-state quorum, not a claim of global Byzantine consensus. It
+does not order publisher heads, hide network metadata, or guarantee liveness
+when required signers are unavailable.
 
 ## Adapter contract
 
-The eventual `ConsensusAdapter` must provide deterministic, bounded operations
+The broader `ConsensusAdapter` must provide deterministic, bounded operations
 equivalent to:
 
 ```text
@@ -30,10 +52,8 @@ independent verification.
 Noctweb Browser consumes this adapter only through an explicit local
 `NoctwebNetworkProfile`. The profile supplies the routing trust-domain and
 consensus verification context; it does not grant authority to its bootstrap
-endpoints. Unknown suffix claims remain unresolved, while conflicting finalized
-claims require an explicit user selection and visible trust-domain
-fingerprint. A default profile must never silently change the meaning of a
-textual `noct://` URL.
+endpoints. Unknown or conflicting suffix claims remain unresolved. A default
+profile must never silently change the meaning of a textual `noct://` URL.
 
 ## Consensus may finalize
 
@@ -41,9 +61,8 @@ textual `noct://` URL.
 - bounded public host locator sets;
 - the selected authenticated federation-policy record for a Noctweave Net
   routing trust domain;
-- globally unique relay-suffix allocations, including custom suffixes and the
-  deterministic `r-<hash>` fallback derived from the host-receipt verification
-  public key and defined by the active profile;
+- any future transfer or governance state beyond the implemented permanent
+  relay-suffix ownership ledger;
 - unique site-label bindings within each suffix;
 - protocol epochs and supported mandatory suite identifiers;
 - explicit public revocations defined by a future profile;
@@ -99,11 +118,11 @@ is a bounded launch hint; every included endpoint, publisher expectation, and
 profile hint remains untrusted until this adapter and the publisher/object
 verification pipeline validate it.
 
-Noctweb Publisher currently has no consensus naming profile. Its
-operator-configured or host-receipt-key-derived suffix and every displayed
-`noct://` address are provisional. A valid hosting receipt permits the UI to
-report **Hosted** only; it cannot be promoted to finalized name, head, or
-locator evidence.
+Noctweb Lab now stores the immutable object before requesting a strict
+relay-signed site binding. Noctweb Browser resolves the suffix through the
+implemented namespace quorum and verifies that signed binding. This
+authenticates the federation-local name but does not finalize a global
+publisher-head history or guarantee continued hosting.
 
 ## Availability
 
@@ -118,14 +137,11 @@ availability.
 
 Before a consensus profile can be called supported, it must specify:
 
-- finality and reorganization behavior;
+- publication-head and host-locator finality and reorganization behavior;
 - light-client or equivalent verification;
 - validator or membership transition rules;
 - maximum record sizes and locator counts;
-- canonical site and suffix syntax, normalization, allocation, transfer,
-  expiry, revocation, and conflict behavior;
-- exact deterministic fallback-suffix derivation, encoding, length, and
-  collision handling;
+- any future suffix transfer or revocation semantics beyond permanent burn;
 - replay, expiry, and clock assumptions;
 - authentication, trust-domain binding, freshness, and replacement rules for
   federation-policy and host-operator records;
@@ -136,4 +152,5 @@ Before a consensus profile can be called supported, it must specify:
 - upgrade and emergency-stop semantics;
 - deterministic conformance vectors.
 
-Until then, consensus integration remains an interface and research task.
+Until then, broader publication consensus remains an interface and research
+task. Federation suffix resolution is implemented independently.

@@ -24,14 +24,15 @@ It must not:
 
 - resolve publisher identities;
 - index capsule semantics;
-- forward traffic to other relays as federation;
 - vote in Noctweave Net consensus merely by operating a relay;
 - decrypt private payloads or log ciphertext bodies and bearer capabilities.
 
-Standard relays remain direct client submission endpoints. Existing
-Noctweave federation forwarding is not part of the Noctweave Net topology.
+Standard relays remain client submission endpoints. They may forward a bounded,
+already-encrypted append or authenticated host read to another federation
+member through `nw.federation-forward@1`; that control-plane operation does not
+create a fourth Noctweave Net role or grant content authority.
 
-A `solo` standard relay may also advertise `nw.net-host@1`. In that
+A standard relay may also advertise `nw.net-host@1`. In that
 configuration the same process can directly host and serve content, but the
 standard and host modules retain separate authorization and limits. Hosting
 does not become a standard-module operation. Such a deployment may serve the
@@ -119,8 +120,9 @@ It must not:
 - possess private capsule keys by protocol requirement;
 - turn hosting credentials into a global Noctweave Net account.
 
-A host can store and directly serve content without a passthrough module,
-federation forwarding, a consensus retrieval hop, or namespace ownership.
+A host can store and directly serve content without a passthrough module or
+consensus retrieval hop. A federated host separately advertises its relay
+identity and suffix; a solo development host may remain unnamed.
 
 Signed publication bundles remain opaque relay payloads. Browser clients must
 verify their object digest and publication-scoped publisher signature before
@@ -145,25 +147,20 @@ availability and name allocation remain separate claims.
 
 ### Namespace function
 
-The namespace function is an optional advertisement by a relay with the host
-module, not a fourth relay role and not a prerequisite for hosting. Consensus
-eventually owns global suffix uniqueness and unique site-label allocation
-within each suffix. An operator may configure a suffix; otherwise Noctweb
-Publisher derives its provisional `r-<hash>` fallback from the public key that
-verifies the host's signed receipts.
+Federated standard and host relays advertise a persistent ML-DSA-65 identity
+and canonical suffix. Signed deterministic namespace snapshots map each suffix
+to one relay ID, endpoint set, and capability set. A Browser profile pins the
+eligible signer set and threshold. It accepts only byte-identical state meeting
+that threshold; DHT/PEX discovery never grants signing authority.
 
-The namespace relay is the host relay associated with the suffix. It is not
-automatically the current content host for every publication under that suffix.
-A finalized name record binds the canonical
-`noct://<site>.<relay-suffix>/` URL to a publication-scoped publisher
-identifier; independently finalized locators identify current content hosts.
-Neither suffix control nor name allocation grants authority to sign or advance
-the publication head.
+Downtime does not release a suffix. Double-signed identity rotation retains it,
+and signed release permanently tombstones it. Conflicting partition snapshots
+fail closed.
 
-No consensus naming profile is implemented yet. Current Publisher displays of
-`noct://` names are provisional namespace hints, even when the suffix is
-operator-configured. They do not prove global uniqueness, finality, or portable
-resolution.
+Within its suffix, the owner relay signs strict site bindings after the target
+object is stored. Neither suffix ownership nor a signed site binding grants
+authority to sign or advance the publication head. Publisher signatures and
+object hashes remain mandatory.
 
 ## Retrieval-policy authority
 
@@ -222,7 +219,7 @@ operator-level traffic correlation.
 Solo self-hosted publication and direct retrieval:
 
 ```text
-Publisher browser -> solo standard relay + nw.net-host@1
+Publisher browser -> standard relay + nw.net-host@1
                   -> opaque signed bundle + hosting receipt
                   -> consensus adapter (head + locators)
 visitor runtime   -> same relay's nw.net-host@1

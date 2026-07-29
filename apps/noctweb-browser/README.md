@@ -19,18 +19,23 @@ The first implementation provides:
 - local network profiles and visible trust-domain selection;
 - a per-tab visitor route preference evaluated after federation, host, and
   publisher policy;
-- deterministic signed fixture resolution while the production consensus
-  adapter remains unselected;
+- threshold verification of byte-identical ML-DSA-signed federation namespace
+  snapshots;
+- authenticated suffix-to-relay resolution and home-relay forwarding of signed
+  name and immutable object reads;
+- deterministic signed fixture resolution for isolated development;
 - tabs, address navigation, bookmarks, history, and verification states;
 - a trust panel exposing publisher, trust domain, route, and verification
   evidence; and
 - a publication-scoped, non-persistent WebKit renderer with external network,
   navigation, service worker, native bridge, and WebRTC access denied.
 
-The fixture resolver is a test profile, not consensus finality. Production
-profiles must connect the same `NoctwebResolving` boundary to a selected
-`ConsensusAdapter`, authenticated host locators, and the Noctweave Net host and
-passthrough clients.
+The fixture resolver is a test profile, not consensus finality. Federation
+profiles pin bootstrap endpoints, relay IDs, ML-DSA public keys, a federation
+name, and a namespace threshold. Manual profiles default to unanimity.
+DHT/PEX-discovered relays are candidates only and never become namespace
+authorities implicitly. Broader publisher-head and locator consensus remains
+behind the same `NoctwebResolving` boundary.
 
 ## Build and test
 

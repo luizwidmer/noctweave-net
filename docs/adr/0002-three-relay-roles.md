@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
-- Clarified by: ADR 0007
+- Clarified by: ADR 0007 and ADR 0011
 
 ## Context
 

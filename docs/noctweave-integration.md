@@ -16,7 +16,7 @@ more than one family.
 | `host` | `nw.net-host@1` | Content-addressed object storage, retrieval, presence, and capability-protected release |
 
 Every relay process also advertises `nw.core@2` for health, information, and
-exact capability discovery. In particular, a `solo` standard relay may also
+exact capability discovery. In particular, a standard relay may also
 advertise `nw.net-host@1` and directly host and serve content. Advertising the
 host module does not require the passthrough module, federation forwarding, a
 consensus retrieval hop, or a namespace advertisement.
@@ -42,14 +42,14 @@ The relay signs storage receipts, not publisher heads. A host signature proves
 only that the host acknowledged those exact bytes and bounds. `get` and `has`
 are public by object ID; `put` and `release` require relay authentication.
 Private hosted objects must already be encrypted by the client.
-The host module does not require the relay to own or advertise a Noctweb
-namespace.
+The host module does not itself grant a Noctweb namespace. Federated standard
+and host relays separately advertise a persistent relay identity and suffix.
 
 ## Noctweb Publisher deployment contract
 
 Noctweb Publisher is a basic browser page served from the same origin as its
 enabled hosting endpoint. It may be exposed by a dedicated host relay or by a
-`solo` standard relay process that separately opts into `nw.net-host@1`.
+standard relay process that separately opts into `nw.net-host@1`.
 Serving the page does not create a fourth role, and a standard-only deployment
 cannot accept publication bundles.
 
@@ -80,10 +80,39 @@ hosted revision in a bounded local ledger. An unhost-all operation attempts
 every tracked release and keeps unreleased entries for retry. The capability is
 not submitted to the host except in its explicit release request.
 
-An operator may configure the relay suffix displayed by Publisher. If none is
-configured, Publisher derives a deterministic provisional suffix from the
-host-receipt verification public key. Until a consensus naming profile is
-implemented, every displayed `noct://` address is explicitly provisional.
+An operator configures the relay suffix before a relay joins a federation.
+Noctweb Lab stores the publication first and then requests a strict signed name
+binding. Solo development hosting may still derive a local fallback suffix,
+but that fallback is not federation namespace evidence.
+
+## Authenticated federation namespace and forwarding
+
+Federated standard and host relays persist an ML-DSA-65 relay identity. A signed
+claim binds the relay ID to its role, federation, advertised endpoints,
+capabilities, optional host receipt key, and `.suffix`.
+
+The durable namespace ledger enforces:
+
+- at most one relay ID per suffix in any accepted snapshot;
+- no release on downtime;
+- old-key/new-key double signatures for rotation;
+- permanent tombstones after signed release.
+
+Relays sign deterministic namespace snapshots. Clients configure an explicit
+signer set and threshold and accept only byte-identical state meeting that
+policy. DHT/PEX is restricted to open federation discovery and is never
+namespace authority.
+
+For messaging, a client may submit a destination route to its home relay. The
+home relay wraps only the already-encrypted append in
+`nw.federation-forward@1`, authenticates the destination relay identity, and
+forwards it. It never receives relationship keys or plaintext.
+
+For Noctweb, the Browser resolves `.suffix` through the signed snapshot quorum,
+then asks its home relay for a federated signed-name read and immutable-object
+read from the selected destination. The Browser verifies the destination
+identity, name signature, hosting receipt, object digest, and publisher
+signature before rendering.
 
 Publisher and upload API share an origin, but hosted active content must not
 inherit that origin's ambient authority. A client first verifies the bundle

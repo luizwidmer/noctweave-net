@@ -1,5 +1,23 @@
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
+
+let noctweaveDependency: Package.Dependency
+let noctweavePackageIdentity: String
+if let localPath = ProcessInfo.processInfo.environment[
+    "NOCTWEAVE_PACKAGE_PATH"
+], !localPath.isEmpty {
+    noctweaveDependency = .package(path: localPath)
+    noctweavePackageIdentity = URL(
+        fileURLWithPath: localPath
+    ).lastPathComponent
+} else {
+    noctweaveDependency = .package(
+        url: "https://github.com/luizwidmer/Noctweave.git",
+        branch: "main"
+    )
+    noctweavePackageIdentity = "Noctweave"
+}
 
 let package = Package(
     name: "NoctwebLab",
@@ -17,11 +35,18 @@ let package = Package(
         )
     ],
     dependencies: [
+        noctweaveDependency,
         .package(path: "../noctweb-ui"),
     ],
     targets: [
         .target(
             name: "NoctwebLabCore",
+            dependencies: [
+                .product(
+                    name: "NoctweaveCore",
+                    package: noctweavePackageIdentity
+                )
+            ],
             linkerSettings: [
                 .linkedFramework("Security")
             ]

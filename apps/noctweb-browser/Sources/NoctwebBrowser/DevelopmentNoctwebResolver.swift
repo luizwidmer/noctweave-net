@@ -11,6 +11,7 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     private static let maximumSiteCount = 256
 
     private let fixtureResolver: DeterministicNoctwebResolver
+    private let federationResolver = FederatedNoctwebResolver()
     private let labWorkspaceURL: URL
 
     init(
@@ -34,11 +35,19 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
                 visitorDirective: visitorDirective
             )
         } catch NoctwebBrowserError.unresolvedName {
-            return try await resolveHostedLabPublication(
-                navigationURL,
-                profile: profile,
-                visitorDirective: visitorDirective
-            )
+            do {
+                return try await federationResolver.resolve(
+                    navigationURL,
+                    profile: profile,
+                    visitorDirective: visitorDirective
+                )
+            } catch NoctwebBrowserError.unresolvedName {
+                return try await resolveHostedLabPublication(
+                    navigationURL,
+                    profile: profile,
+                    visitorDirective: visitorDirective
+                )
+            }
         }
     }
 

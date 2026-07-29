@@ -1307,9 +1307,24 @@ final class AppModel: ObservableObject {
                 ),
                 authorization: authorization
             )
+            let address = try NoctwebAddress.parse(
+                publication.object.address
+            )
+            let nameBinding = try await client.bindName(
+                relaySuffix: ".\(address.relaySuffix)",
+                siteLabel: address.siteLabel,
+                objectID: put.receipt.objectID,
+                publisherID: publication.object.publisherID,
+                headID: publication.headID,
+                revision: publication.object.revision,
+                previousObjectID: initialSite.hostObjectID,
+                authorization: authorization
+            )
             transition(
                 to: .replicate,
-                message: "The relay retained \(put.receipt.byteCount) bytes until \(put.receipt.expiresAt.formatted())."
+                message:
+                    "The relay retained \(put.receipt.byteCount) bytes and signed "
+                    + "\(address.canonicalString) revision \(nameBinding.revision)."
             )
 
             let fetched = try await client.fetch(

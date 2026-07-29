@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-26
 - Amends: ADR 0003, ADR 0004, and ADR 0006
-- Amended by: ADR 0009
+- Amended by: ADR 0009 and ADR 0011
 
 ## Context
 
@@ -73,12 +73,11 @@ copies. Unhost-all attempts every tracked release and retains failed entries
 for retry. Release capabilities are disclosed to the host only in explicit
 release requests.
 
-An operator may configure the relay suffix/namespace displayed by Publisher.
-If none is configured, Publisher derives a deterministic provisional suffix
-from the public key used to verify that host's signed receipts. Until a
-consensus naming profile exists, every displayed
-`noct://<site>.<relay-suffix>/` name is marked provisional. Neither suffix path
-proves global uniqueness, allocation, finality, or portable resolution.
+For solo development, Publisher may derive a local fallback suffix from the
+public key used to verify that host's signed receipts. ADR 0011 supersedes this
+fallback for federation: every federated standard or host relay configures a
+suffix and proves its ownership through threshold-verified signed namespace
+snapshots.
 
 Publisher application resources and the host upload API share an origin.
 Hosted active content does not. A client must verify the bundle digest and

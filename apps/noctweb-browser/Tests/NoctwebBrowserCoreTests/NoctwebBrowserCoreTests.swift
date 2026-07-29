@@ -86,6 +86,47 @@ final class NoctwebBrowserCoreTests: XCTestCase {
         )
     }
 
+    func testManualNamespacePolicyDefaultsToUnanimity() throws {
+        let environment = try DeterministicNoctwebResolver
+            .developmentEnvironment()
+        let signers = [
+            NoctwebNamespaceSigner(
+                relayID: "nwr1\(String(repeating: "a", count: 64))",
+                signingPublicKey: Data(repeating: 0x11, count: 1_952)
+            ),
+            NoctwebNamespaceSigner(
+                relayID: "nwr1\(String(repeating: "b", count: 64))",
+                signingPublicKey: Data(repeating: 0x22, count: 1_952)
+            )
+        ]
+        let profile = try NoctwebNetworkProfile(
+            id: "manual-federation",
+            displayName: "Manual federation",
+            routingTrustDomainID:
+                environment.profile.routingTrustDomainID,
+            consensusProfileID: "noctweb.namespace.v1",
+            verificationKey: Data(repeating: 0x33, count: 32),
+            bootstrapEndpoints: [
+                URL(string: "https://relay.example")!
+            ],
+            supportedEpochs: [1],
+            federationMode: .manual,
+            namespaceFederationName: "friends",
+            federationDirective: .open,
+            defaultVisitorDirective: .open,
+            namespaceSigners: signers
+        )
+
+        XCTAssertEqual(profile.namespaceThreshold, signers.count)
+        XCTAssertEqual(
+            try JSONDecoder().decode(
+                NoctwebNetworkProfile.self,
+                from: JSONEncoder().encode(profile)
+            ),
+            profile
+        )
+    }
+
     func testCodableEntryPointsReapplySecurityValidation() throws {
         XCTAssertThrowsError(
             try JSONDecoder().decode(

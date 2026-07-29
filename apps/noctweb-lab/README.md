@@ -8,13 +8,11 @@ extension, Electron bundle, or remote-origin WebView shell.
 
 The Lab currently implements the explicitly incompatible `noctweb-lab-v3`
 website-bundle, signed publisher-routing, and relay-scoped namespace profile.
-It is a local protocol
-simulator and
-product-development surface; it does not claim production consensus,
-wire-format compatibility, or production sandboxing. Its deterministic relay
-and routing-policy adapters model standard, passthrough, and host modules,
-operator advertisements, and federation policy but do not yet connect the
-application to live Noctweave relay endpoints.
+It is a local protocol simulator and product-development surface; it does not
+claim production publication consensus, wire-format compatibility, or a
+security audit. Its publisher connects to live Noctweave host endpoints,
+verifies the relay's ML-DSA identity and suffix, stores the immutable object,
+then creates a strict relay-signed site binding.
 
 ## Website workflow
 
@@ -94,7 +92,7 @@ visitor -> passthrough -> host
 ```
 
 They are alternatives; there is no mandatory
-standard-to-passthrough-to-host chain. A `solo` standard relay may also
+standard-to-passthrough-to-host chain. A standard relay may also
 advertise `nw.net-host@1` and directly host and serve a publication.
 
 Each layer may leave routing open, require direct retrieval, or require one
@@ -128,21 +126,16 @@ The Lab models canonical public base URLs as:
 noct://<site>.<relay-suffix>/
 ```
 
-The namespace function is an optional advertisement by a relay with the host
-module, not a fourth relay role and not a prerequisite for hosting. An operator
-that advertises it may choose a custom suffix or use the profile's
-deterministic `r-<hash>` fallback derived from a dedicated namespace public
-key. Site labels are unique only within one suffix, so two different suffixes
-may each allocate the same label.
+Federated standard and host relays advertise a persistent ML-DSA identity and
+suffix. The Lab verifies that signed identity before publishing. It uploads the
+immutable object first and requests the strict name binding only after the
+hosting receipt succeeds.
 
-The Lab's deterministic topology rejects duplicate visible suffixes, and its
-in-process finality model rejects a second publication claiming the same full
-name. This is a local test stand-in: a production consensus profile must
-finalize globally unique suffix allocations and unique site-label bindings
-within each suffix. The binding resolves to the site's publication-scoped
-publisher identity. The namespace relay does not gain the publisher key and
-need not be the current content host; resolution uses current host locators and
-verifies the publisher signature and exact bundle bytes.
+Site labels are unique only within one suffix, so two different suffixes may
+each allocate the same label. The signed binding resolves to the site's
+publication-scoped publisher identity, head, revision, and object. The relay
+does not gain the publisher key; readers still verify the publisher signature
+and exact bundle bytes.
 
 ## Verified website runtime
 

@@ -21,15 +21,15 @@ resolution, and local rendering. Noctweave owns the reusable transport
 primitives and their cryptographic and operational boundaries. The selected
 consensus profile owns only finalized public coordination state. Exactly three
 relay/module families remain, but one process may advertise more than one. A
-`solo` standard relay may also advertise `nw.net-host@1` and directly host and
-serve content.
+A standard relay may also advertise `nw.net-host@1` and directly host and
+serve content in any non-passthrough federation mode.
 
 ## 2. Relay-hosted Noctweb Publisher
 
 Noctweb Publisher is a simple browser authoring page served from the same
 origin as an opted-in hosting endpoint. A deployment is either:
 
-- a `solo` standard relay process that separately advertises
+- a standard relay process that separately advertises
   `nw.net-host@1`; or
 - a dedicated host relay.
 
@@ -140,29 +140,31 @@ The canonical base URL for a named site is:
 noct://<site>.<relay-suffix>/
 ```
 
-A namespace advertisement is an optional capability of a relay process that
-advertises the host module. It is not a fourth relay role and is not required
-to host or serve content. An operator may set the displayed relay suffix. If
-it does not, Noctweb Publisher derives a deterministic provisional
-`r-<hash>` fallback from the public key that verifies the host's signed
-receipts. A future consensus profile must define the exact normalization,
-digest input, encoding, allocation, and collision handling before
-interoperability is claimed.
+Every federated standard or host relay owns a persistent ML-DSA-65 identity and
+an operator-configured suffix. A signed identity claim binds the relay ID,
+suffix, endpoints, role, federation, and capabilities. This namespace
+advertisement is a control-plane property, not a fourth relay role, and does
+not require the relay to host every object named beneath its suffix.
 
-Site labels are allocated within a suffix. Consensus enforces global suffix
-uniqueness and uniqueness of each `(<site>, <relay-suffix>)` pair; the same
-site label may be allocated under another suffix.
+Each federation maintains a durable suffix ledger. A first valid claim reserves
+one suffix for one relay ID. Downtime does not release it. Identity rotation
+requires signatures from both old and new keys and retains the suffix. Signed
+release creates a permanent tombstone. No subsequent relay may claim a
+tombstoned suffix.
 
-The finalized name record binds the URL to a publication-scoped publisher
-identifier. It does not transfer cryptographic authority to the namespace
-operator. The relay associated with a suffix is not required to be the current
-content host: object retrieval follows the publication's independently
-finalized host locators.
+Relays expose ML-DSA-signed snapshots of the canonical ledger. A Browser
+network profile pins the eligible signer keys and threshold. It accepts only
+byte-identical snapshots meeting that threshold: manual defaults to unanimity,
+curated uses its configured coordinator quorum, and open uses an explicit
+threshold signer set. DHT/PEX discovers candidates only. It never votes,
+allocates, or overrides the signer policy. Divergent partition state therefore
+fails closed.
 
-Until a consensus naming profile exists, Noctweb Publisher displays
-`noct://<site>.<relay-suffix>/` only as a provisional name. Neither an
-operator-configured suffix nor a receipt-key-derived fallback establishes
-global uniqueness, allocation, finality, or portable resolution.
+Site labels are allocated within a suffix. The owner relay signs a binding from
+`(<site>, <suffix>)` to the publication publisher ID, head, revision, and object
+ID after that object is stored. The same site label may exist under another
+suffix. Publisher signatures and object hashes remain mandatory; suffix
+ownership does not grant publisher authority.
 
 ## 6. Publish flow
 
@@ -172,29 +174,28 @@ global uniqueness, allocation, finality, or portable resolution.
    that signature also covers the publisher route directive.
 4. Objects are uploaded to one or more host relays, directly or through a
    passthrough relay.
-5. The client verifies hosting receipts and submits only the bounded public
-   head, locator, and selected routing-policy commitments required by the
-   consensus profile.
-6. For a named publication, an authorized suffix allocation submits the
-   canonical site-label binding to the publisher identifier.
-7. After finality, resolvers may treat the name binding and new head as
-   current.
+5. The client verifies the hosting receipt.
+6. For a named publication, it asks the suffix owner to bind the canonical
+   site label to the publisher identifier, head, revision, and stored object.
+7. The client verifies the relay-signed name binding before reporting the
+   publication as named.
 
 Uploading an object does not publish it. A hosting receipt does not establish
 publisher authority, consensus finality, or permanent availability.
 Publishing and hosting never require passthrough, relay federation forwarding,
 a consensus retrieval hop, or a namespace advertisement.
 
-For the current Noctweb Publisher surface, the implemented flow stops after the
-browser verifies the hosting receipt and reports **Hosted**. Consensus
-submission and finalized naming remain later profile work.
+General publication-head consensus remains later profile work; the implemented
+federation profile covers relay/suffix ownership and relay-signed local names.
 
 ## 7. Resolve flow
 
-1. For a named URL, the runtime canonicalizes the address and asks its
-   `ConsensusAdapter` for the finalized publisher binding.
-2. It resolves the finalized publisher head and permitted public locators.
-3. It chooses a current content host; this need not be the namespace relay.
+1. The runtime canonicalizes the address and queries its bootstrap relays for
+   signed namespace snapshots.
+2. It requires the local profile's threshold of byte-identical snapshots and
+   resolves the suffix to one authenticated relay identity and endpoint.
+3. It asks its home relay for the destination's signed site binding and object;
+   the home relay forwards only a bounded opaque federation request.
 4. It authenticates the federation-policy record for the routing trust domain
    and the selected host's operator advertisement, then verifies the signed
    publisher directive where the publication profile supplies one.
@@ -204,8 +205,9 @@ submission and finalized naming remain later profile work.
 6. It fetches the root and referenced objects through exactly one of the two v0
    shapes: directly from the host, or through one bounded passthrough and then
    the host.
-7. It verifies namespace and policy finality evidence, publisher signature,
-   object IDs, version links, bounds, and the actual route used.
+7. It verifies namespace quorum evidence, destination relay identity, signed
+   name, publisher signature, object IDs, version links, bounds, and the actual
+   route used.
 8. It decrypts authorized private portions locally.
 9. It renders or executes only within the runtime's sandbox and permission
    model. Hosted active content must not inherit Publisher-page origin

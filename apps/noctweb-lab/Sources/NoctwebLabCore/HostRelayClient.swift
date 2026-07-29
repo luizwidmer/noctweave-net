@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+@preconcurrency import NoctweaveCore
 import Security
 
 public struct NoctwebHostRelayConfiguration: Codable, Equatable, Sendable {
@@ -102,6 +103,20 @@ public struct NoctwebHostPutResult: Sendable {
     public let releaseCapability: Data
 }
 
+public struct NoctwebHostNameBindingReceipt:
+    Equatable,
+    Sendable
+{
+    public let relayID: String
+    public let relaySuffix: String
+    public let siteLabel: String
+    public let objectID: String
+    public let publisherID: String
+    public let headID: String?
+    public let revision: UInt64
+    public let expiresAt: Date
+}
+
 public enum NoctwebHostRelayError: LocalizedError, Sendable {
     case invalidEndpoint
     case insecureRemoteEndpoint
@@ -139,8 +154,10 @@ public enum NoctwebHostRelayError: LocalizedError, Sendable {
 
 public actor NoctwebHostRelayClient {
     public let baseURL: URL
+    private let relayEndpoint: RelayEndpoint
     private let session: URLSession
     private var cachedConfiguration: NoctwebHostRelayConfiguration?
+    private var cachedRelayIdentity: SignedRelayIdentityClaimV1?
 
     public init(endpoint: String) throws {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,6 +178,9 @@ public actor NoctwebHostRelayClient {
             throw NoctwebHostRelayError.invalidEndpoint
         }
         self.baseURL = baseURL
+        self.relayEndpoint = try RelayEndpointParser.parse(
+            baseURL.absoluteString
+        )
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 8
         configuration.timeoutIntervalForResource = 12
@@ -241,6 +261,70 @@ public actor NoctwebHostRelayClient {
         )
     }
 
+    /// Atomically publishes the human-facing name after the immutable object
+    /// has been retained. The relay signs the resulting mapping with its
+    /// persistent ML-DSA identity; this method verifies that identity and the
+    /// returned mapping before reporting success.
+    public func bindName(
+        relaySuffix: String,
+        siteLabel: String,
+        objectID: String,
+        publisherID: String,
+        headID: String?,
+        revision: UInt64,
+        previousObjectID: String?,
+        authorization: String
+    ) async throws -> NoctwebHostNameBindingReceipt {
+        let identity = try await authenticatedRelayIdentity()
+        guard let suffix = NoctwebRelaySuffixV1(
+            rawValue: relaySuffix.hasPrefix(".")
+                ? relaySuffix
+                : ".\(relaySuffix)"
+        ), identity.claim.noctwebSuffix == suffix else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+        let binding = NoctweaveNetHostNameBindingRequestV1(
+            relaySuffix: suffix,
+            siteLabel: siteLabel,
+            objectID: objectID,
+            publisherID: publisherID,
+            headID: headID,
+            revision: revision,
+            previousObjectID: previousObjectID,
+            idempotencyKey: try Self.randomData(count: 32)
+        )
+        guard binding.isStructurallyValid else {
+            throw NoctwebHostRelayError.invalidResponse
+        }
+        let response = try await RelayClient(
+            endpoint: relayEndpoint,
+            authToken: authorization.isEmpty ? nil : authorization
+        ).send(.bindNetHostName(binding))
+        guard case .netHostNameResolution(let resolution)? =
+            response.successBody,
+            try resolution.verifyThrowing(
+                expectedRelayIdentity: identity
+            ),
+            resolution.relaySuffix == suffix,
+            resolution.siteLabel == siteLabel,
+            resolution.objectID == objectID,
+            resolution.publisherID == publisherID,
+            resolution.headID == headID,
+            resolution.revision == revision else {
+            throw NoctwebHostRelayError.invalidResponse
+        }
+        return NoctwebHostNameBindingReceipt(
+            relayID: resolution.relayID.rawValue,
+            relaySuffix: resolution.relaySuffix.rawValue,
+            siteLabel: resolution.siteLabel,
+            objectID: resolution.objectID,
+            publisherID: resolution.publisherID,
+            headID: resolution.headID,
+            revision: resolution.revision,
+            expiresAt: resolution.expiresAt
+        )
+    }
+
     public func fetch(objectID: String) async throws -> NoctwebHostedObject {
         let configuration = try await discover()
         let response: HostObjectResponse = try await send(
@@ -300,6 +384,36 @@ public actor NoctwebHostRelayClient {
         SHA256.hash(data: payload)
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+
+    private func authenticatedRelayIdentity(
+        force: Bool = false
+    ) async throws -> SignedRelayIdentityClaimV1 {
+        if !force, let cachedRelayIdentity,
+           (try? cachedRelayIdentity.verifyThrowing()) == true {
+            return cachedRelayIdentity
+        }
+        let response = try await RelayClient(endpoint: relayEndpoint)
+            .send(.info())
+        guard case .relayInfo(let info)? = response.successBody,
+              let identity = info.relayIdentity,
+              try identity.verifyThrowing(at: info.advertisedAt),
+              info.authenticatedRelayID == identity.claim.relayID,
+              info.authenticatedNoctwebSuffix
+                == identity.claim.noctwebSuffix,
+              info.protocolCapabilities?.supports(
+                module: "nw.net-host",
+                version: 1
+              ) == true else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+        let configuration = try await discover()
+        guard identity.claim.noctwebSuffix?.rawValue
+            == ".\(configuration.relaySuffix)" else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+        cachedRelayIdentity = identity
+        return identity
     }
 
     private func send<RequestBody: Encodable, ResponseBody: Decodable>(
