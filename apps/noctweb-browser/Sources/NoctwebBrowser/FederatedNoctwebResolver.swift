@@ -335,7 +335,10 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             try federated.verifyThrowing(
                 expectedRelayID: identity.claim.relayID
             ),
-            federated.destinationIdentity == identity else {
+            sameRelayAuthority(
+                federated.destinationIdentity,
+                as: identity
+            ) else {
             throw NoctwebBrowserError.verificationFailed(
                 "the home relay returned an unauthenticated name result"
             )
@@ -379,12 +382,35 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             try federated.verifyThrowing(
                 expectedRelayID: identity.claim.relayID
             ),
-            federated.destinationIdentity == identity else {
+            sameRelayAuthority(
+                federated.destinationIdentity,
+                as: identity
+            ) else {
             throw NoctwebBrowserError.verificationFailed(
                 "the home relay returned an unauthenticated hosted object"
             )
         }
         return federated.object
+    }
+
+    /// Relay identity claims are short-lived, signed advertisements. Their
+    /// sequence, issuance window, and endpoint set can advance without changing
+    /// the cryptographic authority anchored by the namespace snapshot.
+    private func sameRelayAuthority(
+        _ live: SignedRelayIdentityClaimV1,
+        as anchored: SignedRelayIdentityClaimV1
+    ) -> Bool {
+        live.claim.relayID == anchored.claim.relayID
+            && live.claim.signingPublicKey
+                == anchored.claim.signingPublicKey
+            && live.claim.hostSigningPublicKey
+                == anchored.claim.hostSigningPublicKey
+            && live.claim.noctwebSuffix
+                == anchored.claim.noctwebSuffix
+            && live.claim.federationMode
+                == anchored.claim.federationMode
+            && live.claim.federationName
+                == anchored.claim.federationName
     }
 
     private func relayEndpoint(_ url: URL) throws -> RelayEndpoint {

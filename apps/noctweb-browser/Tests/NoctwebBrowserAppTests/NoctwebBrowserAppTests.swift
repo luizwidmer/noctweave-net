@@ -222,6 +222,46 @@ final class NoctwebBrowserAppTests: XCTestCase {
         XCTAssertFalse(source.contains("addScriptMessageHandler"))
     }
 
+    func testFederatedResolverAcceptsFreshClaimsFromAnchoredAuthority()
+        throws
+    {
+        let source = try String(
+            contentsOf: packageRoot.appending(
+                path: "Sources/NoctwebBrowser/FederatedNoctwebResolver.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(
+            source.contains("federated.destinationIdentity == identity")
+        )
+        XCTAssertTrue(source.contains("sameRelayAuthority("))
+        XCTAssertTrue(
+            source.contains(
+                "live.claim.signingPublicKey"
+                    + "\n                == anchored.claim.signingPublicKey"
+            )
+        )
+        XCTAssertTrue(
+            source.contains(
+                "live.claim.hostSigningPublicKey"
+                    + "\n                == anchored.claim.hostSigningPublicKey"
+            )
+        )
+        XCTAssertTrue(
+            source.contains(
+                "live.claim.noctwebSuffix"
+                    + "\n                == anchored.claim.noctwebSuffix"
+            )
+        )
+        XCTAssertTrue(
+            source.contains(
+                "live.claim.federationName"
+                    + "\n                == anchored.claim.federationName"
+            )
+        )
+    }
+
     func testApplicationBundleRegistersNativeNoctwebEntryPoints() throws {
         let data = try Data(
             contentsOf: packageRoot.appending(path: "Packaging/Info.plist")
