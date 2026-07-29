@@ -12,7 +12,7 @@ struct InspectorView: View {
                 ) {
                     if let site = model.selectedSite {
                         StatusPill(
-                            title: site.objectID == nil ? "No finalized object" : "Object available",
+                            title: site.objectID == nil ? "No hosted object" : "Object available",
                             systemImage: site.objectID == nil ? "circle.dashed" : "checkmark.shield",
                             color: site.objectID == nil ? .secondary : .green
                         )
@@ -110,7 +110,7 @@ struct InspectorView: View {
     }
 
     private func publicationObject(_ site: SiteProject) -> some View {
-        SectionCard("Finalized object", systemImage: "cube") {
+        SectionCard("Hosted object", systemImage: "cube") {
             LazyVGrid(
                 columns: [
                     GridItem(.adaptive(minimum: 210), spacing: 18)
@@ -125,7 +125,7 @@ struct InspectorView: View {
                 )
                 inspectorField(
                     "Object identifier",
-                    value: site.objectID ?? "Not finalized"
+                    value: site.objectID ?? "Not hosted"
                 )
                 inspectorField(
                     "Revision",

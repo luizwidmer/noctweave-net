@@ -1,7 +1,7 @@
 import Foundation
 
 public actor NoctwebLabEngine {
-    private let identities: PublicationIdentityManager
+    let identities: PublicationIdentityManager
     private let network: InMemoryRelayNetwork
     private let finalizer: MockConsensusFinalizer
     private var publicationsByAddress: [String: PublishedCapsule] = [:]

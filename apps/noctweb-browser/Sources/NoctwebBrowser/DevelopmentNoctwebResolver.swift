@@ -2,9 +2,9 @@ import Foundation
 import NoctwebBrowserCore
 import NoctwebLabCore
 
-/// Extends the built-in development fixture with publications created by the
-/// native Lab. This adapter never runs for another network profile and labels
-/// every Lab result as fixture-verified rather than production-finalized.
+/// Resolves deterministic built-in fixtures first, then real relay-hosted
+/// publications recorded by Noctweb Lab. A relay receipt proves bounded
+/// storage only, so Lab results are always labelled as hosted previews.
 actor DevelopmentNoctwebResolver: NoctwebResolving {
     private static let maximumWorkspaceBytes = 32 * 1_024 * 1_024
     private static let maximumWorkspaceCount = 32
@@ -34,7 +34,7 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
                 visitorDirective: visitorDirective
             )
         } catch NoctwebBrowserError.unresolvedName {
-            return try await resolveLabPublication(
+            return try await resolveHostedLabPublication(
                 navigationURL,
                 profile: profile,
                 visitorDirective: visitorDirective
@@ -42,7 +42,7 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
         }
     }
 
-    private func resolveLabPublication(
+    private func resolveHostedLabPublication(
         _ navigationURL: NoctwebNavigationURL,
         profile: NoctwebNetworkProfile,
         visitorDirective: NoctwebBrowserCore.RouteDirective
@@ -52,38 +52,56 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
                 navigationURL.baseAddress
             )
         }
-
-        let publication = try await loadPublication(
+        let record = try loadSiteRecord(
             address: navigationURL.baseAddress
         )
-        let engine = try NoctwebLabEngine(
-            identityStore: InMemoryPublicationPrivateKeyStore(),
-            consensusQuorum: publication.finality.quorum
-        )
-        try await engine.restore(publication)
-        let resolved = try await engine.resolve(
-            address: publication.object.address,
-            preference: labPreference(for: visitorDirective)
-        )
+        guard let endpoint = record.hostRelayEndpoint,
+              let hostObjectID = record.hostObjectID else {
+            throw NoctwebBrowserError.unresolvedName(
+                navigationURL.baseAddress
+            )
+        }
 
-        guard let sourceBundle = resolved.object.bundle else {
+        let client = try NoctwebHostRelayClient(endpoint: endpoint)
+        let hosted: NoctwebHostedObject
+        do {
+            hosted = try await client.fetch(objectID: hostObjectID)
+        } catch {
             throw NoctwebBrowserError.verificationFailed(
-                "the local Lab publication has no website bundle"
+                "the host relay did not return a valid signed storage object"
             )
         }
-        let files = sourceBundle.files.map {
-            NoctwebWebsiteFile(
-                path: $0.path,
-                mediaType: $0.mediaType,
-                bytes: $0.bytes
+        let publication: HostedCapsuleEnvelope
+        do {
+            publication = try CanonicalJSON.decode(
+                HostedCapsuleEnvelope.self,
+                from: hosted.payload
+            ).verified()
+        } catch {
+            throw NoctwebBrowserError.verificationFailed(
+                "the relay-hosted Lab capsule failed publisher verification"
             )
         }
+        guard publication.object.address == navigationURL.baseAddress,
+              publication.object.relayNamespaceID == record.relayNamespaceID,
+              let sourceBundle = publication.object.bundle else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the hosted capsule is not bound to the requested address"
+            )
+        }
+
         let bundle = try NoctwebWebsiteBundle(
             entryPath: sourceBundle.entryPath,
-            files: files
+            files: sourceBundle.files.map {
+                NoctwebWebsiteFile(
+                    path: $0.path,
+                    mediaType: $0.mediaType,
+                    bytes: $0.bytes
+                )
+            }
         )
         let publisherDirective = browserDirective(
-            for: resolved.object.routeDirective ?? .open
+            for: publication.object.routeDirective ?? .open
         )
         let route = NoctwebBrowserCore.RoutingPolicyResolver.resolve(
             federationMode: profile.federationMode,
@@ -92,59 +110,49 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
             publisher: publisherDirective,
             visitor: visitorDirective
         )
+        guard route.directive == .direct else {
+            throw NoctwebBrowserError.verificationFailed(
+                "this hosted preview requires a passthrough adapter that is not configured"
+            )
+        }
 
         return VerifiedNoctwebSite(
             navigationURL: navigationURL,
-            title: resolved.object.title,
+            title: publication.object.title,
             bundle: bundle,
-            state: .fixtureVerified,
+            state: .hostedPreview,
             evidence: NoctwebVerificationEvidence(
-                publisherID: resolved.object.publisherID,
+                publisherID: publication.object.publisherID,
                 routingTrustDomainID: profile.routingTrustDomainID,
-                consensusProfileID: profile.consensusProfileID,
-                epoch: 1,
-                headID: resolved.headID,
-                objectID: resolved.evidence.integrity.computedObjectID,
+                consensusProfileID: "none-hosted-preview",
+                epoch: 0,
+                headID: publication.headID,
+                objectID: publication.head.claims.objectID,
                 route: route,
                 verifiedAt: Date()
             )
         )
     }
 
-    private func loadPublication(address: String) async throws -> PublishedCapsule {
-        if let publication = try loadPublicationFromWorkspace(address: address) {
-            return publication
-        }
-        if let publication = try await loadPublicationFromBridge(address: address) {
-            return publication
-        }
-        throw NoctwebBrowserError.unresolvedName(address)
-    }
-
-    private func loadPublicationFromWorkspace(
-        address: String
-    ) throws -> PublishedCapsule? {
+    private func loadSiteRecord(address: String) throws -> LabSiteRecord {
         guard FileManager.default.fileExists(atPath: labWorkspaceURL.path) else {
-            return nil
+            throw NoctwebBrowserError.unresolvedName(address)
         }
         let values: URLResourceValues
         do {
             values = try labWorkspaceURL.resourceValues(
                 forKeys: [.fileSizeKey, .isRegularFileKey]
             )
-        } catch CocoaError.fileNoSuchFile {
-            return nil
-        } catch CocoaError.fileReadNoPermission {
-            return nil
-        }
-        guard
-            values.isRegularFile == true,
-            let fileSize = values.fileSize,
-            (1...Self.maximumWorkspaceBytes).contains(fileSize)
-        else {
+        } catch {
             throw NoctwebBrowserError.unresolvedName(address)
         }
-
+        guard values.isRegularFile == true,
+              let fileSize = values.fileSize,
+              (1...Self.maximumWorkspaceBytes).contains(fileSize) else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the local Lab workspace exceeds its profile bounds"
+            )
+        }
         let data = try Data(
             contentsOf: labWorkspaceURL,
             options: [.mappedIfSafe]
@@ -164,92 +172,10 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
                 "the local Lab site catalog exceeds its profile bounds"
             )
         }
-        guard
-            let envelope = sites.first(where: { $0.address == address })?
-                .publishedEnvelope
-        else {
-            return nil
+        guard let site = sites.first(where: { $0.address == address }) else {
+            throw NoctwebBrowserError.unresolvedName(address)
         }
-
-        return try decodePublication(envelope)
-    }
-
-    private func loadPublicationFromBridge(
-        address: String
-    ) async throws -> PublishedCapsule? {
-        var components = URLComponents()
-        components.scheme = "http"
-        components.host = "127.0.0.1"
-        components.port = 9_477
-        components.path = "/v1/publication"
-        components.queryItems = [URLQueryItem(name: "address", value: address)]
-        guard let url = components.url else {
-            throw NoctwebBrowserError.verificationFailed(
-                "the local Lab bridge request is invalid"
-            )
-        }
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.timeoutInterval = 1.5
-        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        request.setValue("application/vnd.noctweave.noctweb-capsule", forHTTPHeaderField: "Accept")
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 1.5
-        configuration.timeoutIntervalForResource = 2
-        let session = URLSession(configuration: configuration)
-        defer { session.invalidateAndCancel() }
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch {
-            return nil
-        }
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw NoctwebBrowserError.verificationFailed(
-                "the local Lab bridge returned a non-HTTP response"
-            )
-        }
-        if httpResponse.statusCode == 404 {
-            return nil
-        }
-        guard
-            httpResponse.statusCode == 200,
-            data.count <= Self.maximumWorkspaceBytes,
-            httpResponse.value(forHTTPHeaderField: "Content-Type")?
-                .lowercased()
-                .hasPrefix("application/vnd.noctweave.noctweb-capsule") == true
-        else {
-            throw NoctwebBrowserError.verificationFailed(
-                "the local Lab bridge response is invalid"
-            )
-        }
-        return try decodePublication(data)
-    }
-
-    private func decodePublication(_ envelope: Data) throws -> PublishedCapsule {
-        do {
-            return try CanonicalJSON.decode(
-                PublishedCapsule.self,
-                from: envelope
-            )
-        } catch {
-            throw NoctwebBrowserError.verificationFailed(
-                "the local Lab publication envelope is invalid"
-            )
-        }
-    }
-
-    private func labPreference(
-        for directive: NoctwebBrowserCore.RouteDirective
-    ) -> NoctwebLabCore.LabRoute {
-        switch directive {
-        case .open: .automatic
-        case .direct: .direct
-        case .passthrough: .passthrough
-        }
+        return site
     }
 
     private func browserDirective(
@@ -284,5 +210,7 @@ private struct LabWorkspaceRecord: Decodable {
 
 private struct LabSiteRecord: Decodable {
     let address: String
-    let publishedEnvelope: Data?
+    let relayNamespaceID: String?
+    let hostRelayEndpoint: String?
+    let hostObjectID: String?
 }

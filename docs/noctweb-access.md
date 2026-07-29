@@ -6,7 +6,7 @@ compatibility surfaces.
 | Surface | Purpose | May resolve and execute finalized sites? |
 | --- | --- | --- |
 | **Noctweb Browser** | Everyday navigation, verification, permissions, and rendering | Yes |
-| **Noctweb Lab** | Native authoring, inspection, deterministic testnet, and fault injection | Only its explicit experimental profiles |
+| **Noctweb Lab** | Native authoring, real host-relay publication, inspection, and verified preview | Hosted experimental profiles only |
 | **Noctweb Publisher** | Basic relay-hosted authoring and hosted-preview links | No consensus-backed named resolution |
 | **Browser extension** | Optional `noct://` recognition and native-app handoff | No |
 
@@ -34,7 +34,8 @@ Only the canonical authority selects the finalized namespace record. A path,
 query, or fragment is publication-local navigation state and can never select
 another publisher, routing trust domain, or host. The exact normalization and
 encoding rules must be frozen with conformance vectors before they become a
-stable protocol promise. The current Lab remains base-address-only.
+stable protocol promise. The current Lab remains base-address-only and obtains
+its provisional namespace from the connected host relay.
 
 A user reaches a site in one of four ways:
 
@@ -43,9 +44,10 @@ A user reaches a site in one of four ways:
    Browser application.
 3. Open a bounded `.noctlink` access descriptor when the link must also identify
    a routing trust domain or carry bootstrap hints.
-4. Open a relay HTTPS **Hosted preview** link. This is the current compatibility
-   path before consensus naming exists and is never presented as finalized
-   Noctweb navigation.
+4. Open a relay-backed **Hosted preview** in Noctweb Browser. The Browser
+   re-fetches the object from the Lab-recorded host endpoint and independently
+   verifies the hosted envelope and receipt. This pre-consensus path is never
+   presented as finalized Noctweb navigation.
 
 There is no mandatory central redirector, Noctweave-operated gateway, account,
 or globally operated default relay.

@@ -9,7 +9,7 @@ struct OverviewView: View {
             VStack(alignment: .leading, spacing: 24) {
                 PageHeader(
                     "Overview",
-                    subtitle: "Build, publish, and verify Noctweb sites on a deterministic local network."
+                    subtitle: "Build, host, fetch, and verify Noctweb sites through a real relay."
                 ) {
                     Button {
                         model.createSite()
@@ -26,7 +26,6 @@ struct OverviewView: View {
                     publicationSummary
                     networkSummary
                     trustSummary
-                    recentRuns
                 }
             }
             .padding(24)
@@ -46,14 +45,12 @@ struct OverviewView: View {
     private var metrics: some View {
         let workspace = model.activeWorkspace
         let online = workspace?.relays.filter(\.isOnline).count ?? 0
-        let published = workspace?.sites.filter { $0.lastPublishedAt != nil }.count ?? 0
-        let passingRuns = workspace?.runs.filter { $0.result == .passed }.count ?? 0
-
+        let hosted = workspace?.sites.filter { $0.lastPublishedAt != nil }.count ?? 0
         return LazyVGrid(columns: metricColumns, alignment: .leading, spacing: 14) {
             MetricCard(
                 title: "Sites",
                 value: "\(workspace?.sites.count ?? 0)",
-                detail: "\(published) published",
+                detail: "\(hosted) hosted",
                 systemImage: "rectangle.stack",
                 tint: .accentColor
             )
@@ -63,13 +60,6 @@ struct OverviewView: View {
                 detail: "Relays online",
                 systemImage: "point.3.connected.trianglepath.dotted",
                 tint: online == workspace?.relays.count ? .green : .orange
-            )
-            MetricCard(
-                title: "Test runs",
-                value: "\(passingRuns)",
-                detail: "Passing deterministic scenarios",
-                systemImage: "checkmark.circle",
-                tint: .blue
             )
             MetricCard(
                 title: "Profile",
@@ -123,20 +113,28 @@ struct OverviewView: View {
     }
 
     private var networkSummary: some View {
-        SectionCard("Relay topology", systemImage: "network") {
-            ForEach(LabRelayRole.allCases) { role in
-                let relays = model.activeWorkspace?.relays.filter {
-                    $0.supports(role)
-                } ?? []
+        SectionCard("Host relay", systemImage: "network") {
+            let relays = model.activeWorkspace?.relays ?? []
+            if relays.isEmpty {
+                Text("No host relay configured")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(relays) { relay in
                 HStack {
-                    RelayRoleBadge(role: role)
+                        Label(
+                            relay.name,
+                            systemImage: relay.isOnline
+                                ? "externaldrive.connected.to.line.below"
+                                : "externaldrive.badge.xmark"
+                        )
                     Spacer()
-                    Text("\(relays.filter(\.isOnline).count)/\(relays.count) online")
+                        Text(relay.isOnline ? "Connected" : "Unavailable")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if role != LabRelayRole.allCases.last {
-                    Divider()
+                    if relay.id != relays.last?.id {
+                        Divider()
+                    }
                 }
             }
 
@@ -164,36 +162,4 @@ struct OverviewView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private var recentRuns: some View {
-        SectionCard("Recent test runs", systemImage: "checklist") {
-            if let runs = model.activeWorkspace?.runs.prefix(4), !runs.isEmpty {
-                ForEach(Array(runs)) { run in
-                    HStack(spacing: 10) {
-                        Image(systemName: run.result == .passed ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(run.result == .passed ? .green : .red)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(run.scenarioName)
-                                .font(.subheadline.weight(.medium))
-                            Text(run.startedAt, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(run.durationMilliseconds) ms")
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                Text("Run a fault scenario to establish a repeatable test record.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            Button("Open Test Runs") {
-                model.selection = .testRuns
-            }
-            .buttonStyle(.link)
-        }
-        .frame(maxWidth: .infinity)
-    }
 }

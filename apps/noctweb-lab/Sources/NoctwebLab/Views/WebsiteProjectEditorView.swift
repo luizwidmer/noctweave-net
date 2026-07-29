@@ -515,7 +515,7 @@ struct WebsiteProjectEditorView: View {
 
                             Text(
                                 site.publishedEnvelope != nil
-                                    ? "This relay-scoped name is finalized. Publish revisions without changing it."
+                        ? "This relay-scoped name is committed for this hosted revision. Host new revisions without changing it."
                                     : "Names use noct://site.relay-suffix/. The relay scopes registration; the publisher key controls updates."
                             )
                             .font(.caption)

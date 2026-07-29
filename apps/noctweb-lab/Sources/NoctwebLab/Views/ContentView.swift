@@ -9,7 +9,11 @@ struct ContentView: View {
         NavigationSplitView {
             List(selection: $model.selection) {
                 Section {
-                    ForEach(ProductSection.allCases.filter { $0 != .settings }) { destination in
+                    ForEach(
+                        ProductSection.allCases.filter {
+                            $0 != .settings && $0 != .testRuns
+                        }
+                    ) { destination in
                         Label(destination.title, systemImage: destination.systemImage)
                             .tag(destination)
                     }
@@ -150,7 +154,7 @@ struct ContentView: View {
             }
         } message: { workspace in
             Text(
-                "This removes \(workspace.sites.count) local site projects and \(workspace.runs.count) saved test runs. Published revisions may remain on host relays. Choose whether to retain or permanently destroy every publisher key in the workspace."
+                "This removes \(workspace.sites.count) local site projects. Published revisions may remain on host relays. Choose whether to retain or permanently destroy every publisher key in the workspace."
             )
         }
         .alert(

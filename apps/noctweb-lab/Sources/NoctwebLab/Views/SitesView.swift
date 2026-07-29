@@ -324,28 +324,41 @@ struct SitesView: View {
     }
 
     private func publicationActions(_ site: SiteProject) -> some View {
-        HStack(spacing: 8) {
-            if model.publicationInFlight {
-                ProgressView()
-                    .controlSize(.small)
-            }
-            Button {
-                model.publishSelectedSite()
-            } label: {
-                Label(
-                    model.publicationInFlight
-                        ? "Publishing…"
-                        : "Publish Revision",
-                    systemImage: "paperplane.fill"
-                )
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(
-                model.publicationInFlight ||
-                    site.publicationIdentity != .ready
+        VStack(alignment: .trailing, spacing: 8) {
+            SecureField(
+                "Relay publisher password · not saved",
+                text: $model.relayPublisherAuthorization
             )
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 280)
+            .privacySensitive()
+            .onSubmit {
+                model.publishSelectedSite()
+            }
 
-            siteActionMenu(site, iconOnly: false)
+            HStack(spacing: 8) {
+                if model.publicationInFlight {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button {
+                    model.publishSelectedSite()
+                } label: {
+                    Label(
+                        model.publicationInFlight
+                            ? "Publishing…"
+                            : "Host Revision",
+                        systemImage: "paperplane.fill"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    model.publicationInFlight ||
+                        site.publicationIdentity != .ready
+                )
+
+                siteActionMenu(site, iconOnly: false)
+            }
         }
     }
 

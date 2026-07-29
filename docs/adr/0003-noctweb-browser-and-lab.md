@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-25
-- Amended by: ADR 0008 and ADR 0009
+- Amended by: ADR 0008, ADR 0009, and ADR 0010
 
 ## Context
 
@@ -12,8 +12,8 @@ active content. A conventional extension can provide useful navigation hooks
 but does not provide a consistent cross-browser origin, lifecycle, or storage
 authority.
 
-The protocol also needs a runnable test surface before its stable object and
-consensus profiles exist.
+The protocol also needs a runnable authoring and verification surface before
+its stable object and consensus profiles exist.
 
 ## Decision
 
@@ -23,7 +23,7 @@ The user-facing product is **Noctweb**.
   experience. It is a dedicated native application, not a hosted website or a
   browser extension.
 - **Noctweb Lab** is the native macOS publisher, website editor, verified
-  runtime, inspector, deterministic testnet, and fault-injection product. Its
+  runtime, and inspector. Its
   application interface uses SwiftUI. It is not a web application, PWA,
   Electron shell, hosted service, or remote-origin WebView wrapper.
 - **Noctweb Publisher** is the distinct basic relay-hosted browser authoring
@@ -49,6 +49,8 @@ the lab signature suite and head encoding remain temporary. Stable protocol
 formats may replace the Lab profiles rather than inherit compatibility from
 them. The native app preserves signed v1 publications without silently
 rewriting their committed addresses; only unpublished v1 drafts migrate.
+ADR 0010 replaces the product's deterministic network with real
+`nw.net-host@1` connections while retaining mock consensus only in tests.
 
 The Lab persists private publisher keys only in the macOS Keychain and renders
 only an exact publisher-authenticated website bundle. The website runs in

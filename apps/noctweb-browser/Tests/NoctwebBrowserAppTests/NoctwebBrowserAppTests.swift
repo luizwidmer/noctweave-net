@@ -64,11 +64,21 @@ final class NoctwebBrowserAppTests: XCTestCase {
     }
 
     func testDevelopmentResolverReverifiesNativeLabPublication() async throws {
-        let namespace = try XCTUnwrap(
-            RelayTopology.labDefault.nodes
-                .first(where: { $0.id == "host-lisbon" })?
-                .relayNamespace()
-        )
+        guard
+            let relayEndpoint = ProcessInfo.processInfo.environment[
+                "NOCTWEB_LIVE_HOST_RELAY"
+            ],
+            let authorization = ProcessInfo.processInfo.environment[
+                "NOCTWEB_LIVE_HOST_PASSWORD"
+            ]
+        else {
+            throw XCTSkip(
+                "Set NOCTWEB_LIVE_HOST_RELAY and NOCTWEB_LIVE_HOST_PASSWORD."
+            )
+        }
+        let client = try NoctwebHostRelayClient(endpoint: relayEndpoint)
+        let relayConfiguration = try await client.discover(force: true)
+        let namespace = try XCTUnwrap(relayConfiguration.relayNamespace)
         let sourceBundle = NoctwebLabCore.WebsiteBundle(
             entryPath: "index.html",
             files: [
@@ -76,7 +86,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
                     path: "index.html",
                     mediaType: "text/html; charset=utf-8",
                     bytes: Data(
-                        "<!doctype html><title>Lab bridge proof</title>".utf8
+                        "<!doctype html><title>Hosted Lab proof</title>".utf8
                     )
                 ),
             ]
@@ -85,27 +95,44 @@ final class NoctwebBrowserAppTests: XCTestCase {
             identityStore: InMemoryPublicationPrivateKeyStore()
         )
         let address = "noct://browser-lab.\(namespace.suffix)/"
-        let publication = try await engine.publish(
+        let publication = try await engine.makeHostedPublication(
             draft: CapsuleSiteDraft(
                 publicationID: UUID().uuidString.lowercased(),
                 address: address,
                 relayNamespaceID: namespace.id,
                 routeDirective: NoctwebLabCore.RouteDirective.open,
-                title: "Lab bridge proof",
+                title: "Hosted Lab proof",
                 subtitle: "Native authoring",
                 body: "Signed local publication",
                 accentHex: "#4F8F77",
                 bundle: sourceBundle
-            )
+            ),
+            relayNamespace: namespace
         )
         let envelope = try CanonicalJSON.encode(publication)
+        let put = try await client.put(
+            payload: envelope,
+            ttlSeconds: relayConfiguration.minimumRetentionSeconds,
+            authorization: authorization
+        )
+        defer {
+            Task {
+                _ = try? await client.release(
+                    objectID: put.receipt.objectID,
+                    releaseCapability: put.releaseCapability,
+                    authorization: authorization
+                )
+            }
+        }
         let workspaceData = try JSONSerialization.data(
             withJSONObject: [
                 [
                     "sites": [
                         [
                             "address": address,
-                            "publishedEnvelope": envelope.base64EncodedString(),
+                            "relayNamespaceID": namespace.id,
+                            "hostRelayEndpoint": relayEndpoint,
+                            "hostObjectID": put.receipt.objectID,
                         ],
                     ],
                 ],
@@ -135,8 +162,8 @@ final class NoctwebBrowserAppTests: XCTestCase {
             visitorDirective: NoctwebBrowserCore.RouteDirective.open
         )
 
-        XCTAssertEqual(site.title, "Lab bridge proof")
-        XCTAssertEqual(site.state, .fixtureVerified)
+        XCTAssertEqual(site.title, "Hosted Lab proof")
+        XCTAssertEqual(site.state, .hostedPreview)
         XCTAssertEqual(site.evidence.publisherID, publication.object.publisherID)
         XCTAssertEqual(
             site.bundle.files.first?.bytes,

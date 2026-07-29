@@ -25,6 +25,8 @@ final class AppModel: ObservableObject {
     @Published var inspectorEvidenceID: UUID?
     @Published var preserveRunHistory = true
     @Published private(set) var operationError: String?
+    @Published var relayPublisherAuthorization = ""
+    @Published private(set) var relayRefreshInFlight = false
 
     let scenarios: [FaultScenario] = [
         FaultScenario(
@@ -58,6 +60,7 @@ final class AppModel: ObservableObject {
     ]
 
     private let engine: NoctwebLabEngine
+    private let usesLiveRelay: Bool
     private let workspaceFileURL: URL
     private let identityDeletionJournalFileURL: URL
     private let persistenceQueue = DispatchQueue(
@@ -71,8 +74,11 @@ final class AppModel: ObservableObject {
 
     init(
         engine: NoctwebLabEngine? = nil,
-        workspaceFileURL: URL? = nil
+        workspaceFileURL: URL? = nil,
+        useLiveRelay: Bool? = nil
     ) {
+        self.usesLiveRelay =
+            useLiveRelay ?? (engine == nil && workspaceFileURL == nil)
         self.engine = engine ?? (try! NoctwebLabEngine(
             identityStore: KeychainPublicationIdentityStore()
         ))
@@ -106,10 +112,16 @@ final class AppModel: ObservableObject {
         {
             initialWorkspaces = decoded
         } else {
-            initialWorkspaces = [.starter()]
+            initialWorkspaces = [
+                self.usesLiveRelay ? .liveStarter() : .starter()
+            ]
         }
         workspaces = initialWorkspaces
-        Self.migrateRelayNamespaces(in: &workspaces)
+        if self.usesLiveRelay {
+            Self.removeDevelopmentFixtures(in: &workspaces)
+        } else {
+            Self.migrateRelayNamespaces(in: &workspaces)
+        }
         Self.migrateRoutingPolicies(in: &workspaces)
         for workspaceIndex in workspaces.indices {
             for siteIndex in workspaces[workspaceIndex].sites.indices {
@@ -123,10 +135,17 @@ final class AppModel: ObservableObject {
         selectedSiteID = workspaces.first?.sites.first?.id
         runtimeAddress = workspaces.first?.sites.first?.address ?? ""
         selectedScenarioID = scenarios.first?.id
+        trustEvidence = Self.pendingEvidence(
+            includeConsensus: !self.usesLiveRelay
+        )
         inspectorEvidenceID = trustEvidence.first?.id
 
         Task { [weak self] in
-            await self?.restoreEngineState()
+            if self?.usesLiveRelay == true {
+                await self?.refreshHostRelays()
+            } else {
+                await self?.restoreEngineState()
+            }
             await self?.reconcilePendingPublisherIdentityDeletions()
             await self?.prepareMissingPublisherIdentities()
         }
@@ -200,7 +219,9 @@ final class AppModel: ObservableObject {
     }
 
     func createWorkspace() {
-        var workspace = Workspace.starter()
+        var workspace = usesLiveRelay
+            ? Workspace.liveStarter()
+            : Workspace.starter()
         workspace.name = "Workspace \(workspaces.count + 1)"
         workspace.sites = []
         workspace.runs = []
@@ -546,7 +567,9 @@ final class AppModel: ObservableObject {
         publicationStage = .draft
         publicationOutcome = .ready
         publicationMessage = "Draft changed. Validate before publishing."
-        trustEvidence = Self.pendingEvidence()
+        trustEvidence = Self.pendingEvidence(
+            includeConsensus: !usesLiveRelay
+        )
         inspectorEvidenceID = trustEvidence.first?.id
         scheduleWorkspaceSave()
     }
@@ -571,7 +594,9 @@ final class AppModel: ObservableObject {
         publicationStage = .draft
         publicationOutcome = .ready
         publicationMessage = "Draft is ready for validation."
-        trustEvidence = Self.pendingEvidence()
+        trustEvidence = Self.pendingEvidence(
+            includeConsensus: !usesLiveRelay
+        )
         inspectorEvidenceID = trustEvidence.first?.id
     }
 
@@ -640,6 +665,12 @@ final class AppModel: ObservableObject {
     }
 
     func setRelayOnline(_ relayID: String, isOnline: Bool) {
+        guard !usesLiveRelay else {
+            Task { [weak self] in
+                await self?.refreshHostRelay(relayID, reportError: true)
+            }
+            return
+        }
         guard
             let workspaceIndex = activeWorkspaceIndex,
             let relayIndex = workspaces[workspaceIndex].relays.firstIndex(
@@ -661,6 +692,121 @@ final class AppModel: ObservableObject {
             } catch {
                 publicationMessage = error.localizedDescription
             }
+        }
+    }
+
+    func addHostRelay(endpoint: String) {
+        guard usesLiveRelay, let workspaceIndex = activeWorkspaceIndex else {
+            return
+        }
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            operationError = "Enter an HTTP or HTTPS host-relay endpoint."
+            return
+        }
+        let id = UUID().uuidString.lowercased()
+        workspaces[workspaceIndex].relays.append(
+            LabRelayNode(
+                id: id,
+                name: "Host relay",
+                role: .host,
+                endpoint: trimmed,
+                region: "Remote",
+                isOnline: false,
+                latencyMilliseconds: 0,
+                retainedObjects: 0,
+                advertisedModules: [.host],
+                operatorRouteDirective: .open
+            )
+        )
+        persist()
+        Task { [weak self] in
+            await self?.refreshHostRelay(id, reportError: true)
+        }
+    }
+
+    func removeRelay(_ relayID: String) {
+        guard usesLiveRelay, let workspaceIndex = activeWorkspaceIndex else {
+            return
+        }
+        workspaces[workspaceIndex].relays.removeAll { $0.id == relayID }
+        persist()
+    }
+
+    func refreshHostRelays() async {
+        guard usesLiveRelay, let workspace = activeWorkspace else { return }
+        relayRefreshInFlight = true
+        defer { relayRefreshInFlight = false }
+        for relayID in workspace.relays.map(\.id) {
+            await refreshHostRelay(relayID, reportError: false)
+        }
+    }
+
+    func refreshHostRelay(_ relayID: String) async {
+        relayRefreshInFlight = true
+        defer { relayRefreshInFlight = false }
+        await refreshHostRelay(relayID, reportError: true)
+    }
+
+    private func refreshHostRelay(
+        _ relayID: String,
+        reportError: Bool
+    ) async {
+        guard
+            let workspaceIndex = activeWorkspaceIndex,
+            let relayIndex = workspaces[workspaceIndex].relays.firstIndex(
+                where: { $0.id == relayID }
+            )
+        else { return }
+        let endpoint = workspaces[workspaceIndex].relays[relayIndex].endpoint
+        let started = Date()
+        do {
+            let client = try NoctwebHostRelayClient(endpoint: endpoint)
+            let configuration = try await client.discover(force: true)
+            guard let namespace = configuration.relayNamespace else {
+                throw NoctwebHostRelayError.invalidConfiguration
+            }
+            guard
+                let currentWorkspaceIndex = activeWorkspaceIndex,
+                let currentRelayIndex = workspaces[currentWorkspaceIndex]
+                    .relays.firstIndex(where: { $0.id == relayID })
+            else { return }
+            let normalizedEndpoint = await client.baseURL.absoluteString
+            let host = URL(string: normalizedEndpoint)?.host
+                ?? "Host relay"
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex].name =
+                host
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .endpoint = normalizedEndpoint
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .isOnline = true
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .latencyMilliseconds = max(
+                    1,
+                    Int(Date().timeIntervalSince(started) * 1_000)
+                )
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .relayNamespaceID = namespace.id
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .namespaceSuffix = namespace.suffix
+            workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                .advertisedModules = [.host]
+            operationError = nil
+            persist()
+        } catch {
+            if
+                let currentWorkspaceIndex = activeWorkspaceIndex,
+                let currentRelayIndex = workspaces[currentWorkspaceIndex]
+                    .relays.firstIndex(where: { $0.id == relayID })
+            {
+                workspaces[currentWorkspaceIndex].relays[currentRelayIndex]
+                    .isOnline = false
+            }
+            if reportError {
+                operationError =
+                    "Host relay connection failed: \(error.localizedDescription)"
+            }
+            persist()
         }
     }
 
@@ -1057,6 +1203,205 @@ final class AppModel: ObservableObject {
         _ initialSite: SiteProject,
         workspaceID: UUID
     ) async {
+        if usesLiveRelay {
+            await executeHostedPublication(
+                initialSite,
+                workspaceID: workspaceID
+            )
+        } else {
+            await executeSimulationPublication(
+                initialSite,
+                workspaceID: workspaceID
+            )
+        }
+    }
+
+    private func executeHostedPublication(
+        _ initialSite: SiteProject,
+        workspaceID: UUID
+    ) async {
+        defer {
+            publicationInFlight = false
+            relayPublisherAuthorization = ""
+        }
+        transition(
+            to: .validate,
+            message: "Validating the address, source paths, and bounded website bundle."
+        )
+        guard
+            (try? NoctwebAddress.parse(initialSite.address)) != nil,
+            initialSite.relayNamespaceID.map(
+                RelayNamespace.isValidID
+            ) == true,
+            !initialSite.title.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ).isEmpty,
+            !initialSite.resolvedFiles.isEmpty,
+            initialSite.resolvedFiles.contains(
+                where: { $0.path == initialSite.resolvedEntryPath }
+            ),
+            let relay = workspaces
+                .first(where: { $0.id == workspaceID })?
+                .relays.first(where: {
+                    $0.isOnline
+                        && $0.supports(.host)
+                        && $0.relayNamespaceID
+                            == initialSite.relayNamespaceID
+                })
+        else {
+            failPublication(
+                "Connect the host relay selected by this site's namespace before publishing."
+            )
+            return
+        }
+
+        do {
+            let client = try NoctwebHostRelayClient(
+                endpoint: relay.endpoint
+            )
+            let configuration = try await client.discover(force: true)
+            guard let namespace = configuration.relayNamespace,
+                  namespace.id == initialSite.relayNamespaceID else {
+                throw NoctwebHostRelayError.invalidConfiguration
+            }
+            let previous = try initialSite.publishedEnvelope.map {
+                try CanonicalJSON.decode(
+                    HostedCapsuleEnvelope.self,
+                    from: $0
+                ).verified()
+            }
+
+            transition(
+                to: .sign,
+                message: "Signing this revision with its publication-scoped Keychain authority."
+            )
+            let expectedPublisherID: String
+            if let publisherID = initialSite.publisherID {
+                expectedPublisherID = publisherID
+            } else if let publisherID = previous?.object.publisherID {
+                expectedPublisherID = publisherID
+            } else {
+                expectedPublisherID =
+                    try await engine.preparePublisherIdentity(
+                        for: initialSite.id.uuidString.lowercased()
+                    )
+            }
+            let publication = try await engine.makeHostedPublication(
+                draft: try coreDraft(from: initialSite),
+                relayNamespace: namespace,
+                previous: previous,
+                expectedPublisherID: expectedPublisherID
+            )
+            let envelope = try CanonicalJSON.encode(publication)
+
+            transition(
+                to: .finalize,
+                message: "Submitting the signed revision to the real nw.net-host@1 endpoint."
+            )
+            let authorization = relayPublisherAuthorization
+            let put = try await client.put(
+                payload: envelope,
+                ttlSeconds: min(
+                    86_400,
+                    configuration.maximumRetentionSeconds
+                ),
+                authorization: authorization
+            )
+            transition(
+                to: .replicate,
+                message: "The relay retained \(put.receipt.byteCount) bytes until \(put.receipt.expiresAt.formatted())."
+            )
+
+            let fetched = try await client.fetch(
+                objectID: put.receipt.objectID
+            )
+            guard fetched.payload == envelope else {
+                throw NoctwebHostRelayError.invalidResponse
+            }
+            let verified = try CanonicalJSON.decode(
+                HostedCapsuleEnvelope.self,
+                from: fetched.payload
+            ).verified()
+            transition(
+                to: .verify,
+                message: "Verified the publisher signature, object digest, and relay storage receipt."
+            )
+
+            guard
+                let workspaceIndex = workspaces.firstIndex(
+                    where: { $0.id == workspaceID }
+                ),
+                let siteIndex = workspaces[workspaceIndex].sites.firstIndex(
+                    where: { $0.id == initialSite.id }
+                )
+            else {
+                failPublication(
+                    "The relay accepted the revision, but its local workspace was removed."
+                )
+                return
+            }
+            workspaces[workspaceIndex].sites[siteIndex].revision =
+                Int(verified.object.revision)
+            workspaces[workspaceIndex].sites[siteIndex].lastPublishedAt =
+                put.receipt.storedAt
+            workspaces[workspaceIndex].sites[siteIndex].objectID =
+                verified.head.claims.objectID
+            workspaces[workspaceIndex].sites[siteIndex].headID =
+                verified.headID
+            workspaces[workspaceIndex].sites[siteIndex].publisherID =
+                verified.object.publisherID
+            workspaces[workspaceIndex].sites[siteIndex].publishedEnvelope =
+                envelope
+            workspaces[workspaceIndex].sites[siteIndex].publicationIdentity =
+                .ready
+            workspaces[workspaceIndex].sites[siteIndex].hostRelayEndpoint =
+                relay.endpoint
+            workspaces[workspaceIndex].sites[siteIndex].hostObjectID =
+                put.receipt.objectID
+            workspaces[workspaceIndex].sites[siteIndex].hostingReceipt =
+                put.receipt
+            workspaces[workspaceIndex].relays[
+                workspaces[workspaceIndex].relays.firstIndex(
+                    where: { $0.id == relay.id }
+                )!
+            ].retainedObjects += 1
+
+            trustEvidence = Self.hostedEvidence(
+                publication: verified,
+                receipt: put.receipt,
+                relayName: relay.name
+            )
+            inspectorEvidenceID = trustEvidence.first?.id
+            publicationOutcome = .succeeded
+            publicationMessage =
+                "Revision \(verified.object.revision) is hosted and independently verified. This is not consensus finality."
+            draftChangedDuringPublication = false
+            persist()
+
+            runtimeAddress = verified.object.address
+            applyHostedPublication(
+                verified,
+                sourceSiteID: initialSite.id,
+                relayName: relay.name
+            )
+            if runtimeHistory.last != runtimeAddress {
+                runtimeHistory.append(runtimeAddress)
+                runtimeHistoryIndex = runtimeHistory.count - 1
+            }
+        } catch {
+            failPublication(error.localizedDescription)
+            trustEvidence = Self.rejectedEvidence(
+                for: error,
+                includeConsensus: false
+            )
+            inspectorEvidenceID = trustEvidence.first?.id
+        }
+    }
+
+    private func executeSimulationPublication(
+        _ initialSite: SiteProject,
+        workspaceID: UUID
+    ) async {
         defer {
             publicationInFlight = false
         }
@@ -1207,6 +1552,10 @@ final class AppModel: ObservableObject {
     }
 
     private func performResolution(_ address: String) async {
+        if usesLiveRelay {
+            await performHostedResolution(address)
+            return
+        }
         guard
             let site = workspaces
                 .flatMap(\.sites)
@@ -1240,6 +1589,100 @@ final class AppModel: ObservableObject {
                 runtimeResult = .unavailable(message: error.localizedDescription)
             }
         }
+    }
+
+    private func performHostedResolution(_ address: String) async {
+        guard
+            let site = workspaces
+                .flatMap(\.sites)
+                .first(where: { $0.address == address }),
+            let endpoint = site.hostRelayEndpoint,
+            let hostObjectID = site.hostObjectID
+        else {
+            runtimeResult = .unavailable(
+                message: "No verified relay-hosted revision was found for this address."
+            )
+            return
+        }
+        do {
+            let client = try NoctwebHostRelayClient(endpoint: endpoint)
+            let hosted = try await client.fetch(objectID: hostObjectID)
+            let publication = try CanonicalJSON.decode(
+                HostedCapsuleEnvelope.self,
+                from: hosted.payload
+            ).verified()
+            guard publication.object.address == address,
+                  publication.object.relayNamespaceID
+                    == site.relayNamespaceID else {
+                throw NoctwebHostRelayError.invalidResponse
+            }
+            trustEvidence = Self.hostedEvidence(
+                publication: publication,
+                receipt: hosted.receipt,
+                relayName: URL(string: endpoint)?.host ?? endpoint
+            )
+            inspectorEvidenceID = trustEvidence.first?.id
+            applyHostedPublication(
+                publication,
+                sourceSiteID: site.id,
+                relayName: URL(string: endpoint)?.host ?? endpoint
+            )
+        } catch {
+            trustEvidence = Self.rejectedEvidence(
+                for: error,
+                includeConsensus: false
+            )
+            inspectorEvidenceID = trustEvidence.first?.id
+            if Self.isVerificationFailure(error) {
+                runtimeResult = .rejected(message: error.localizedDescription)
+            } else {
+                runtimeResult = .unavailable(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func applyHostedPublication(
+        _ publication: HostedCapsuleEnvelope,
+        sourceSiteID: UUID,
+        relayName: String
+    ) {
+        let object = publication.object
+        let federation = FederationRoutingPolicy(
+            mode: activeWorkspace?.resolvedFederationMode ?? .solo,
+            directive: activeWorkspace?.resolvedFederationMode == .solo
+                ? .open
+                : activeWorkspace?.resolvedFederationRouteDirective ?? .open
+        )
+        let decision = RoutingPolicyResolver.resolve(
+            federation: federation,
+            relayOperator: .open,
+            publisher: object.routeDirective ?? .open,
+            visitor: routeMode.directive
+        )
+        guard decision.directive == .direct else {
+            runtimeResult = .unavailable(
+                message: "This publication requires a passthrough adapter, which is not configured for the connected host relay."
+            )
+            return
+        }
+        let snapshot = ResolvedSiteSnapshot(
+            sourceSiteID: sourceSiteID,
+            address: object.address,
+            relayNamespaceID: object.relayNamespaceID,
+            title: object.title,
+            subtitle: object.subtitle,
+            body: object.body,
+            accentHex: object.accentHex,
+            revision: object.revision,
+            objectID: publication.head.claims.objectID,
+            publisherID: object.publisherID,
+            bundle: object.bundle ?? legacyBundle(from: object),
+            routingDecision: decision
+        )
+        runtimeResult = .resolved(
+            snapshot: snapshot,
+            relayPath: [relayName]
+        )
     }
 
     private func applyResolution(
@@ -1631,6 +2074,51 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private static func removeDevelopmentFixtures(
+        in workspaces: inout [Workspace]
+    ) {
+        let fixtureRelayIDs: Set<String> = [
+            "standard-local",
+            "passthrough-atlantic",
+            "host-lisbon",
+            "host-salvador",
+        ]
+        let localRelay = Workspace.liveStarter().relays[0]
+        for workspaceIndex in workspaces.indices {
+            workspaces[workspaceIndex].relays.removeAll { relay in
+                fixtureRelayIDs.contains(relay.id)
+                    || URL(string: relay.endpoint)?.host?
+                        .hasSuffix(".invalid") == true
+            }
+            if workspaces[workspaceIndex].relays.isEmpty {
+                workspaces[workspaceIndex].relays = [localRelay]
+            }
+            workspaces[workspaceIndex].runs.removeAll()
+            for siteIndex in workspaces[workspaceIndex].sites.indices {
+                guard
+                    let data = workspaces[workspaceIndex].sites[siteIndex]
+                        .publishedEnvelope,
+                    (try? CanonicalJSON.decode(
+                        PublishedCapsule.self,
+                        from: data
+                    )) != nil
+                else { continue }
+                workspaces[workspaceIndex].sites[siteIndex].revision = 0
+                workspaces[workspaceIndex].sites[siteIndex].lastPublishedAt =
+                    nil
+                workspaces[workspaceIndex].sites[siteIndex].objectID = nil
+                workspaces[workspaceIndex].sites[siteIndex].headID = nil
+                workspaces[workspaceIndex].sites[siteIndex]
+                    .publishedEnvelope = nil
+                workspaces[workspaceIndex].sites[siteIndex]
+                    .hostRelayEndpoint = nil
+                workspaces[workspaceIndex].sites[siteIndex].hostObjectID = nil
+                workspaces[workspaceIndex].sites[siteIndex].hostingReceipt =
+                    nil
+            }
+        }
+    }
+
     private static func migrateRoutingPolicies(
         in workspaces: inout [Workspace]
     ) {
@@ -1775,6 +2263,52 @@ final class AppModel: ObservableObject {
                     "Stored on \(publication.hostRelayIDs.count) host relay\(publication.hostRelayIDs.count == 1 ? "" : "s")",
                 detail:
                     "Only host relays retain the immutable object: \(publication.hostRelayIDs.joined(separator: ", ")).",
+                checkedAt: now
+            ),
+        ]
+    }
+
+    private static func hostedEvidence(
+        publication: HostedCapsuleEnvelope,
+        receipt: NoctwebHostingReceipt,
+        relayName: String
+    ) -> [TrustEvidence] {
+        let now = Date()
+        return [
+            TrustEvidence(
+                id: UUID(),
+                kind: .objectIntegrity,
+                state: .accepted,
+                summary: "Canonical object digest matched",
+                detail:
+                    "\(publication.head.claims.objectID) matches the signed immutable capsule bytes.",
+                checkedAt: now
+            ),
+            TrustEvidence(
+                id: UUID(),
+                kind: .publicationIdentity,
+                state: .accepted,
+                summary: "Publisher signature accepted",
+                detail:
+                    "\(publication.object.publisherID) signed revision \(publication.object.revision) with its publication-scoped authority.",
+                checkedAt: now
+            ),
+            TrustEvidence(
+                id: UUID(),
+                kind: .hostReceipt,
+                state: .accepted,
+                summary: "Relay storage receipt verified",
+                detail:
+                    "\(relayName) signed its receipt for host object \(receipt.objectID). The receipt expires \(receipt.expiresAt.formatted()).",
+                checkedAt: now
+            ),
+            TrustEvidence(
+                id: UUID(),
+                kind: .replication,
+                state: .accepted,
+                summary: "One host copy verified",
+                detail:
+                    "The connected relay returned the exact signed capsule bytes. Hosting does not imply consensus naming or finality.",
                 checkedAt: now
             ),
         ]
@@ -2016,8 +2550,12 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("product-workspaces-v1.json")
     }
 
-    private static func pendingEvidence() -> [TrustEvidence] {
-        TrustEvidenceKind.allCases.map {
+    private static func pendingEvidence(
+        includeConsensus: Bool = true
+    ) -> [TrustEvidence] {
+        TrustEvidenceKind.allCases
+            .filter { includeConsensus || $0 != .consensusFinality }
+            .map {
             TrustEvidence(
                 id: UUID(),
                 kind: $0,
@@ -2027,13 +2565,16 @@ final class AppModel: ObservableObject {
                     "Publish and resolve a revision to evaluate this evidence independently.",
                 checkedAt: nil
             )
-        }
+            }
     }
 
     private static func rejectedEvidence(
-        for error: any Error
+        for error: any Error,
+        includeConsensus: Bool = true
     ) -> [TrustEvidence] {
-        TrustEvidenceKind.allCases.map { kind in
+        TrustEvidenceKind.allCases
+            .filter { includeConsensus || $0 != .consensusFinality }
+            .map { kind in
             TrustEvidence(
                 id: UUID(),
                 kind: kind,
@@ -2044,7 +2585,7 @@ final class AppModel: ObservableObject {
                 detail: error.localizedDescription,
                 checkedAt: Date()
             )
-        }
+            }
     }
 
     private static func isVerificationFailure(_ error: any Error) -> Bool {

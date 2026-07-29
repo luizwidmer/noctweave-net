@@ -52,8 +52,8 @@ enum PublicationStage: Int, CaseIterable, Codable, Identifiable {
         case .draft: "Draft"
         case .validate: "Validate"
         case .sign: "Sign"
-        case .finalize: "Finalize"
-        case .replicate: "Replicate"
+        case .finalize: "Host"
+        case .replicate: "Fetch"
         case .verify: "Verify"
         }
     }
@@ -63,8 +63,8 @@ enum PublicationStage: Int, CaseIterable, Codable, Identifiable {
         case .draft: "pencil.line"
         case .validate: "checkmark.seal"
         case .sign: "signature"
-        case .finalize: "checkmark.circle"
-        case .replicate: "square.3.layers.3d"
+        case .finalize: "externaldrive.badge.plus"
+        case .replicate: "arrow.down.doc"
         case .verify: "shield.checkered"
         }
     }
@@ -189,6 +189,7 @@ struct LabRelayNode: Identifiable, Codable, Hashable {
 enum TrustEvidenceKind: String, CaseIterable, Codable, Identifiable {
     case objectIntegrity
     case publicationIdentity
+    case hostReceipt
     case consensusFinality
     case replication
 
@@ -198,6 +199,7 @@ enum TrustEvidenceKind: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .objectIntegrity: "Object integrity"
         case .publicationIdentity: "Publication identity"
+        case .hostReceipt: "Host receipt"
         case .consensusFinality: "Consensus finality"
         case .replication: "Host replication"
         }
@@ -207,6 +209,7 @@ enum TrustEvidenceKind: String, CaseIterable, Codable, Identifiable {
         switch self {
         case .objectIntegrity: "number"
         case .publicationIdentity: "signature"
+        case .hostReceipt: "externaldrive.badge.checkmark"
         case .consensusFinality: "checkmark.seal"
         case .replication: "square.3.layers.3d"
         }
@@ -391,6 +394,9 @@ struct SiteProject: Identifiable, Codable, Hashable {
     var entryPath: String? = nil
     var files: [SiteSourceFile]? = nil
     var blocks: [SiteBlock]? = nil
+    var hostRelayEndpoint: String? = nil
+    var hostObjectID: String? = nil
+    var hostingReceipt: NoctwebHostingReceipt? = nil
 
     var resolvedProjectKind: SiteProjectKind {
         projectKind ?? .visual
@@ -515,6 +521,32 @@ struct Workspace: Identifiable, Codable, Hashable {
 }
 
 extension Workspace {
+    static func liveStarter() -> Workspace {
+        Workspace(
+            id: UUID(),
+            name: "Hosted development",
+            createdAt: Date(),
+            sites: [],
+            relays: [
+                LabRelayNode(
+                    id: "local-host-relay",
+                    name: "Local host relay",
+                    role: .host,
+                    endpoint: "http://127.0.0.1:9440",
+                    region: "Local",
+                    isOnline: false,
+                    latencyMilliseconds: 0,
+                    retainedObjects: 0,
+                    advertisedModules: [.host],
+                    operatorRouteDirective: .open
+                )
+            ],
+            runs: [],
+            federationMode: .solo,
+            federationRouteDirective: .open
+        )
+    }
+
     static func starter() -> Workspace {
         let topology = RelayTopology.labDefault
         let primaryNamespace = try! topology.nodes

@@ -2,11 +2,12 @@
 
 - Status: Accepted
 - Date: 2026-07-25
+- Amended by: ADR 0010
 
 ## Context
 
 Noctweb Lab holds publication authority, verifies signed heads and immutable
-objects, simulates relay faults, and renders the result. Delivering that product
+objects, and renders the result. Delivering that product
 as an ordinary hosted application would make a web origin and hosting provider
 part of the application lifecycle and would confuse the test platform with a
 Noctweb website.
@@ -35,16 +36,17 @@ Noctweb Lab is a native macOS SwiftUI application distributed as a signed
   access. WebKit's networking process requires the network-client entitlement;
   the verified custom-scheme loader, content security policy, navigation
   delegate, and WebRTC guard enforce the website-level network boundary.
-- Network and consensus behavior is accessed through replaceable native
-  adapters. The initial adapters are deterministic local simulations.
+- Host behavior is accessed through the real `nw.net-host@1` API. The Lab
+  discovers relay configuration, submits signed envelopes, fetches them back,
+  and verifies hosting receipts. Deterministic adapters remain test-only.
 - A future browser extension may hand off `noct://` links, but cannot own keys,
   consensus verification, capabilities, or execution.
 
 ## Consequences
 
 - The Lab has an explicit macOS 14 or later platform boundary.
-- A local package build can produce a launchable application without a web
-  server, browser, or network connection.
+- A local package build can produce a launchable application without a browser
+  or hosted app shell. Hosting and retrieval require a connected host relay.
 - WebKit is a bounded website-execution component inside the verified native
   product; it does not make the Lab a hosted web app or browser wrapper.
 - Native code signing and Keychain identity must remain stable across releases.

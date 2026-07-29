@@ -284,24 +284,28 @@ is evaluated only after federation, host-operator, and signed publisher policy.
 Query- or fragment-bearing addresses stay out of local history and bookmarks
 until the capability URL grammar is frozen.
 
-The built-in profile is deliberately labeled **Development fixture**, never
-**Finalized**. Production consensus resolution, authenticated host and
-passthrough retrieval adapters, network-profile import, permissions, and
-verified offline cache remain. The current relay viewer remains a
-Hosted-preview bridge until those production adapters and a selected consensus
-profile exist.
+The built-in deterministic profile is deliberately labeled **Development
+fixture**, never **Finalized**. Separately, the Browser can open a Lab-hosted
+development publication by reading its recorded host endpoint and object
+identifier, re-fetching the object, and independently verifying the hosted
+envelope and signed relay receipt. This produces **Hosted preview**, not
+consensus finality. Production consensus resolution, authenticated
+passthrough retrieval, network-profile import, permissions, and verified
+offline cache remain.
 
-This repository also documents the relay integration contract; Noctweb Lab
-currently exercises matching deterministic in-process adapters rather than
-connecting to operator relay endpoints. The Lab is a runnable native macOS
-application for the explicitly incompatible `noctweb-lab-v3` profile, whose
-publisher routing directive is signed with the publication. Existing v2
-relay-namespace publications remain verifiable and upgradeable; v1 remains
-legacy read-only. The Lab edits
+This repository also documents the relay integration contract. Noctweb Lab now
+connects directly to real `nw.net-host@1` operator endpoints: it discovers the
+relay namespace, submits a publisher-signed hosted envelope, fetches the exact
+object back, and verifies the digest, publisher signature, and signed hosting
+receipt. Publisher authorization is memory-only. Mock consensus and
+deterministic relay topology remain test fixtures and are not exposed as the
+product network. The Lab is a runnable native macOS application for the
+explicitly incompatible hosted development profile. The Lab edits
 ordinary HTML, CSS, JavaScript, and asset files; imports production builds from
 tools such as React and Vite; publishes with publication-scoped Keychain
-identities; simulates all three relay roles; allocates canonical `noct://`
-names; and resolves through the effective direct or one-hop policy. Verified
+identities; obtains provisional `noct://` namespaces from connected host
+relays; and resolves hosted revisions through the effective direct policy.
+Verified
 client-side
 sites run in a publication-scoped, network-isolated WebKit canvas
 inside the App Sandbox. Project, workspace, source-file, visual-block, and

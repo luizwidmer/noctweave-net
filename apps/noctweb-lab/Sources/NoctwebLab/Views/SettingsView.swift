@@ -1,3 +1,4 @@
+import NoctwebLabCore
 import NoctwebUI
 import SwiftUI
 
@@ -22,7 +23,7 @@ struct SettingsView: View {
             Section("Workspace Storage") {
                 LabeledContent("Mode", value: "Local persistent workspace")
                 LabeledContent("Saved workspaces", value: "\(model.workspaces.count)")
-                Text("Site drafts, topology settings, and test runs are stored on this Mac. Protocol identity is not derived from an application account.")
+                Text("Site drafts and relay endpoints are stored on this Mac. Publisher authorization is never saved, and protocol identity is not derived from an application account.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -33,13 +34,6 @@ struct SettingsView: View {
                 LabeledContent("Renderer", value: "Isolated WebKit")
                 LabeledContent("Website scripts", value: "Same-publication only")
                 Text("Every site has a publisher-scoped Keychain identity. Only verified bundle bytes run, with no native bridge and website access to external network resources blocked by runtime policy.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Test Runs") {
-                Toggle("Preserve run history", isOn: $model.preserveRunHistory)
-                Text("Saved runs include scenario steps and assertions, but never plaintext private communications or secret key material.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -55,11 +49,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Experimental Profile") {
-                LabeledContent("Profile", value: "noctweb-lab-v3")
-                LabeledContent("Bundle limit", value: "512 files · 16 MB")
-                LabeledContent("Consensus", value: "Deterministic test adapter")
-                Text("This profile includes hierarchical route policy and remains a development surface, not a stable Noctweave Net wire format.")
+            Section("Hosted Profile") {
+                LabeledContent("Capsule", value: HostedCapsuleEnvelope.profile)
+                LabeledContent("Bundle limit", value: "1 MiB per hosted object")
+                LabeledContent("Relay module", value: "nw.net-host@1")
+                LabeledContent("Consensus", value: "Not claimed")
+                Text("The Lab verifies publisher signatures, content hashes, and relay hosting receipts. A successful host operation does not establish global naming or finality.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
