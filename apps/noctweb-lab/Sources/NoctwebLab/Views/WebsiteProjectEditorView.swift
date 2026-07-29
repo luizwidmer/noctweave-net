@@ -114,6 +114,7 @@ struct WebsiteProjectEditorView: View {
     @State private var sourceDraft = ""
     @State private var sourceDraftFileID: UUID?
     @State private var sourceSaveStatus = "Saved locally"
+    @State private var showsDesignInspector = false
     @State private var showingImporter = false
     @State private var pathPrompt: EditorPathPrompt?
     @State private var destructiveAction: EditorDestructiveAction?
@@ -272,6 +273,21 @@ struct WebsiteProjectEditorView: View {
 
             Spacer(minLength: 8)
 
+            if mode == .design {
+                Button {
+                    showsDesignInspector.toggle()
+                } label: {
+                    Label(
+                        showsDesignInspector ? "Done Editing" : "Edit Block",
+                        systemImage: showsDesignInspector
+                            ? "checkmark"
+                            : "slider.horizontal.3"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .tint(showsDesignInspector ? .accentColor : .secondary)
+            }
+
             StatusPill(
                 title: site.resolvedProjectKind.title,
                 systemImage: site.resolvedProjectKind == .visual
@@ -328,33 +344,25 @@ struct WebsiteProjectEditorView: View {
             }
             .padding(24)
         } else {
-            GeometryReader { proxy in
-                if proxy.size.width >= 1_040 {
-                    HSplitView {
-                        blockNavigator
-                            .frame(minWidth: 210, idealWidth: 230, maxWidth: 260)
-                        designCanvas
-                            .frame(minWidth: 360)
-                        blockInspector
-                            .frame(minWidth: 280, idealWidth: 310, maxWidth: 360)
-                    }
-                } else if proxy.size.width >= 700 {
-                    HSplitView {
-                        blockNavigator
-                            .frame(minWidth: 200, idealWidth: 220, maxWidth: 250)
-                        VSplitView {
+            VStack(spacing: 0) {
+                compactBlockNavigator
+                Divider()
+                GeometryReader { proxy in
+                    if showsDesignInspector && proxy.size.width >= 760 {
+                        HSplitView {
                             designCanvas
-                                .frame(minHeight: 240, idealHeight: 320)
+                                .frame(minWidth: 420)
                             blockInspector
-                                .frame(minHeight: 260)
+                                .frame(
+                                    minWidth: 300,
+                                    idealWidth: 330,
+                                    maxWidth: 380
+                                )
                         }
-                            .frame(minWidth: 360)
-                    }
-                } else {
-                    VStack(spacing: 0) {
-                        compactBlockNavigator
-                        Divider()
+                    } else if showsDesignInspector {
                         blockInspector
+                    } else {
+                        designCanvas
                     }
                 }
             }
@@ -400,6 +408,7 @@ struct WebsiteProjectEditorView: View {
                         block in
                         Button {
                             selectedBlockID = block.id
+                            showsDesignInspector = true
                         } label: {
                             Label(
                                 block.heading.isEmpty
@@ -488,10 +497,21 @@ struct WebsiteProjectEditorView: View {
     }
 
     private var blockInspector: some View {
-        Group {
-            if let block = selectedBlock {
-                ScrollView {
-                    Form {
+        VStack(spacing: 0) {
+            paneHeader("Edit Block", systemImage: "slider.horizontal.3") {
+                Button {
+                    showsDesignInspector = false
+                } label: {
+                    Label("Done", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderless)
+            }
+            Divider()
+
+            Group {
+                if let block = selectedBlock {
+                    ScrollView {
+                        Form {
                         Section("Publication") {
                             Picker(
                                 "Relay namespace",
@@ -637,15 +657,18 @@ struct WebsiteProjectEditorView: View {
                             }
                         }
                     }
-                    .formStyle(.grouped)
-                    .padding(.bottom, 16)
+                        .formStyle(.grouped)
+                        .padding(.bottom, 16)
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "Select a Block",
+                        systemImage: "square.dashed",
+                        description: Text(
+                            "Choose a page block to edit its content and layout."
+                        )
+                    )
                 }
-            } else {
-                ContentUnavailableView(
-                    "Select a Block",
-                    systemImage: "square.dashed",
-                    description: Text("Choose a page block to edit its content and layout.")
-                )
             }
         }
         .background(Color(nsColor: .controlBackgroundColor))

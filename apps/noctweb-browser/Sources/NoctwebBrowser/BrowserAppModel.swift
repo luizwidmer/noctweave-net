@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+@preconcurrency import NoctweaveCore
 import NoctwebBrowserCore
 import SwiftUI
 
@@ -28,6 +30,16 @@ private struct BrowserPersistentState: Codable {
     let history: [NoctwebHistoryEntry]
     let lastProfileID: String
     let lastAddress: String
+    let relayEndpoint: String?
+    let relayProfile: NoctwebNetworkProfile?
+}
+
+enum BrowserRelayConnectionState: Equatable {
+    case notConfigured
+    case saved(String)
+    case checking
+    case connected(String)
+    case failed(String)
 }
 
 @MainActor
@@ -64,6 +76,10 @@ final class BrowserAppModel: ObservableObject {
     @Published var showsSidebar = true
     @Published var showsTrustInspector = false
     @Published var sidebarSection: BrowserSidebarSection = .bookmarks
+    @Published var relayEndpointText: String
+    @Published private(set) var activeRelayEndpoint: String?
+    @Published private(set) var relayConnectionState:
+        BrowserRelayConnectionState
     @Published private(set) var sitesByTab: [UUID: VerifiedNoctwebSite] = [:]
     @Published private(set) var errorsByTab: [UUID: String] = [:]
     @Published private(set) var blockedNoticesByTab: [UUID: String] = [:]
@@ -73,13 +89,17 @@ final class BrowserAppModel: ObservableObject {
 
     private let resolver: any NoctwebResolving
     private let persistenceStore: BrowserPersistenceStore
+    private let usesDevelopmentFixtures: Bool
     private var resolutionTasksByTab: [UUID: Task<Void, Never>] = [:]
     private var resolutionGenerationByTab: [UUID: UUID] = [:]
     private var backStackByTab: [UUID: [String]] = [:]
     private var forwardStackByTab: [UUID: [String]] = [:]
     private var hasStarted = false
 
-    init(persistenceStore: BrowserPersistenceStore = .standard) {
+    init(
+        persistenceStore: BrowserPersistenceStore = .standard,
+        useDevelopmentFixtures: Bool = false
+    ) {
         let environment: (
             profile: NoctwebNetworkProfile,
             resolver: DeterministicNoctwebResolver,
@@ -92,29 +112,51 @@ final class BrowserAppModel: ObservableObject {
         }
 
         self.persistenceStore = persistenceStore
-        resolver = DevelopmentNoctwebResolver(
-            fixtureResolver: environment.resolver
-        )
+        usesDevelopmentFixtures = useDevelopmentFixtures
 
         let persisted = persistenceStore.load()
-        let initialProfileID: String
-        if persisted?.lastProfileID == environment.profile.id {
-            initialProfileID = environment.profile.id
-        } else {
-            initialProfileID = environment.profile.id
-        }
+        let profile: NoctwebNetworkProfile
         let initialAddress: String
-        if let value = persisted?.lastAddress,
-           (try? NoctwebNavigationURL(parsing: value)) != nil {
-            initialAddress = value
+        if useDevelopmentFixtures {
+            resolver = DevelopmentNoctwebResolver(
+                fixtureResolver: environment.resolver
+            )
+            profile = environment.profile
+            if let value = persisted?.lastAddress,
+               (try? NoctwebNavigationURL(parsing: value)) != nil {
+                initialAddress = value
+            } else {
+                initialAddress = environment.welcomeURL.canonicalString
+            }
+            relayEndpointText = ""
+            activeRelayEndpoint = nil
+            relayConnectionState = .connected(
+                environment.profile.displayName
+            )
         } else {
-            initialAddress = environment.welcomeURL.canonicalString
+            resolver = FederatedNoctwebResolver()
+            profile = persisted?.relayProfile
+                ?? Self.unconfiguredProfile()
+            let savedEndpoint = persisted?.relayEndpoint
+            relayEndpointText = savedEndpoint ?? ""
+            activeRelayEndpoint = savedEndpoint
+            relayConnectionState = persisted?.relayProfile.map {
+                .saved($0.displayName)
+            } ?? .notConfigured
+            if persisted?.relayProfile != nil,
+               let value = persisted?.lastAddress,
+               value != Self.blankAddress,
+               (try? NoctwebNavigationURL(parsing: value)) != nil {
+                initialAddress = value
+            } else {
+                initialAddress = Self.blankAddress
+            }
         }
 
         do {
             session = try NoctwebBrowserSession(
-                profiles: [environment.profile],
-                selectedProfileID: initialProfileID,
+                profiles: [profile],
+                selectedProfileID: profile.id,
                 initialAddress: initialAddress
             )
         } catch {
@@ -128,7 +170,7 @@ final class BrowserAppModel: ObservableObject {
             )
         }
         visitorDirectiveByTab[session.selectedTabID] =
-            environment.profile.defaultVisitorDirective
+            profile.defaultVisitorDirective
     }
 
     var selectedTab: NoctwebBrowserTab {
@@ -160,6 +202,15 @@ final class BrowserAppModel: ObservableObject {
             selectedProfile.defaultVisitorDirective
     }
 
+    var relayIsConfigured: Bool {
+        usesDevelopmentFixtures
+            || (
+                activeRelayEndpoint != nil
+                    && !selectedProfile.bootstrapEndpoints.isEmpty
+                    && !selectedProfile.namespaceSigners.isEmpty
+            )
+    }
+
     var canGoBack: Bool {
         !(backStackByTab[session.selectedTabID] ?? []).isEmpty
     }
@@ -185,7 +236,18 @@ final class BrowserAppModel: ObservableObject {
     func startIfNeeded() {
         guard !hasStarted else { return }
         hasStarted = true
-        navigate(to: addressText, pushCurrentAddress: false)
+        if usesDevelopmentFixtures {
+            navigate(to: addressText, pushCurrentAddress: false)
+            return
+        }
+        guard relayIsConfigured else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            await self.connectRelay(
+                navigateAfterConnection:
+                    self.addressText != Self.blankAddress
+            )
+        }
     }
 
     func navigateFromAddressBar() {
@@ -196,6 +258,14 @@ final class BrowserAppModel: ObservableObject {
         to rawAddress: String,
         pushCurrentAddress: Bool = true
     ) {
+        guard relayIsConfigured else {
+            failSelectedTab(
+                NoctwebBrowserError.blocked(
+                    "choose and verify a relay before opening Noctweb addresses"
+                )
+            )
+            return
+        }
         let parsed: NoctwebNavigationURL
         do {
             parsed = try NoctwebNavigationURL(
@@ -271,22 +341,138 @@ final class BrowserAppModel: ObservableObject {
 
     func addTab() {
         do {
-            let address = DeterministicNoctwebResolver.welcomeURLString
+            let address = Self.blankAddress
             let tabID = try session.addTab(address: address)
             visitorDirectiveByTab[tabID] =
                 selectedProfile.defaultVisitorDirective
             addressText = address
             reloadTokensByTab[tabID] = UUID()
-            navigate(to: address, pushCurrentAddress: false)
+            if relayIsConfigured {
+                try? session.updateTab(
+                    id: tabID,
+                    address: address,
+                    title: "New Tab",
+                    state: .idle
+                )
+            }
         } catch {
             failSelectedTab(error)
         }
     }
 
+    func connectRelay(
+        navigateAfterConnection: Bool = false
+    ) async {
+        guard !usesDevelopmentFixtures else { return }
+        let requested = relayEndpointText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        relayConnectionState = .checking
+        do {
+            let endpoint = try RelayEndpointParser.parse(requested)
+            let canonicalEndpoint = try Self.canonicalEndpointString(endpoint)
+            let response = try await RelayClient(endpoint: endpoint)
+                .send(.info(), timeout: 8)
+            guard response.status == .success,
+                  case .relayInfo(let info)? = response.successBody,
+                  try info.isStructurallyValidThrowing,
+                  let identity = info.relayIdentity,
+                  try identity.verifyThrowing(at: info.advertisedAt) else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay did not return a valid signed identity"
+                )
+            }
+            let providesHosting =
+                info.protocolCapabilities?.supports(
+                    module: "nw.net-host",
+                    version: 1
+                ) == true
+            let providesFederatedRetrieval =
+                info.protocolCapabilities?.supports(
+                    module: "nw.federation-forward",
+                    version: 1
+                ) == true
+            guard providesHosting
+                    || (
+                        info.federation.mode != .solo
+                            && providesFederatedRetrieval
+                    ) else {
+                throw NoctwebBrowserError.blocked(
+                    "this relay does not advertise Noctweb hosting or federated retrieval"
+                )
+            }
+
+            if canonicalEndpoint == activeRelayEndpoint,
+               let pinned = selectedProfile.namespaceSigners.first,
+               (
+                   pinned.relayID != identity.claim.relayID.rawValue
+                       || pinned.signingPublicKey
+                           != identity.claim.signingPublicKey
+               ) {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay identity changed; forget the saved relay before trusting a replacement"
+                )
+            }
+
+            let profile = try Self.makeRelayProfile(
+                endpoint: endpoint,
+                info: info
+            )
+            try session.replaceProfile(
+                profile,
+                replacing: selectedProfile.id
+            )
+            activeRelayEndpoint = canonicalEndpoint
+            relayEndpointText = canonicalEndpoint
+            relayConnectionState = .connected(profile.displayName)
+            visitorDirectiveByTab[session.selectedTabID] =
+                profile.defaultVisitorDirective
+            errorsByTab[session.selectedTabID] = nil
+            persist()
+
+            if navigateAfterConnection,
+               addressText != Self.blankAddress {
+                navigate(
+                    to: addressText,
+                    pushCurrentAddress: false
+                )
+            }
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            relayConnectionState = .failed(message)
+        }
+    }
+
+    func forgetRelay() {
+        guard !usesDevelopmentFixtures else { return }
+        resolutionTasksByTab.values.forEach { $0.cancel() }
+        resolutionTasksByTab.removeAll()
+        resolutionGenerationByTab.removeAll()
+        let profile = Self.unconfiguredProfile()
+        try? session.replaceProfile(
+            profile,
+            replacing: selectedProfile.id
+        )
+        activeRelayEndpoint = nil
+        relayEndpointText = ""
+        relayConnectionState = .notConfigured
+        addressText = Self.blankAddress
+        sitesByTab[session.selectedTabID] = nil
+        errorsByTab[session.selectedTabID] = nil
+        blockedNoticesByTab[session.selectedTabID] = nil
+        try? session.updateSelectedTab(
+            address: Self.blankAddress,
+            title: "New Tab",
+            state: .idle
+        )
+        persist()
+    }
+
     func selectTab(_ id: UUID) {
         session.selectTab(id: id)
         addressText = session.selectedTab.address
-        if sitesByTab[id] == nil,
+        if relayIsConfigured,
+           sitesByTab[id] == nil,
            session.selectedTab.verificationState != .resolving {
             navigate(to: session.selectedTab.address, pushCurrentAddress: false)
         }
@@ -356,7 +542,9 @@ final class BrowserAppModel: ObservableObject {
 
     func setVisitorDirective(_ directive: RouteDirective) {
         visitorDirectiveByTab[session.selectedTabID] = directive
-        reload()
+        if relayIsConfigured {
+            reload()
+        }
     }
 
     func toggleSidebar() {
@@ -627,7 +815,7 @@ final class BrowserAppModel: ObservableObject {
         try? session.updateTab(
             id: tabID,
             address: session.tabs.first(where: { $0.id == tabID })?.address ??
-                DeterministicNoctwebResolver.welcomeURLString,
+                Self.blankAddress,
             title: "Unable to open",
             state: .failed
         )
@@ -655,10 +843,126 @@ final class BrowserAppModel: ObservableObject {
                 bookmarks: session.bookmarks,
                 history: session.history,
                 lastProfileID: selectedProfile.id,
-                lastAddress: session.selectedTab.address
+                lastAddress: session.selectedTab.address,
+                relayEndpoint: activeRelayEndpoint,
+                relayProfile: usesDevelopmentFixtures
+                    ? nil
+                    : (relayIsConfigured ? selectedProfile : nil)
             )
         )
     }
+
+    static func makeRelayProfile(
+        endpoint: RelayEndpoint,
+        info: RelayInfo
+    ) throws -> NoctwebNetworkProfile {
+        guard try info.isStructurallyValidThrowing,
+              let identity = info.relayIdentity,
+              try identity.verifyThrowing(at: info.advertisedAt) else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the relay identity is invalid"
+            )
+        }
+        guard let federationMode = NoctwebBrowserCore.FederationMode(
+            rawValue: info.federation.mode.rawValue
+        ) else {
+            throw NoctwebBrowserError.invalidNetworkProfile(
+                "the relay federation mode is unsupported"
+            )
+        }
+        let relayID = identity.claim.relayID.rawValue
+        let trustDomainID = relayTrustDomainID(relayID)
+        let displayName: String
+        if let relayName = info.relayName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !relayName.isEmpty,
+           relayName.utf8.count <= 80 {
+            displayName = relayName
+        } else {
+            displayName = endpoint.host
+        }
+        return try NoctwebNetworkProfile(
+            id: Self.relayProfileID,
+            displayName: displayName,
+            routingTrustDomainID: trustDomainID,
+            consensusProfileID: "noctweb.namespace.v1",
+            verificationKey: Data(
+                SHA256.hash(data: identity.claim.signingPublicKey)
+            ),
+            bootstrapEndpoints: [
+                try canonicalEndpointURL(endpoint),
+            ],
+            supportedEpochs: [1],
+            federationMode: federationMode,
+            namespaceFederationName: info.federation.name,
+            federationDirective: .open,
+            defaultVisitorDirective: .open,
+            namespaceSigners: [
+                NoctwebNamespaceSigner(
+                    relayID: relayID,
+                    signingPublicKey: identity.claim.signingPublicKey
+                ),
+            ],
+            namespaceThreshold: 1
+        )
+    }
+
+    static func canonicalEndpointString(
+        _ endpoint: RelayEndpoint
+    ) throws -> String {
+        try canonicalEndpointURL(endpoint).absoluteString
+    }
+
+    nonisolated static func relayTrustDomainID(_ relayID: String) -> String {
+        "sha256:" + String(relayID.dropFirst(4))
+    }
+
+    private static func canonicalEndpointURL(
+        _ endpoint: RelayEndpoint
+    ) throws -> URL {
+        var components = URLComponents()
+        switch endpoint.transport {
+        case .tcp:
+            components.scheme = endpoint.useTLS ? "tls" : "tcp"
+        case .http:
+            components.scheme = endpoint.useTLS ? "https" : "http"
+        case .websocket:
+            components.scheme = endpoint.useTLS ? "wss" : "ws"
+        }
+        components.host = endpoint.host
+        components.port = Int(endpoint.port)
+        guard let url = components.url else {
+            throw NoctwebBrowserError.invalidNetworkProfile(
+                "the relay endpoint is invalid"
+            )
+        }
+        return url
+    }
+
+    private static func unconfiguredProfile() -> NoctwebNetworkProfile {
+        do {
+            return try NoctwebNetworkProfile(
+                id: relayProfileID,
+                displayName: "No relay selected",
+                routingTrustDomainID:
+                    "sha256:" + String(repeating: "0", count: 64),
+                consensusProfileID: "noctweb.unconfigured",
+                verificationKey: Data(repeating: 0, count: 32),
+                bootstrapEndpoints: [],
+                supportedEpochs: [1],
+                federationMode: .solo,
+                federationDirective: .open,
+                defaultVisitorDirective: .open
+            )
+        } catch {
+            preconditionFailure(
+                "The built-in empty browser profile is invalid: \(error)"
+            )
+        }
+    }
+
+    private static let relayProfileID = "selected-relay"
+    private static let blankAddress = "noct://start.unconfigured/"
 
     private func append(
         _ address: String,

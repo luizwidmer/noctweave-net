@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
-    @Published var selection: ProductSection? = .overview
+    @Published var selection: ProductSection? = .sites
     @Published private(set) var workspaces: [Workspace]
     @Published var activeWorkspaceID: UUID?
     @Published var selectedSiteID: UUID?
@@ -139,6 +139,9 @@ final class AppModel: ObservableObject {
             includeConsensus: !self.usesLiveRelay
         )
         inspectorEvidenceID = trustEvidence.first?.id
+        if self.usesLiveRelay {
+            persist()
+        }
 
         Task { [weak self] in
             if self?.usesLiveRelay == true {
@@ -2098,17 +2101,33 @@ final class AppModel: ObservableObject {
             "host-lisbon",
             "host-salvador",
         ]
-        let localRelay = Workspace.liveStarter().relays[0]
         for workspaceIndex in workspaces.indices {
+            let isStarterWorkspace =
+                workspaces[workspaceIndex].name
+                    == "Local development"
             workspaces[workspaceIndex].relays.removeAll { relay in
                 fixtureRelayIDs.contains(relay.id)
                     || URL(string: relay.endpoint)?.host?
                         .hasSuffix(".invalid") == true
             }
-            if workspaces[workspaceIndex].relays.isEmpty {
-                workspaces[workspaceIndex].relays = [localRelay]
-            }
             workspaces[workspaceIndex].runs.removeAll()
+            workspaces[workspaceIndex].sites.removeAll {
+                $0.title == "A garden with no address"
+                    && $0.subtitle
+                        == "Field notes from a site that belongs to its publisher, not its host."
+                    && $0.accentHex.uppercased() == "#4F8F77"
+                    && (
+                        $0.address == "noct://quiet-garden/"
+                            || (try? NoctwebAddress.parse($0.address))?.siteLabel
+                                == "quiet-garden"
+                    )
+            }
+            if isStarterWorkspace {
+                workspaces[workspaceIndex].name = "My workspace"
+                workspaces[workspaceIndex].federationMode = .solo
+                workspaces[workspaceIndex]
+                    .federationRouteDirective = .open
+            }
             for siteIndex in workspaces[workspaceIndex].sites.indices {
                 guard
                     let data = workspaces[workspaceIndex].sites[siteIndex]

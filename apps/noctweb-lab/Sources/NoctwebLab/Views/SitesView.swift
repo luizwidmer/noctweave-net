@@ -1,3 +1,4 @@
+import NoctwebUI
 import SwiftUI
 
 private enum SiteDestructiveAction {
@@ -116,20 +117,51 @@ struct SitesView: View {
         } else if let site = model.selectedSite {
             siteWorkspace(site, width: width)
                 .id(site.id)
-        } else {
-            VStack(spacing: 14) {
-                ContentUnavailableView(
-                    "No Sites Yet",
-                    systemImage: "rectangle.stack.badge.plus",
-                    description: Text(
-                        "Start visually or create a site and import an agent-built production bundle."
-                    )
+        } else if model.activeWorkspace?.relays.isEmpty != false {
+            VStack(spacing: 16) {
+                Image(systemName: "network.slash")
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(NoctwebTheme.accent)
+                    .frame(width: 70, height: 70)
+                    .background(NoctwebTheme.status, in: Circle())
+                Text("Connect a host relay")
+                    .font(.title2.weight(.semibold))
+                Text(
+                    "Noctweb Lab publishes only through relays you configure. Add a real host relay before creating your first site."
                 )
-                Button("Create Site") {
-                    model.createSite()
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 440)
+                Button {
+                    model.selection = .network
+                } label: {
+                    Label("Add Relay", systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
             }
+            .padding(32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 16) {
+                Image(systemName: "rectangle.stack.badge.plus")
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(NoctwebTheme.accent)
+                    .frame(width: 70, height: 70)
+                    .background(NoctwebTheme.status, in: Circle())
+                Text("Create your first site")
+                    .font(.title2.weight(.semibold))
+                Text("Start with a clean website project, then design, preview, and publish from one place.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 430)
+                Button {
+                    model.createSite()
+                } label: {
+                    Label("New Site", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -262,44 +294,24 @@ struct SitesView: View {
     }
 
     private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 16) {
-                    siteIdentity(site, compact: compact)
-                    Spacer(minLength: 12)
-                    publicationActions(site)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    siteIdentity(site, compact: true)
-                    publicationActions(site)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 18) {
+                siteIdentity(site, compact: compact)
+                Spacer(minLength: 12)
+                publicationStatus
+                    .frame(maxWidth: 280, alignment: .trailing)
+                publicationActions(site)
             }
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 14) {
-                    PublicationPipeline(
-                        activeStage: model.publicationStage,
-                        outcome: model.publicationOutcome
-                    )
-                    .frame(maxWidth: 610, alignment: .leading)
-                    Spacer(minLength: 8)
-                    publicationStatus
-                        .frame(maxWidth: 360, alignment: .trailing)
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    PublicationPipeline(
-                        activeStage: model.publicationStage,
-                        outcome: model.publicationOutcome
-                    )
-                    publicationStatus
-                }
+            VStack(alignment: .leading, spacing: 12) {
+                siteIdentity(site, compact: true)
+                publicationStatus
+                publicationActions(site)
             }
         }
         .padding(.horizontal, compact ? 14 : 20)
-        .padding(.vertical, compact ? 12 : 15)
-        .background(.regularMaterial)
+        .padding(.vertical, compact ? 12 : 14)
+        .background(.ultraThinMaterial)
     }
 
     private func siteIdentity(_ site: SiteProject, compact: Bool) -> some View {
@@ -324,41 +336,42 @@ struct SitesView: View {
     }
 
     private func publicationActions(_ site: SiteProject) -> some View {
-        VStack(alignment: .trailing, spacing: 8) {
+        HStack(spacing: 8) {
             SecureField(
-                "Relay publisher password · not saved",
+                "Relay password",
                 text: $model.relayPublisherAuthorization
             )
-            .textFieldStyle(.roundedBorder)
-            .frame(width: 280)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, 11)
+            .frame(width: 190, height: 34)
+            .background(
+                NoctwebTheme.input,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
             .privacySensitive()
             .onSubmit {
                 model.publishSelectedSite()
             }
 
-            HStack(spacing: 8) {
-                if model.publicationInFlight {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-                Button {
-                    model.publishSelectedSite()
-                } label: {
-                    Label(
-                        model.publicationInFlight
-                            ? "Publishing…"
-                            : "Host Revision",
-                        systemImage: "paperplane.fill"
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    model.publicationInFlight ||
-                        site.publicationIdentity != .ready
-                )
-
-                siteActionMenu(site, iconOnly: false)
+            if model.publicationInFlight {
+                ProgressView()
+                    .controlSize(.small)
             }
+            Button {
+                model.publishSelectedSite()
+            } label: {
+                Label(
+                    model.publicationInFlight ? "Publishing…" : "Publish",
+                    systemImage: "paperplane.fill"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(
+                model.publicationInFlight ||
+                    site.publicationIdentity != .ready
+            )
+
+            siteActionMenu(site, iconOnly: false)
         }
     }
 

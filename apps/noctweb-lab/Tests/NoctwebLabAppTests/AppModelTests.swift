@@ -6,6 +6,56 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testProductionStartupRemovesDevelopmentFixtures() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        try writeWorkspaces(
+            [.starter()],
+            to: fixture.workspaceURL
+        )
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+
+        XCTAssertEqual(model.activeWorkspace?.name, "My workspace")
+        XCTAssertEqual(model.activeWorkspace?.sites, [])
+        XCTAssertEqual(model.activeWorkspace?.relays, [])
+        XCTAssertEqual(model.activeWorkspace?.runs, [])
+        XCTAssertEqual(
+            model.activeWorkspace?.resolvedFederationMode,
+            .solo
+        )
+        let persisted = try decodeWorkspaces(at: fixture.workspaceURL)
+        XCTAssertEqual(persisted.first?.name, "My workspace")
+        XCTAssertEqual(persisted.first?.sites, [])
+        XCTAssertEqual(persisted.first?.relays, [])
+    }
+
+    func testProductionStartupFinishesPartiallyMigratedFixtureCleanup() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        workspace.name = "My workspace"
+        workspace.sites[0].address = "noct://quiet-garden/"
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+
+        XCTAssertEqual(model.activeWorkspace?.sites, [])
+        XCTAssertEqual(model.activeWorkspace?.relays, [])
+        XCTAssertEqual(
+            try decodeWorkspaces(at: fixture.workspaceURL).first?.sites,
+            []
+        )
+    }
+
     func testDeletingLastSitePersistsEmptyWorkspaceAndKeepsPublisherKey() async throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
@@ -19,6 +69,10 @@ final class AppModelTests: XCTestCase {
         let publisherID = try await fixture.engine.preparePublisherIdentity(
             for: publicationID
         )
+        for _ in 0..<200
+        where model.identityPreparationSiteIDs.contains(siteID) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
 
         XCTAssertTrue(model.deleteSite(siteID))
         XCTAssertEqual(model.activeWorkspace?.sites, [])

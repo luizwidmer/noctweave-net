@@ -58,6 +58,23 @@ public struct NoctwebBrowserSession: Equatable, Sendable {
         }
     }
 
+    public mutating func replaceProfile(
+        _ profile: NoctwebNetworkProfile,
+        replacing profileID: String
+    ) throws {
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }),
+              profile.id == profileID else {
+            throw NoctwebBrowserError.profileNotFound(profileID)
+        }
+        let savedBookmarks = bookmarks
+        let savedHistory = history
+        profiles[index] = profile
+        restorePersistentState(
+            bookmarks: savedBookmarks,
+            history: savedHistory
+        )
+    }
+
     @discardableResult
     public mutating func addTab(address: String? = nil) throws -> UUID {
         guard tabs.count < Self.maximumTabs else {

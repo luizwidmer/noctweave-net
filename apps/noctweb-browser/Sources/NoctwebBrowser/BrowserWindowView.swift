@@ -5,22 +5,23 @@ import SwiftUI
 struct BrowserWindowView: View {
     @EnvironmentObject private var model: BrowserAppModel
     @FocusState private var addressFieldIsFocused: Bool
+    @State private var showsRelayPanel = false
 
     var body: some View {
         VStack(spacing: 0) {
             browserToolbar
-            Divider()
+            horizontalDivider
             tabStrip
-            Divider()
+            horizontalDivider
             HStack(spacing: 0) {
                 if model.showsSidebar {
                     BrowserSidebar()
-                    Divider()
+                    verticalDivider
                 }
                 browserContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if model.showsTrustInspector {
-                    Divider()
+                    verticalDivider
                     TrustInspector()
                 }
             }
@@ -111,44 +112,33 @@ struct BrowserWindowView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Menu {
-                ForEach(model.session.profiles) { profile in
-                    Button {
-                        model.selectProfile(profile.id)
-                    } label: {
-                        if profile.id == model.selectedProfile.id {
-                            Label(profile.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(profile.displayName)
-                        }
-                    }
-                }
-                Divider()
-                Section("Visitor route preference") {
-                    ForEach(RouteDirective.allCases, id: \.self) { directive in
-                        Button {
-                            model.setVisitorDirective(directive)
-                        } label: {
-                            if directive == model.selectedVisitorDirective {
-                                Label(
-                                    visitorDirectiveTitle(directive),
-                                    systemImage: "checkmark"
-                                )
-                            } else {
-                                Text(visitorDirectiveTitle(directive))
-                            }
-                        }
-                    }
-                }
+            Button {
+                showsRelayPanel.toggle()
             } label: {
-                Image(systemName: "network")
-                    .frame(width: 22, height: 22)
+                ZStack(alignment: .bottomTrailing) {
+                    Image(systemName: "network")
+                        .frame(width: 24, height: 24)
+                    Circle()
+                        .fill(relayStatusColor)
+                        .frame(width: 7, height: 7)
+                        .overlay {
+                            Circle()
+                                .stroke(
+                                    NoctwebTheme.navigation,
+                                    lineWidth: 1.5
+                                )
+                        }
+                }
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help(
-                "Network: \(model.selectedProfile.displayName) · Visitor route: \(visitorDirectiveTitle(model.selectedVisitorDirective))"
-            )
+            .buttonStyle(.plain)
+            .help("Choose relay")
+            .popover(
+                isPresented: $showsRelayPanel,
+                arrowEdge: .top
+            ) {
+                RelayConnectionPanel()
+                    .environmentObject(model)
+            }
 
             toolbarButton(
                 systemImage: model.isSelectedSiteBookmarked
@@ -180,7 +170,7 @@ struct BrowserWindowView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(NoctwebTheme.navigation)
+        .background(.ultraThinMaterial)
     }
 
     private var tabStrip: some View {
@@ -200,11 +190,36 @@ struct BrowserWindowView: View {
             .padding(.vertical, 5)
         }
         .scrollIndicators(.hidden)
-        .background(NoctwebTheme.navigation)
+        .background(.ultraThinMaterial)
     }
 
     @ViewBuilder
     private var browserContent: some View {
+        if !model.relayIsConfigured {
+            VStack(spacing: 17) {
+                Image(systemName: "network.badge.shield.half.filled")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundStyle(NoctwebTheme.accent)
+                    .frame(width: 76, height: 76)
+                    .background(NoctwebTheme.status, in: Circle())
+                Text("Choose a relay")
+                    .font(.title2.weight(.semibold))
+                Text(
+                    "The Browser connects only to a relay you select and verifies its signed identity before resolving any Noctweb address."
+                )
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 470)
+                Button {
+                    showsRelayPanel = true
+                } label: {
+                    Label("Connect Relay", systemImage: "network")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(36)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
         switch model.selectedTab.verificationState {
         case .resolving:
             VStack(spacing: 12) {
@@ -271,6 +286,34 @@ struct BrowserWindowView: View {
                 )
             }
         }
+        }
+    }
+
+    private var horizontalDivider: some View {
+        Rectangle()
+            .fill(.primary.opacity(0.07))
+            .frame(height: 1)
+    }
+
+    private var verticalDivider: some View {
+        Rectangle()
+            .fill(.primary.opacity(0.07))
+            .frame(width: 1)
+    }
+
+    private var relayStatusColor: Color {
+        switch model.relayConnectionState {
+        case .connected:
+            .green
+        case .checking:
+            .orange
+        case .failed:
+            .red
+        case .saved:
+            .blue
+        case .notConfigured:
+            .secondary
+        }
     }
 
     private var verificationSymbol: String {
@@ -334,6 +377,244 @@ struct BrowserWindowView: View {
         case .direct: "Prefer direct"
         case .passthrough: "Require passthrough"
         }
+    }
+}
+
+private struct RelayConnectionPanel: View {
+    @EnvironmentObject private var model: BrowserAppModel
+    @FocusState private var endpointFocused: Bool
+    @State private var showsRouting = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 11) {
+                Image(systemName: "network")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(
+                        LinearGradient(
+                            colors: [
+                                NoctwebTheme.accent,
+                                NoctwebTheme.aqua,
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(
+                            cornerRadius: 11,
+                            style: .continuous
+                        )
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Relay Connection")
+                        .font(.headline)
+                    Text("Choose where Noctweb resolves")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 9, height: 9)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("RELAY ADDRESS")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    TextField(
+                        "https://relay.example.org",
+                        text: $model.relayEndpointText
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($endpointFocused)
+                    .onSubmit {
+                        connect()
+                    }
+
+                    Button {
+                        connect()
+                    } label: {
+                        if case .checking =
+                            model.relayConnectionState {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 52)
+                        } else {
+                            Text(model.relayIsConfigured ? "Verify" : "Connect")
+                                .frame(width: 52)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        model.relayEndpointText
+                            .trimmingCharacters(
+                                in: .whitespacesAndNewlines
+                            )
+                            .isEmpty
+                            || model.relayConnectionState == .checking
+                    )
+                }
+                .padding(.leading, 11)
+                .padding(.trailing, 5)
+                .frame(height: 40)
+                .background(
+                    NoctwebTheme.input,
+                    in: RoundedRectangle(
+                        cornerRadius: 11,
+                        style: .continuous
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(
+                        cornerRadius: 11,
+                        style: .continuous
+                    )
+                    .strokeBorder(.primary.opacity(0.09))
+                }
+            }
+
+            statusView
+
+            if model.relayIsConfigured {
+                VStack(alignment: .leading, spacing: 9) {
+                    LabeledContent(
+                        "Profile",
+                        value: model.selectedProfile.displayName
+                    )
+                    if let signer =
+                        model.selectedProfile.namespaceSigners.first {
+                        LabeledContent(
+                            "Relay identity",
+                            value: abbreviated(signer.relayID)
+                        )
+                    }
+                    LabeledContent(
+                        "Federation",
+                        value: model.selectedProfile.federationMode
+                            .rawValue.capitalized
+                    )
+                }
+                .font(.caption)
+                .padding(12)
+                .background(
+                    NoctwebTheme.surface,
+                    in: RoundedRectangle(
+                        cornerRadius: 12,
+                        style: .continuous
+                    )
+                )
+            }
+
+            DisclosureGroup(
+                "Routing preference",
+                isExpanded: $showsRouting
+            ) {
+                Picker(
+                    "Visitor route",
+                    selection: visitorDirectiveBinding
+                ) {
+                    Text("Follow network policy")
+                        .tag(RouteDirective.open)
+                    Text("Prefer direct")
+                        .tag(RouteDirective.direct)
+                    Text("Require passthrough")
+                        .tag(RouteDirective.passthrough)
+                }
+                .pickerStyle(.radioGroup)
+                .padding(.top, 8)
+            }
+            .font(.subheadline)
+
+            if model.relayIsConfigured {
+                Button(role: .destructive) {
+                    model.forgetRelay()
+                    endpointFocused = true
+                } label: {
+                    Label("Forget Relay", systemImage: "trash")
+                }
+                .buttonStyle(.plain)
+                .font(.caption.weight(.medium))
+            }
+        }
+        .padding(18)
+        .frame(width: 390)
+        .background(.ultraThinMaterial)
+    }
+
+    private var statusView: some View {
+        Group {
+            switch model.relayConnectionState {
+            case .notConfigured:
+                Label(
+                    "No relay is configured. Nothing is contacted until you connect.",
+                    systemImage: "lock.shield"
+                )
+                .foregroundStyle(.secondary)
+            case .saved(let name):
+                Label(
+                    "\(name) is saved. Its identity will be reverified before use.",
+                    systemImage: "clock.badge.checkmark"
+                )
+                .foregroundStyle(.blue)
+            case .checking:
+                Label(
+                    "Checking transport, capabilities, and relay identity…",
+                    systemImage: "ellipsis.shield"
+                )
+                .foregroundStyle(.orange)
+            case .connected(let name):
+                Label(
+                    "\(name) is connected and identity-pinned.",
+                    systemImage: "checkmark.shield.fill"
+                )
+                .foregroundStyle(.green)
+            case .failed(let message):
+                Label(
+                    message,
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.red)
+            }
+        }
+        .font(.caption)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var statusColor: Color {
+        switch model.relayConnectionState {
+        case .connected:
+            .green
+        case .checking:
+            .orange
+        case .failed:
+            .red
+        case .saved:
+            .blue
+        case .notConfigured:
+            .secondary
+        }
+    }
+
+    private var visitorDirectiveBinding: Binding<RouteDirective> {
+        Binding(
+            get: { model.selectedVisitorDirective },
+            set: { model.setVisitorDirective($0) }
+        )
+    }
+
+    private func connect() {
+        Task {
+            await model.connectRelay()
+        }
+    }
+
+    private func abbreviated(_ value: String) -> String {
+        guard value.count > 20 else { return value }
+        return "\(value.prefix(10))…\(value.suffix(8))"
     }
 }
 

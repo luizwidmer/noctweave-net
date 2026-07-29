@@ -6,12 +6,41 @@ import XCTest
 
 final class NoctwebBrowserAppTests: XCTestCase {
     @MainActor
+    func testProductionAppStartsUnconfiguredWithoutCrashing() throws {
+        let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let model = BrowserAppModel(
+            persistenceStore: BrowserPersistenceStore(defaults: defaults)
+        )
+
+        XCTAssertFalse(model.relayIsConfigured)
+        XCTAssertEqual(model.activeRelayEndpoint, nil)
+        XCTAssertEqual(model.addressText, "noct://start.unconfigured/")
+        XCTAssertEqual(
+            model.selectedProfile.routingTrustDomainID,
+            "sha256:" + String(repeating: "0", count: 64)
+        )
+    }
+
+    func testRelayIdentityBecomesCanonicalRoutingTrustDomain() {
+        XCTAssertEqual(
+            BrowserAppModel.relayTrustDomainID(
+                "nwr1\(String(repeating: "a", count: 64))"
+            ),
+            "sha256:\(String(repeating: "a", count: 64))"
+        )
+    }
+
+    @MainActor
     func testDefaultAppResolvesVerifiedFixture() async throws {
         let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults)
+            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            useDevelopmentFixtures: true
         )
 
         model.startIfNeeded()
@@ -227,7 +256,8 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults)
+            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            useDevelopmentFixtures: true
         )
 
         XCTAssertTrue(model.showsSidebar)
@@ -248,7 +278,8 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults)
+            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            useDevelopmentFixtures: true
         )
         model.startIfNeeded()
         for _ in 0..<200

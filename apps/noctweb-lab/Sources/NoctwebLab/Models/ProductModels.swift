@@ -16,8 +16,8 @@ enum ProductSection: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "Overview"
         case .sites: "Sites"
-        case .runtime: "Noctweb Runtime"
-        case .network: "Network"
+        case .runtime: "Preview"
+        case .network: "Relays"
         case .testRuns: "Test Runs"
         case .inspector: "Inspector"
         case .settings: "Settings"
@@ -524,23 +524,10 @@ extension Workspace {
     static func liveStarter() -> Workspace {
         Workspace(
             id: UUID(),
-            name: "Hosted development",
+            name: "My workspace",
             createdAt: Date(),
             sites: [],
-            relays: [
-                LabRelayNode(
-                    id: "local-host-relay",
-                    name: "Local host relay",
-                    role: .host,
-                    endpoint: "http://127.0.0.1:9440",
-                    region: "Local",
-                    isOnline: false,
-                    latencyMilliseconds: 0,
-                    retainedObjects: 0,
-                    advertisedModules: [.host],
-                    operatorRouteDirective: .open
-                )
-            ],
+            relays: [],
             runs: [],
             federationMode: .solo,
             federationRouteDirective: .open

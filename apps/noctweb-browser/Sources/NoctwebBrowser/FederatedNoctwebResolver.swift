@@ -6,7 +6,7 @@ import NoctwebLabCore
 /// Resolves `noct://site.suffix/` through an authenticated federation
 /// namespace, then asks the selected home relay to retrieve the signed name
 /// mapping and immutable hosted object from the destination relay.
-actor FederatedNoctwebResolver {
+actor FederatedNoctwebResolver: NoctwebResolving {
     func resolve(
         _ navigationURL: NoctwebNavigationURL,
         profile: NoctwebNetworkProfile,
@@ -120,6 +120,14 @@ actor FederatedNoctwebResolver {
         profile: NoctwebNetworkProfile,
         bootstrapEndpoints: [RelayEndpoint]
     ) async throws -> ResolvedNamespace {
+        if profile.federationMode == .solo,
+           profile.namespaceSigners.count == 1 {
+            return try await resolvePinnedSoloNamespace(
+                suffix: suffix,
+                profile: profile,
+                bootstrapEndpoints: bootstrapEndpoints
+            )
+        }
         if !profile.namespaceSigners.isEmpty {
             return try await resolveConsensusNamespace(
                 suffix: suffix,
@@ -155,6 +163,53 @@ actor FederatedNoctwebResolver {
         }
         throw NoctwebBrowserError.unresolvedName(
             "no authenticated local relay owns \(suffix.rawValue)"
+        )
+    }
+
+    private func resolvePinnedSoloNamespace(
+        suffix: NoctwebRelaySuffixV1,
+        profile: NoctwebNetworkProfile,
+        bootstrapEndpoints: [RelayEndpoint]
+    ) async throws -> ResolvedNamespace {
+        guard let signer = profile.namespaceSigners.first,
+              let expectedRelayID = RelayIdentityIDV1(
+                rawValue: signer.relayID
+              ) else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the selected relay profile has no valid identity pin"
+            )
+        }
+        for endpoint in bootstrapEndpoints {
+            do {
+                let response = try await RelayClient(endpoint: endpoint)
+                    .send(.info())
+                guard case .relayInfo(let info)? = response.successBody,
+                      let identity = info.relayIdentity,
+                      try identity.verifyThrowing(at: info.advertisedAt),
+                      identity.claim.relayID == expectedRelayID,
+                      identity.claim.signingPublicKey
+                        == signer.signingPublicKey,
+                      identity.claim.noctwebSuffix == suffix,
+                      info.protocolCapabilities?.supports(
+                        module: "nw.net-host",
+                        version: 1
+                      ) == true else {
+                    continue
+                }
+                return ResolvedNamespace(
+                    identity: identity,
+                    endpoint: preferredHostEndpoint(
+                        from: identity.claim.advertisedEndpoints
+                    ) ?? endpoint,
+                    epoch: UInt64(max(1, identity.claim.sequence)),
+                    isConsensusVerified: false
+                )
+            } catch {
+                continue
+            }
+        }
+        throw NoctwebBrowserError.unresolvedName(
+            "the selected relay does not own \(suffix.rawValue)"
         )
     }
 

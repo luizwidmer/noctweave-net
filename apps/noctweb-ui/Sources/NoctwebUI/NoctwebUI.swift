@@ -58,16 +58,18 @@ public final class NoctwebAppearanceStore: ObservableObject {
 }
 
 public enum NoctwebTheme {
-    public static let coral = Color(
-        red: 201.0 / 255.0,
-        green: 106.0 / 255.0,
-        blue: 97.0 / 255.0
+    public static let accent = Color(
+        red: 116.0 / 255.0,
+        green: 99.0 / 255.0,
+        blue: 1.0
     )
-    public static let coralStrong = Color(
-        red: 146.0 / 255.0,
-        green: 45.0 / 255.0,
-        blue: 53.0 / 255.0
+    public static let aqua = Color(
+        red: 61.0 / 255.0,
+        green: 210.0 / 255.0,
+        blue: 190.0 / 255.0
     )
+    public static let coral = accent
+    public static let coralStrong = accent
     public static let ivory = Color(
         red: 250.0 / 255.0,
         green: 243.0 / 255.0,
@@ -78,21 +80,25 @@ public enum NoctwebTheme {
         green: 199.0 / 255.0,
         blue: 175.0 / 255.0
     )
-    public static let wine = coralStrong
+    public static let wine = accent
 
     public static let canvas = Color(nsColor: .windowBackgroundColor)
     public static let surface = Color(nsColor: .controlBackgroundColor)
+        .opacity(0.86)
     public static let card = Color(nsColor: .textBackgroundColor)
+        .opacity(0.82)
     public static let input = Color(nsColor: .textBackgroundColor)
+        .opacity(0.72)
     public static let navigation = Color(nsColor: .underPageBackgroundColor)
-    public static let status = coral.opacity(0.12)
+        .opacity(0.9)
+    public static let status = accent.opacity(0.14)
 }
 
 public struct NoctwebChromeModifier: ViewModifier {
     public func body(content: Content) -> some View {
         content
-            .tint(NoctwebTheme.coral)
-            .accentColor(NoctwebTheme.coral)
+            .tint(NoctwebTheme.accent)
+            .accentColor(NoctwebTheme.accent)
     }
 }
 
