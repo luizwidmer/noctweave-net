@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
   <title id="title">Noctweb Browser icon</title>
-  <desc id="desc">The canonical Noctweave Offset Veil mark on its dark application surface.</desc>
+  <desc id="desc">A Noctweave corridor crossing a minimal browser viewport.</desc>
   <defs>
     <linearGradient id="surface" x1="88" y1="64" x2="940" y2="964" gradientUnits="userSpaceOnUse">
       <stop stop-color="#2D1C23"/>
@@ -8,8 +8,14 @@
     </linearGradient>
   </defs>
   <rect x="28" y="28" width="968" height="968" rx="230" fill="url(#surface)" stroke="#56313A" stroke-width="10"/>
-  <g transform="translate(128 128) scale(3)">
-    <path d="M96 32H224V176L140 134V110L96 88Z" fill="#FAF3EA"/>
-    <path d="M32 80L116 122V146L160 168V224H32Z" fill="#C96A61"/>
+  <rect x="166" y="176" width="692" height="672" rx="118" fill="#21151B" stroke="#EBC7AF" stroke-width="48"/>
+  <path d="M166 338H858" fill="none" stroke="#EBC7AF" stroke-width="48"/>
+  <g fill="none" stroke-linejoin="miter">
+    <path d="M244 475H464L574 531H780" stroke="#FAF3EA" stroke-width="44"/>
+    <path d="M244 469H464L574 525H780" stroke="#C96A61" stroke-width="10"/>
+    <path d="M244 598H464L574 654H780" stroke="#FAF3EA" stroke-width="44"/>
+    <path d="M244 592H464L574 648H780" stroke="#C96A61" stroke-width="10"/>
+    <path d="M244 721H464L574 777H780" stroke="#FAF3EA" stroke-width="44"/>
+    <path d="M244 715H464L574 771H780" stroke="#C96A61" stroke-width="10"/>
   </g>
 </svg>

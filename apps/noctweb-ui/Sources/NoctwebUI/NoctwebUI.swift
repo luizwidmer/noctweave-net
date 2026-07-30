@@ -216,55 +216,158 @@ public struct NoctwebProductIcon: View {
                     )
                 }
 
-                Path { path in
-                    path.move(
-                        to: CGPoint(x: side * 0.375, y: side * 0.125)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.875, y: side * 0.125)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.875, y: side * 0.6875)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.546875, y: side * 0.5234375)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.546875, y: side * 0.4296875)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.375, y: side * 0.34375)
-                    )
-                    path.closeSubpath()
+                switch product {
+                case .browser:
+                    browserGlyph(side: side)
+                case .lab:
+                    offsetVeilGlyph(side: side)
                 }
-                .fill(upperPlaneColor)
-
-                Path { path in
-                    path.move(
-                        to: CGPoint(x: side * 0.125, y: side * 0.3125)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.453125, y: side * 0.4765625)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.453125, y: side * 0.5703125)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.625, y: side * 0.65625)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.625, y: side * 0.875)
-                    )
-                    path.addLine(
-                        to: CGPoint(x: side * 0.125, y: side * 0.875)
-                    )
-                    path.closeSubpath()
-                }
-                .fill(NoctwebTheme.coral)
             }
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
+    }
+
+    private func browserGlyph(side: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(
+                cornerRadius: side * 0.115,
+                style: .continuous
+            )
+            .fill(NoctwebTheme.ink.opacity(0.36))
+            .overlay {
+                RoundedRectangle(
+                    cornerRadius: side * 0.115,
+                    style: .continuous
+                )
+                .strokeBorder(
+                    NoctwebTheme.sand,
+                    lineWidth: max(1, side * 0.047)
+                )
+            }
+            .padding(side * 0.16)
+
+            Path { path in
+                path.move(
+                    to: CGPoint(x: side * 0.16, y: side * 0.33)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.84, y: side * 0.33)
+                )
+            }
+            .stroke(
+                NoctwebTheme.sand,
+                style: StrokeStyle(lineWidth: max(1, side * 0.047))
+            )
+
+            ForEach([-0.12, 0, 0.12], id: \.self) { offset in
+                corridorPath(
+                    side: side,
+                    verticalOffset: side * offset
+                )
+                .stroke(
+                    NoctwebTheme.ivory,
+                    style: StrokeStyle(
+                        lineWidth: max(1, side * 0.043),
+                        lineJoin: .miter
+                    )
+                )
+
+                corridorPath(
+                    side: side,
+                    verticalOffset: side * (offset - 0.006)
+                )
+                .stroke(
+                    NoctwebTheme.coral,
+                    style: StrokeStyle(
+                        lineWidth: max(1, side * 0.01),
+                        lineJoin: .miter
+                    )
+                )
+            }
+        }
+    }
+
+    private func corridorPath(
+        side: CGFloat,
+        verticalOffset: CGFloat = 0
+    ) -> Path {
+        Path { path in
+            path.move(
+                to: CGPoint(
+                    x: side * 0.24,
+                    y: side * 0.59 + verticalOffset
+                )
+            )
+            path.addLine(
+                to: CGPoint(
+                    x: side * 0.455,
+                    y: side * 0.59 + verticalOffset
+                )
+            )
+            path.addLine(
+                to: CGPoint(
+                    x: side * 0.56,
+                    y: side * 0.645 + verticalOffset
+                )
+            )
+            path.addLine(
+                to: CGPoint(
+                    x: side * 0.76,
+                    y: side * 0.645 + verticalOffset
+                )
+            )
+        }
+    }
+
+    private func offsetVeilGlyph(side: CGFloat) -> some View {
+        ZStack {
+            Path { path in
+                path.move(
+                    to: CGPoint(x: side * 0.375, y: side * 0.125)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.875, y: side * 0.125)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.875, y: side * 0.6875)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.546875, y: side * 0.5234375)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.546875, y: side * 0.4296875)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.375, y: side * 0.34375)
+                )
+                path.closeSubpath()
+            }
+            .fill(NoctwebTheme.wine)
+
+            Path { path in
+                path.move(
+                    to: CGPoint(x: side * 0.125, y: side * 0.3125)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.453125, y: side * 0.4765625)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.453125, y: side * 0.5703125)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.625, y: side * 0.65625)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.625, y: side * 0.875)
+                )
+                path.addLine(
+                    to: CGPoint(x: side * 0.125, y: side * 0.875)
+                )
+                path.closeSubpath()
+            }
+            .fill(NoctwebTheme.coral)
+        }
     }
 
     private var backgroundColors: [Color] {
@@ -273,15 +376,6 @@ public struct NoctwebProductIcon: View {
             [NoctwebTheme.plum, NoctwebTheme.ink]
         case .lab:
             [NoctwebTheme.ivory, NoctwebTheme.sand]
-        }
-    }
-
-    private var upperPlaneColor: Color {
-        switch product {
-        case .browser:
-            NoctwebTheme.ivory
-        case .lab:
-            NoctwebTheme.wine
         }
     }
 
