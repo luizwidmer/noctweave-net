@@ -192,12 +192,12 @@ enum WebsiteProjectBuilder {
 
     static func legacyCSS(accentHex: String) -> String {
         """
-        :root { color-scheme: light dark; --accent: \(accentHex); --coral: #e86f5a; --wine: #46141f; --ivory: #fbf6ec; --ink: var(--wine); --muted: #75545a; }
+        :root { color-scheme: light dark; --accent: \(accentHex); --coral: #c96a61; --wine: #922d35; --ivory: #faf3ea; --ink: #1b1217; --muted: #6f565e; }
         body { font: 18px/1.65 -apple-system, sans-serif; max-width: 760px; margin: auto; padding: 10vw 2rem; color: var(--ink); background: var(--ivory); }
         h1 { color: var(--accent); font: 700 clamp(3rem, 8vw, 6rem)/.96 Georgia, serif; }
         .subtitle { color: var(--muted); font-size: 1.3rem; }
         @media (prefers-color-scheme: dark) {
-          :root { --ink: #fff4e9; --muted: #d0afb0; --ivory: #241019; }
+          :root { --ink: #faf3ea; --muted: #d9c8bc; --ivory: #1b1217; }
         }
         """
     }
@@ -443,11 +443,11 @@ enum WebsiteProjectBuilder {
         :root {
           color-scheme: light dark;
           --accent: \(accentHex);
-          --coral: #e86f5a;
-          --wine: #46141f;
-          --ivory: #fbf6ec;
-          --ink: var(--wine);
-          --muted: #75545a;
+          --coral: #c96a61;
+          --wine: #922d35;
+          --ivory: #faf3ea;
+          --ink: #1b1217;
+          --muted: #6f565e;
           --paper: var(--ivory);
           --card: rgba(255,255,255,.82);
           font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -491,9 +491,9 @@ enum WebsiteProjectBuilder {
           .block { padding-inline: 1.25rem; }
         }
         @media (prefers-color-scheme: dark) {
-          :root { --ink: #fff4e9; --muted: #d0afb0; --paper: #241019; --card: rgba(255,255,255,.07); }
-          .callout { background: #fbf6ec; color: #46141f; }
-          .callout p { color: #75545a; }
+          :root { --ink: #faf3ea; --muted: #d9c8bc; --paper: #1b1217; --card: rgba(255,255,255,.07); }
+          .callout { background: #faf3ea; color: #1b1217; }
+          .callout p { color: #6f565e; }
         }
         """
     }

@@ -10,6 +10,8 @@
     <string>NoctwebBrowser</string>
     <key>CFBundleIdentifier</key>
     <string>net.noctweave.noctweb-browser</string>
+    <key>CFBundleIconFile</key>
+    <string>NoctwebBrowser.icns</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>

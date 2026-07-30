@@ -312,6 +312,26 @@ final class NoctwebBrowserAppTests: XCTestCase {
         XCTAssertFalse(model.showsTrustInspector)
     }
 
+    func testSidebarFillsWindowHeightInsteadOfCenteringItsContents() throws {
+        let source = try String(
+            contentsOf: packageRoot.appending(
+                path: "Sources/NoctwebBrowser/BrowserWindowView.swift"
+            ),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            source.contains(
+                ".frame(maxHeight: .infinity, alignment: .top)"
+            )
+        )
+        XCTAssertTrue(
+            source.contains(
+                ".frame(maxWidth: .infinity, maxHeight: .infinity)"
+            )
+        )
+    }
+
     @MainActor
     func testVisitorRoutePreferenceRecomputesEffectivePolicy() async throws {
         let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"

@@ -101,18 +101,8 @@ struct ContentView: View {
     private var labSidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 11) {
-                Image(systemName: "hammer.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                NoctwebProductIcon(.lab)
                     .frame(width: 34, height: 34)
-                    .background(
-                        LinearGradient(
-                            colors: [NoctwebTheme.accent, NoctwebTheme.aqua],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    )
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Noctweb Lab")
                         .font(.headline)

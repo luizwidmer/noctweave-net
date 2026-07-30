@@ -1,14 +1,57 @@
-# Noctweave Net
+<p align="center">
+  <img src="apps/noctweb-browser/Packaging/NoctwebBrowserIcon.svg" width="112" alt="Noctweb Browser icon">
+  &nbsp;&nbsp;&nbsp;
+  <img src="apps/noctweb-lab/Packaging/NoctwebLabIcon.svg" width="112" alt="Noctweb Lab icon">
+</p>
 
-Noctweave Net is a cryptographically addressed web built behind the public
-Noctweave transport layer. It treats existing network infrastructure as
-replaceable delivery and storage while clients retain authority over identity,
-verification, permissions, decryption, and rendering.
+<h1 align="center">Noctweave Net</h1>
+
+<p align="center"><strong>A cryptographically addressed web behind Noctweave.</strong></p>
+
+<p align="center">
+  Publish signed websites with native tools. Resolve them through independent
+  relays. Verify identity, content, and routing locally before anything renders.
+</p>
+
+Noctweave Net treats network infrastructure as replaceable delivery and
+storage. Publishers retain authority over identity and revisions; visitors
+retain authority over verification, permissions, decryption, and rendering.
 
 This repository is a pre-1.0 implementation, not a production-compatible
 protocol release. The native Browser and Lab now exercise authenticated
 Noctweave federation, while publication-wide consensus and production auditing
 remain explicit release gates.
+
+## Native tools
+
+### Noctweb Browser
+
+![Noctweb Browser verifying a signed site](docs/assets/noctweb-browser.png)
+
+Resolve `noct://` addresses, verify signed publication state, enforce route
+policy, and render websites in a publication-scoped WebKit sandbox.
+The screenshot uses the deterministic signed fixture; production launches
+without a configured relay or bundled browsing identity.
+
+### Noctweb Lab
+
+![Noctweb Lab showing a locally verified website preview](docs/assets/noctweb-lab.png)
+
+Build ordinary HTML, CSS, JavaScript, or compiled web projects; sign each
+publication locally; publish through a host-capable Noctweave relay.
+
+Both apps are native macOS executables. They do not embed Electron, Chromium,
+or a remote application shell.
+
+### Run from source
+
+```sh
+swift run --package-path apps/noctweb-lab NoctwebLab
+swift run --package-path apps/noctweb-browser NoctwebBrowser
+```
+
+The packages use the public Noctweave repository by default. During protocol
+development, set `NOCTWEAVE_PACKAGE_PATH` to a local `NoctweaveCore` checkout.
 
 ## Core model
 

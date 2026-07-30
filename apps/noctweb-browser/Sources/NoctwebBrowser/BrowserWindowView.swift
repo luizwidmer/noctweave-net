@@ -332,7 +332,7 @@ struct BrowserWindowView: View {
     private var verificationColor: Color {
         switch model.selectedTab.verificationState {
         case .finalized, .offlineVerifiedCache: .green
-        case .fixtureVerified: .indigo
+        case .fixtureVerified: NoctwebTheme.accent
         case .hostedPreview, .stale: .orange
         case .failed, .blocked: .red
         default: .secondary
@@ -396,7 +396,7 @@ private struct RelayConnectionPanel: View {
                         LinearGradient(
                             colors: [
                                 NoctwebTheme.accent,
-                                NoctwebTheme.aqua,
+                                NoctwebTheme.sand,
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -712,7 +712,7 @@ private struct BrowserTabButton: View {
 
     private var stateColor: Color {
         switch tab.verificationState {
-        case .fixtureVerified: .indigo
+        case .fixtureVerified: NoctwebTheme.accent
         case .finalized, .offlineVerifiedCache: .green
         case .failed, .blocked: .red
         case .hostedPreview, .stale: .orange
@@ -726,6 +726,22 @@ private struct BrowserSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                NoctwebProductIcon(.browser)
+                    .frame(width: 30, height: 30)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Noctweb Browser")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Verify and browse")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
             Picker("Library", selection: $model.sidebarSection) {
                 ForEach(BrowserSidebarSection.allCases) { section in
                     Image(systemName: section.systemImage)
@@ -739,14 +755,18 @@ private struct BrowserSidebar: View {
 
             Divider()
 
-            switch model.sidebarSection {
-            case .bookmarks:
-                bookmarkList
-            case .history:
-                historyList
+            Group {
+                switch model.sidebarSection {
+                case .bookmarks:
+                    bookmarkList
+                case .history:
+                    historyList
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: 230)
+        .frame(maxHeight: .infinity, alignment: .top)
         .background(NoctwebTheme.surface)
     }
 
