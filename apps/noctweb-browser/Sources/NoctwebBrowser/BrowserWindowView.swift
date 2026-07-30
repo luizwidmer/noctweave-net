@@ -726,22 +726,6 @@ private struct BrowserSidebar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                NoctwebProductIcon(.browser)
-                    .frame(width: 30, height: 30)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Noctweb Browser")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Verify and browse")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
             Picker("Library", selection: $model.sidebarSection) {
                 ForEach(BrowserSidebarSection.allCases) { section in
                     Image(systemName: section.systemImage)
