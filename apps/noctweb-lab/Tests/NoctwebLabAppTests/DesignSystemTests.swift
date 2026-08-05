@@ -15,15 +15,15 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(source.contains("color-scheme: light dark"))
         XCTAssertTrue(source.contains("@media (prefers-color-scheme: dark)"))
-        XCTAssertTrue(source.contains("--coral: #c96a61"))
-        XCTAssertTrue(source.contains("--wine: #922d35"))
-        XCTAssertTrue(source.contains("--ivory: #faf3ea"))
+        XCTAssertTrue(source.contains("--violet: #674dd9"))
+        XCTAssertTrue(source.contains("--blue: #397ccf"))
+        XCTAssertTrue(source.contains("--teal: #168f83"))
 
         let legacySource = WebsiteProjectBuilder.legacyCSS(
             accentHex: "#4F8F77"
         )
         XCTAssertTrue(legacySource.contains("color-scheme: light dark"))
         XCTAssertTrue(legacySource.contains("@media (prefers-color-scheme: dark)"))
-        XCTAssertTrue(legacySource.contains("var(--ivory)"))
+        XCTAssertTrue(legacySource.contains("var(--canvas)"))
     }
 }

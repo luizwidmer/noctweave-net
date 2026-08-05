@@ -22,9 +22,9 @@ final class NoctwebUITests: XCTestCase {
         )
     }
 
-    func testThemeDefinesCoralIvoryWineSemanticPalette() {
-        XCTAssertNotNil(NoctwebTheme.coral)
-        XCTAssertNotNil(NoctwebTheme.ivory)
-        XCTAssertNotNil(NoctwebTheme.wine)
+    func testThemeDefinesCanonicalVioletBlueTealPalette() {
+        XCTAssertNotNil(NoctwebTheme.quantumViolet)
+        XCTAssertNotNil(NoctwebTheme.transitBlue)
+        XCTAssertNotNil(NoctwebTheme.signalTeal)
     }
 }

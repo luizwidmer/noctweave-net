@@ -41,7 +41,8 @@ struct NoctwebLabApp: App {
             SettingsView()
                 .environmentObject(model)
                 .environmentObject(appearance)
-                .frame(width: 620, height: 460)
+                .noctwebAppearance(appearance.selection)
+                .frame(minWidth: 760, minHeight: 600)
         }
     }
 }

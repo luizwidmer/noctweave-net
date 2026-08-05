@@ -266,7 +266,7 @@ final class AppModel: ObservableObject {
             title: "Untitled publication",
             subtitle: "A new site for Noctweb.",
             body: "Start writing here.",
-            accentHex: "#C96A61",
+            accentHex: "#7B61FF",
             revision: 0,
             lastPublishedAt: nil,
             objectID: nil,

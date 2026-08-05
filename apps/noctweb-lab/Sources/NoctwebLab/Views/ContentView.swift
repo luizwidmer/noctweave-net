@@ -10,22 +10,26 @@ struct ContentView: View {
             labSidebar
             .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 250)
         } detail: {
-            Group {
-                switch model.selection ?? .sites {
-                case .overview:
-                    SitesView()
-                case .sites:
-                    SitesView()
-                case .runtime:
-                    RuntimeView()
-                case .network:
-                    NetworkView()
-                case .testRuns:
-                    TestRunsView()
-                case .inspector:
-                    InspectorView()
-                case .settings:
-                    SettingsView()
+            ZStack {
+                NoctwebTheme.canvas
+                    .ignoresSafeArea()
+                Group {
+                    switch model.selection ?? .sites {
+                    case .overview:
+                        SitesView()
+                    case .sites:
+                        SitesView()
+                    case .runtime:
+                        RuntimeView()
+                    case .network:
+                        NetworkView()
+                    case .testRuns:
+                        TestRunsView()
+                    case .inspector:
+                        InspectorView()
+                    case .settings:
+                        SettingsView()
+                    }
                 }
             }
         }
@@ -179,7 +183,12 @@ struct ContentView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 12)
         }
-        .background(.ultraThinMaterial)
+        .background(NoctwebTheme.navigation)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(NoctwebTheme.border)
+                .frame(width: 1)
+        }
     }
 
     private var workspaceMenu: some View {

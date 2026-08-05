@@ -1,0 +1,15 @@
+{
+  "originHash" : "b800fe01eec24deb3b3fb97b70abe86759803024f2d1326399c6b16eede46581",
+  "pins" : [
+    {
+      "identity" : "noctweave",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizwidmer/Noctweave.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "b29ab0a9953637ea156d6400780b45bfd726963a"
+      }
+    }
+  ],
+  "version" : 3
+}

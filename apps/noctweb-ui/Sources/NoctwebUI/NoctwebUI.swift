@@ -58,110 +58,148 @@ public final class NoctwebAppearanceStore: ObservableObject {
 }
 
 public enum NoctwebTheme {
-    public static let ivory = Color(
-        red: 250.0 / 255.0,
-        green: 243.0 / 255.0,
-        blue: 234.0 / 255.0
+    public static let quantumViolet = Color(
+        red: 123.0 / 255.0,
+        green: 97.0 / 255.0,
+        blue: 255.0 / 255.0
     )
-    public static let sand = Color(
-        red: 235.0 / 255.0,
-        green: 199.0 / 255.0,
-        blue: 175.0 / 255.0
+    public static let transitBlue = Color(
+        red: 91.0 / 255.0,
+        green: 156.0 / 255.0,
+        blue: 250.0 / 255.0
     )
-    public static let coral = Color(
-        red: 201.0 / 255.0,
-        green: 106.0 / 255.0,
-        blue: 97.0 / 255.0
+    public static let signalTeal = Color(
+        red: 61.0 / 255.0,
+        green: 213.0 / 255.0,
+        blue: 197.0 / 255.0
     )
-    public static let wine = Color(
-        red: 146.0 / 255.0,
-        green: 45.0 / 255.0,
-        blue: 53.0 / 255.0
+    public static let night = Color(
+        red: 8.0 / 255.0,
+        green: 11.0 / 255.0,
+        blue: 22.0 / 255.0
     )
-    public static let ink = Color(
-        red: 27.0 / 255.0,
-        green: 18.0 / 255.0,
-        blue: 23.0 / 255.0
+    public static let raised = Color(
+        red: 18.0 / 255.0,
+        green: 22.0 / 255.0,
+        blue: 37.0 / 255.0
     )
-    public static let plum = Color(
-        red: 45.0 / 255.0,
-        green: 28.0 / 255.0,
-        blue: 35.0 / 255.0
+    public static let soft = Color(
+        red: 28.0 / 255.0,
+        green: 32.0 / 255.0,
+        blue: 48.0 / 255.0
     )
-    public static let accent = coral
-    public static let coralStrong = wine
+    public static let primaryText = Color(
+        red: 243.0 / 255.0,
+        green: 245.0 / 255.0,
+        blue: 250.0 / 255.0
+    )
+    public static let secondaryText = Color(
+        red: 168.0 / 255.0,
+        green: 173.0 / 255.0,
+        blue: 189.0 / 255.0
+    )
+    public static let accent = quantumViolet
+    public static let accentStrong = transitBlue
 
     public static let canvas = adaptive(
         light: NSColor(
-            srgbRed: 250.0 / 255.0,
-            green: 243.0 / 255.0,
-            blue: 234.0 / 255.0,
+            srgbRed: 245.0 / 255.0,
+            green: 247.0 / 255.0,
+            blue: 252.0 / 255.0,
             alpha: 1
         ),
         dark: NSColor(
-            srgbRed: 27.0 / 255.0,
-            green: 18.0 / 255.0,
-            blue: 23.0 / 255.0,
+            srgbRed: 8.0 / 255.0,
+            green: 11.0 / 255.0,
+            blue: 22.0 / 255.0,
             alpha: 1
         )
     )
     public static let surface = adaptive(
         light: NSColor(
-            srgbRed: 246.0 / 255.0,
-            green: 234.0 / 255.0,
-            blue: 223.0 / 255.0,
-            alpha: 0.92
+            srgbRed: 243.0 / 255.0,
+            green: 245.0 / 255.0,
+            blue: 250.0 / 255.0,
+            alpha: 0.96
         ),
         dark: NSColor(
-            srgbRed: 45.0 / 255.0,
-            green: 28.0 / 255.0,
-            blue: 35.0 / 255.0,
-            alpha: 0.92
+            srgbRed: 18.0 / 255.0,
+            green: 22.0 / 255.0,
+            blue: 37.0 / 255.0,
+            alpha: 0.96
         )
     )
     public static let card = adaptive(
         light: NSColor(
             srgbRed: 1,
-            green: 249.0 / 255.0,
-            blue: 242.0 / 255.0,
-            alpha: 0.9
+            green: 1,
+            blue: 1,
+            alpha: 0.98
         ),
         dark: NSColor(
-            srgbRed: 42.0 / 255.0,
-            green: 27.0 / 255.0,
-            blue: 33.0 / 255.0,
-            alpha: 0.9
+            srgbRed: 28.0 / 255.0,
+            green: 32.0 / 255.0,
+            blue: 48.0 / 255.0,
+            alpha: 0.96
         )
     )
     public static let input = adaptive(
         light: NSColor(
             srgbRed: 1,
-            green: 252.0 / 255.0,
-            blue: 248.0 / 255.0,
+            green: 1,
+            blue: 1,
             alpha: 0.9
         ),
         dark: NSColor(
-            srgbRed: 61.0 / 255.0,
-            green: 35.0 / 255.0,
-            blue: 38.0 / 255.0,
+            srgbRed: 13.0 / 255.0,
+            green: 17.0 / 255.0,
+            blue: 32.0 / 255.0,
             alpha: 0.86
         )
     )
     public static let navigation = adaptive(
         light: NSColor(
-            srgbRed: 240.0 / 255.0,
-            green: 224.0 / 255.0,
-            blue: 212.0 / 255.0,
-            alpha: 0.94
+            srgbRed: 238.0 / 255.0,
+            green: 241.0 / 255.0,
+            blue: 248.0 / 255.0,
+            alpha: 0.97
         ),
         dark: NSColor(
-            srgbRed: 36.0 / 255.0,
-            green: 22.0 / 255.0,
-            blue: 29.0 / 255.0,
-            alpha: 0.94
+            srgbRed: 13.0 / 255.0,
+            green: 17.0 / 255.0,
+            blue: 32.0 / 255.0,
+            alpha: 0.97
         )
     )
     public static let status = accent.opacity(0.14)
+    public static let border = adaptive(
+        light: NSColor(
+            srgbRed: 103.0 / 255.0,
+            green: 77.0 / 255.0,
+            blue: 217.0 / 255.0,
+            alpha: 0.24
+        ),
+        dark: NSColor(
+            srgbRed: 91.0 / 255.0,
+            green: 156.0 / 255.0,
+            blue: 250.0 / 255.0,
+            alpha: 0.24
+        )
+    )
+    public static let softShadow = adaptive(
+        light: NSColor(
+            srgbRed: 24.0 / 255.0,
+            green: 35.0 / 255.0,
+            blue: 74.0 / 255.0,
+            alpha: 0.16
+        ),
+        dark: NSColor(
+            srgbRed: 0,
+            green: 0,
+            blue: 0,
+            alpha: 0.34
+        )
+    )
 
     private static func adaptive(
         light: NSColor,
@@ -234,14 +272,14 @@ public struct NoctwebProductIcon: View {
                 cornerRadius: side * 0.115,
                 style: .continuous
             )
-            .fill(NoctwebTheme.ink.opacity(0.36))
+            .fill(NoctwebTheme.night.opacity(0.36))
             .overlay {
                 RoundedRectangle(
                     cornerRadius: side * 0.115,
                     style: .continuous
                 )
                 .strokeBorder(
-                    NoctwebTheme.sand,
+                    NoctwebTheme.transitBlue,
                     lineWidth: max(1, side * 0.047)
                 )
             }
@@ -256,7 +294,7 @@ public struct NoctwebProductIcon: View {
                 )
             }
             .stroke(
-                NoctwebTheme.sand,
+                NoctwebTheme.transitBlue,
                 style: StrokeStyle(lineWidth: max(1, side * 0.047))
             )
 
@@ -266,7 +304,7 @@ public struct NoctwebProductIcon: View {
                     verticalOffset: side * offset
                 )
                 .stroke(
-                    NoctwebTheme.ivory,
+                    NoctwebTheme.primaryText,
                     style: StrokeStyle(
                         lineWidth: max(1, side * 0.043),
                         lineJoin: .miter
@@ -278,7 +316,7 @@ public struct NoctwebProductIcon: View {
                     verticalOffset: side * (offset - 0.006)
                 )
                 .stroke(
-                    NoctwebTheme.coral,
+                    NoctwebTheme.signalTeal,
                     style: StrokeStyle(
                         lineWidth: max(1, side * 0.01),
                         lineJoin: .miter
@@ -343,7 +381,7 @@ public struct NoctwebProductIcon: View {
                 )
                 path.closeSubpath()
             }
-            .fill(NoctwebTheme.wine)
+            .fill(NoctwebTheme.quantumViolet)
 
             Path { path in
                 path.move(
@@ -366,25 +404,25 @@ public struct NoctwebProductIcon: View {
                 )
                 path.closeSubpath()
             }
-            .fill(NoctwebTheme.coral)
+            .fill(NoctwebTheme.signalTeal)
         }
     }
 
     private var backgroundColors: [Color] {
         switch product {
         case .browser:
-            [NoctwebTheme.plum, NoctwebTheme.ink]
+            [NoctwebTheme.raised, NoctwebTheme.night]
         case .lab:
-            [NoctwebTheme.ivory, NoctwebTheme.sand]
+            [NoctwebTheme.primaryText, NoctwebTheme.secondaryText]
         }
     }
 
     private var borderColor: Color {
         switch product {
         case .browser:
-            NoctwebTheme.sand.opacity(0.16)
+            NoctwebTheme.transitBlue.opacity(0.16)
         case .lab:
-            NoctwebTheme.wine.opacity(0.16)
+            NoctwebTheme.quantumViolet.opacity(0.16)
         }
     }
 }

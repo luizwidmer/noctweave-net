@@ -3,10 +3,12 @@
   <desc id="desc">Two offset Noctweave plates crossed by three wide corridors.</desc>
   <defs>
     <linearGradient id="tile-fill" x1="32" y1="24" x2="224" y2="236" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#241B25"/>
-      <stop offset=".55" stop-color="#181219"/>
-      <stop offset="1" stop-color="#110D12"/>
+      <stop offset="0" stop-color="#1C2030"/>
+      <stop offset=".55" stop-color="#121625"/>
+      <stop offset="1" stop-color="#080B16"/>
     </linearGradient>
+    <linearGradient id="upper" x1="96" y1="32" x2="224" y2="176" gradientUnits="userSpaceOnUse"><stop stop-color="#7B61FF"/><stop offset="1" stop-color="#5B9CFA"/></linearGradient>
+    <linearGradient id="lower" x1="32" y1="80" x2="160" y2="224" gradientUnits="userSpaceOnUse"><stop stop-color="#5B9CFA"/><stop offset="1" stop-color="#3DD5C5"/></linearGradient>
     <mask id="corridor-cuts">
       <rect width="256" height="256" fill="white"/>
       <path d="M96 40L156 70V86L224 120V148L132 102V86L96 68Z" fill="black"/>
@@ -15,7 +17,7 @@
   </defs>
   <rect width="256" height="256" rx="60" fill="url(#tile-fill)"/>
   <g mask="url(#corridor-cuts)">
-    <path d="M96 32H224V176L140 134V110L96 88Z" fill="#FAF3EA"/>
-    <path d="M32 80L116 122V146L160 168V224H32Z" fill="#C96A61"/>
+    <path d="M96 32H224V176L140 134V110L96 88Z" fill="url(#upper)"/>
+    <path d="M32 80L116 122V146L160 168V224H32Z" fill="url(#lower)"/>
   </g>
 </svg>

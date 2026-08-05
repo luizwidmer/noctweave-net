@@ -311,24 +311,24 @@ public actor DeterministicNoctwebResolver: NoctwebResolving {
                     mediaType: "text/css; charset=utf-8",
                     bytes: Data(
                         """
-                        :root { color-scheme: light dark; --coral: #c96a61; --wine: #922d35; --ivory: #faf3ea; --ink: #1b1217; --muted: #6f565e; --surface: rgba(255,255,255,.78); font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: var(--ivory); color: var(--ink); }
+                        :root { color-scheme: light dark; --violet: #674dd9; --blue: #397ccf; --teal: #168f83; --canvas: #f5f7fc; --ink: #151827; --muted: #62697a; --surface: rgba(255,255,255,.82); font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: var(--canvas); color: var(--ink); }
                         * { box-sizing: border-box; }
-                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #c96a6135, transparent 38rem), var(--ivory); }
+                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #7b61ff35, transparent 38rem), var(--canvas); }
                         main { width: min(780px, 100%); }
-                        .eyebrow { color: var(--coral); font-size: 12px; font-weight: 800; letter-spacing: .2em; }
+                        .eyebrow { color: var(--violet); font-size: 12px; font-weight: 800; letter-spacing: .2em; }
                         h1 { margin: 14px 0 20px; max-width: 760px; font-size: clamp(42px, 8vw, 82px); line-height: .98; letter-spacing: -.055em; }
                         .lede { max-width: 660px; color: var(--muted); font-size: 20px; }
-                        section { margin-top: 42px; padding: 18px 20px; display: grid; gap: 3px; border: 1px solid #1b121722; border-radius: 14px; background: var(--surface); }
-                        section strong { color: var(--wine); }
+                        section { margin-top: 42px; padding: 18px 20px; display: grid; gap: 3px; border: 1px solid #15182722; border-radius: 14px; background: var(--surface); }
+                        section strong { color: var(--blue); }
                         section span { color: var(--muted); }
-                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #1b121730; border-radius: 9px; background: #ffffff80; color: var(--wine); font: inherit; font-weight: 650; cursor: pointer; }
+                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #15182730; border-radius: 9px; background: #ffffff80; color: var(--violet); font: inherit; font-weight: 650; cursor: pointer; }
                         button:hover { background: #ffffffcc; }
                         @media (prefers-color-scheme: dark) {
-                          :root { --ink: #faf3ea; --muted: #d9c8bc; --ivory: #1b1217; --surface: rgba(255,255,255,.07); }
-                          body { background: radial-gradient(circle at 20% 0%, #c96a6135, transparent 38rem), var(--ivory); }
+                          :root { --violet: #7b61ff; --blue: #5b9cfa; --teal: #3dd5c5; --ink: #f3f5fa; --muted: #a8adbd; --canvas: #080b16; --surface: rgba(255,255,255,.07); }
+                          body { background: radial-gradient(circle at 20% 0%, #7b61ff35, transparent 38rem), var(--canvas); }
                           section { border-color: #ffffff20; }
-                          section strong { color: #ebc7af; }
-                          button { border-color: #ffffff25; background: #ffffff0c; color: #ebc7af; }
+                          section strong { color: var(--blue); }
+                          button { border-color: #ffffff25; background: #ffffff0c; color: var(--blue); }
                           button:hover { background: #ffffff18; }
                         }
                         """.utf8

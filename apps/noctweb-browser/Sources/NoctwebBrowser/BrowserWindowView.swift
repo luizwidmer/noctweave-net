@@ -170,7 +170,7 @@ struct BrowserWindowView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial)
+        .background(NoctwebTheme.navigation)
     }
 
     private var tabStrip: some View {
@@ -190,7 +190,7 @@ struct BrowserWindowView: View {
             .padding(.vertical, 5)
         }
         .scrollIndicators(.hidden)
-        .background(.ultraThinMaterial)
+        .background(NoctwebTheme.navigation)
     }
 
     @ViewBuilder
@@ -396,7 +396,7 @@ private struct RelayConnectionPanel: View {
                         LinearGradient(
                             colors: [
                                 NoctwebTheme.accent,
-                                NoctwebTheme.sand,
+                                NoctwebTheme.signalTeal,
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -540,9 +540,9 @@ private struct RelayConnectionPanel: View {
                 .font(.caption.weight(.medium))
             }
         }
-        .padding(18)
-        .frame(width: 390)
-        .background(.ultraThinMaterial)
+        .padding(20)
+        .frame(width: 410)
+        .background(NoctwebTheme.navigation)
     }
 
     private var statusView: some View {
@@ -728,12 +728,13 @@ private struct BrowserSidebar: View {
         VStack(spacing: 0) {
             Picker("Library", selection: $model.sidebarSection) {
                 ForEach(BrowserSidebarSection.allCases) { section in
-                    Image(systemName: section.systemImage)
+                    Label(section.title, systemImage: section.systemImage)
                         .tag(section)
                         .help(section.title)
                 }
             }
             .pickerStyle(.segmented)
+            .labelStyle(.titleAndIcon)
             .labelsHidden()
             .padding(10)
 
