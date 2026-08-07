@@ -443,12 +443,12 @@ enum WebsiteProjectBuilder {
         :root {
           color-scheme: light dark;
           --accent: \(accentHex);
-          --violet: #674dd9;
-          --blue: #397ccf;
-          --teal: #168f83;
-          --canvas: #f5f7fc;
-          --ink: #151827;
-          --muted: #62697a;
+          --wine: #922d35;
+          --coral: #a84f4b;
+          --sand: #9c6b55;
+          --canvas: #faf6f2;
+          --ink: #25191e;
+          --muted: #765f64;
           --paper: var(--canvas);
           --card: rgba(255,255,255,.82);
           font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -492,9 +492,9 @@ enum WebsiteProjectBuilder {
           .block { padding-inline: 1.25rem; }
         }
         @media (prefers-color-scheme: dark) {
-          :root { --violet: #7b61ff; --blue: #5b9cfa; --teal: #3dd5c5; --ink: #f3f5fa; --muted: #a8adbd; --paper: #080b16; --card: rgba(255,255,255,.07); }
-          .callout { background: #f3f5fa; color: #080b16; }
-          .callout p { color: #62697a; }
+          :root { --wine: #b55250; --coral: #c96a61; --sand: #ebc7af; --ink: #faf3ea; --muted: #bda9aa; --paper: #120b0f; --card: rgba(255,255,255,.07); }
+          .callout { background: #faf3ea; color: #1b1217; }
+          .callout p { color: #765f64; }
         }
         """
     }

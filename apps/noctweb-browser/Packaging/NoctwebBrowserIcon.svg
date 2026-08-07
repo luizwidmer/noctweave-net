@@ -3,12 +3,12 @@
   <desc id="desc">Two offset Noctweave plates crossed by three wide corridors.</desc>
   <defs>
     <linearGradient id="tile-fill" x1="32" y1="24" x2="224" y2="236" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1C2030"/>
-      <stop offset=".55" stop-color="#121625"/>
-      <stop offset="1" stop-color="#080B16"/>
+      <stop offset="0" stop-color="#2D1C23"/>
+      <stop offset=".55" stop-color="#1B1217"/>
+      <stop offset="1" stop-color="#120B0F"/>
     </linearGradient>
-    <linearGradient id="upper" x1="96" y1="32" x2="224" y2="176" gradientUnits="userSpaceOnUse"><stop stop-color="#7B61FF"/><stop offset="1" stop-color="#5B9CFA"/></linearGradient>
-    <linearGradient id="lower" x1="32" y1="80" x2="160" y2="224" gradientUnits="userSpaceOnUse"><stop stop-color="#5B9CFA"/><stop offset="1" stop-color="#3DD5C5"/></linearGradient>
+    <linearGradient id="upper" x1="96" y1="32" x2="224" y2="176" gradientUnits="userSpaceOnUse"><stop stop-color="#FAF3EA"/><stop offset="1" stop-color="#EBC7AF"/></linearGradient>
+    <linearGradient id="lower" x1="32" y1="80" x2="160" y2="224" gradientUnits="userSpaceOnUse"><stop stop-color="#C96A61"/><stop offset="1" stop-color="#922D35"/></linearGradient>
     <mask id="corridor-cuts">
       <rect width="256" height="256" fill="white"/>
       <path d="M96 40L156 70V86L224 120V148L132 102V86L96 68Z" fill="black"/>

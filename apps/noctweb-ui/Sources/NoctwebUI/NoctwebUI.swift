@@ -58,139 +58,139 @@ public final class NoctwebAppearanceStore: ObservableObject {
 }
 
 public enum NoctwebTheme {
-    public static let quantumViolet = Color(
-        red: 123.0 / 255.0,
-        green: 97.0 / 255.0,
-        blue: 255.0 / 255.0
+    public static let warmIvory = Color(
+        red: 250.0 / 255.0,
+        green: 243.0 / 255.0,
+        blue: 234.0 / 255.0
     )
-    public static let transitBlue = Color(
-        red: 91.0 / 255.0,
-        green: 156.0 / 255.0,
-        blue: 250.0 / 255.0
+    public static let paleSand = Color(
+        red: 235.0 / 255.0,
+        green: 199.0 / 255.0,
+        blue: 175.0 / 255.0
     )
-    public static let signalTeal = Color(
-        red: 61.0 / 255.0,
-        green: 213.0 / 255.0,
-        blue: 197.0 / 255.0
+    public static let mutedCoral = Color(
+        red: 201.0 / 255.0,
+        green: 106.0 / 255.0,
+        blue: 97.0 / 255.0
     )
-    public static let night = Color(
-        red: 8.0 / 255.0,
-        green: 11.0 / 255.0,
-        blue: 22.0 / 255.0
+    public static let deepWine = Color(
+        red: 146.0 / 255.0,
+        green: 45.0 / 255.0,
+        blue: 53.0 / 255.0
     )
-    public static let raised = Color(
-        red: 18.0 / 255.0,
-        green: 22.0 / 255.0,
-        blue: 37.0 / 255.0
+    public static let plumBlack = Color(
+        red: 27.0 / 255.0,
+        green: 18.0 / 255.0,
+        blue: 23.0 / 255.0
     )
-    public static let soft = Color(
-        red: 28.0 / 255.0,
-        green: 32.0 / 255.0,
-        blue: 48.0 / 255.0
+    public static let success = Color(
+        red: 121.0 / 255.0,
+        green: 198.0 / 255.0,
+        blue: 163.0 / 255.0
     )
     public static let primaryText = Color(
-        red: 243.0 / 255.0,
-        green: 245.0 / 255.0,
-        blue: 250.0 / 255.0
+        red: 250.0 / 255.0,
+        green: 243.0 / 255.0,
+        blue: 234.0 / 255.0
     )
     public static let secondaryText = Color(
-        red: 168.0 / 255.0,
-        green: 173.0 / 255.0,
-        blue: 189.0 / 255.0
+        red: 189.0 / 255.0,
+        green: 169.0 / 255.0,
+        blue: 170.0 / 255.0
     )
-    public static let accent = quantumViolet
-    public static let accentStrong = transitBlue
+    public static let accent = mutedCoral
+    public static let accentStrong = deepWine
 
     public static let canvas = adaptive(
         light: NSColor(
-            srgbRed: 245.0 / 255.0,
-            green: 247.0 / 255.0,
-            blue: 252.0 / 255.0,
+            srgbRed: 250.0 / 255.0,
+            green: 246.0 / 255.0,
+            blue: 242.0 / 255.0,
             alpha: 1
         ),
         dark: NSColor(
-            srgbRed: 8.0 / 255.0,
+            srgbRed: 18.0 / 255.0,
             green: 11.0 / 255.0,
-            blue: 22.0 / 255.0,
+            blue: 15.0 / 255.0,
             alpha: 1
         )
     )
     public static let surface = adaptive(
         light: NSColor(
-            srgbRed: 243.0 / 255.0,
-            green: 245.0 / 255.0,
-            blue: 250.0 / 255.0,
+            srgbRed: 250.0 / 255.0,
+            green: 243.0 / 255.0,
+            blue: 234.0 / 255.0,
             alpha: 0.96
         ),
         dark: NSColor(
-            srgbRed: 18.0 / 255.0,
-            green: 22.0 / 255.0,
-            blue: 37.0 / 255.0,
+            srgbRed: 27.0 / 255.0,
+            green: 18.0 / 255.0,
+            blue: 23.0 / 255.0,
             alpha: 0.96
         )
     )
     public static let card = adaptive(
         light: NSColor(
             srgbRed: 1,
-            green: 1,
-            blue: 1,
+            green: 253.0 / 255.0,
+            blue: 251.0 / 255.0,
             alpha: 0.98
         ),
         dark: NSColor(
-            srgbRed: 28.0 / 255.0,
-            green: 32.0 / 255.0,
-            blue: 48.0 / 255.0,
+            srgbRed: 42.0 / 255.0,
+            green: 27.0 / 255.0,
+            blue: 33.0 / 255.0,
             alpha: 0.96
         )
     )
     public static let input = adaptive(
         light: NSColor(
-            srgbRed: 1,
-            green: 1,
-            blue: 1,
+            srgbRed: 247.0 / 255.0,
+            green: 238.0 / 255.0,
+            blue: 233.0 / 255.0,
             alpha: 0.9
         ),
         dark: NSColor(
-            srgbRed: 13.0 / 255.0,
-            green: 17.0 / 255.0,
-            blue: 32.0 / 255.0,
+            srgbRed: 23.0 / 255.0,
+            green: 15.0 / 255.0,
+            blue: 19.0 / 255.0,
             alpha: 0.86
         )
     )
     public static let navigation = adaptive(
         light: NSColor(
-            srgbRed: 238.0 / 255.0,
-            green: 241.0 / 255.0,
-            blue: 248.0 / 255.0,
+            srgbRed: 247.0 / 255.0,
+            green: 238.0 / 255.0,
+            blue: 233.0 / 255.0,
             alpha: 0.97
         ),
         dark: NSColor(
-            srgbRed: 13.0 / 255.0,
-            green: 17.0 / 255.0,
-            blue: 32.0 / 255.0,
+            srgbRed: 23.0 / 255.0,
+            green: 15.0 / 255.0,
+            blue: 19.0 / 255.0,
             alpha: 0.97
         )
     )
     public static let status = accent.opacity(0.14)
     public static let border = adaptive(
         light: NSColor(
-            srgbRed: 103.0 / 255.0,
-            green: 77.0 / 255.0,
-            blue: 217.0 / 255.0,
+            srgbRed: 217.0 / 255.0,
+            green: 198.0 / 255.0,
+            blue: 193.0 / 255.0,
             alpha: 0.24
         ),
         dark: NSColor(
-            srgbRed: 91.0 / 255.0,
-            green: 156.0 / 255.0,
-            blue: 250.0 / 255.0,
+            srgbRed: 86.0 / 255.0,
+            green: 49.0 / 255.0,
+            blue: 58.0 / 255.0,
             alpha: 0.24
         )
     )
     public static let softShadow = adaptive(
         light: NSColor(
-            srgbRed: 24.0 / 255.0,
-            green: 35.0 / 255.0,
-            blue: 74.0 / 255.0,
+            srgbRed: 69.0 / 255.0,
+            green: 36.0 / 255.0,
+            blue: 46.0 / 255.0,
             alpha: 0.16
         ),
         dark: NSColor(
@@ -243,16 +243,6 @@ public struct NoctwebProductIcon: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .overlay {
-                    RoundedRectangle(
-                        cornerRadius: side * 0.245,
-                        style: .continuous
-                    )
-                    .strokeBorder(
-                        borderColor,
-                        lineWidth: max(0.75, side * 0.012)
-                    )
-                }
 
                 switch product {
                 case .browser:
@@ -268,93 +258,87 @@ public struct NoctwebProductIcon: View {
 
     private func browserGlyph(side: CGFloat) -> some View {
         ZStack {
-            RoundedRectangle(
-                cornerRadius: side * 0.115,
-                style: .continuous
-            )
-            .fill(NoctwebTheme.night.opacity(0.36))
-            .overlay {
-                RoundedRectangle(
-                    cornerRadius: side * 0.115,
-                    style: .continuous
-                )
-                .strokeBorder(
-                    NoctwebTheme.transitBlue,
-                    lineWidth: max(1, side * 0.047)
-                )
-            }
-            .padding(side * 0.16)
-
-            Path { path in
-                path.move(
-                    to: CGPoint(x: side * 0.16, y: side * 0.33)
-                )
-                path.addLine(
-                    to: CGPoint(x: side * 0.84, y: side * 0.33)
-                )
-            }
-            .stroke(
-                NoctwebTheme.transitBlue,
-                style: StrokeStyle(lineWidth: max(1, side * 0.047))
-            )
-
-            ForEach([-0.12, 0, 0.12], id: \.self) { offset in
-                corridorPath(
-                    side: side,
-                    verticalOffset: side * offset
-                )
-                .stroke(
-                    NoctwebTheme.primaryText,
-                    style: StrokeStyle(
-                        lineWidth: max(1, side * 0.043),
-                        lineJoin: .miter
+            ZStack {
+                upperPlatePath(side: side)
+                    .fill(
+                        LinearGradient(
+                            colors: [NoctwebTheme.warmIvory, NoctwebTheme.paleSand],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
                     )
-                )
-
-                corridorPath(
-                    side: side,
-                    verticalOffset: side * (offset - 0.006)
-                )
-                .stroke(
-                    NoctwebTheme.signalTeal,
-                    style: StrokeStyle(
-                        lineWidth: max(1, side * 0.01),
-                        lineJoin: .miter
-                    )
-                )
+                upperCorridorPath(side: side)
+                    .fill(.black)
+                    .blendMode(.destinationOut)
             }
+            .compositingGroup()
+
+            ZStack {
+                lowerPlatePath(side: side)
+                    .fill(
+                        LinearGradient(
+                            colors: [NoctwebTheme.mutedCoral, NoctwebTheme.deepWine],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                lowerCorridorPath(side: side)
+                    .fill(.black)
+                    .blendMode(.destinationOut)
+            }
+            .compositingGroup()
         }
     }
 
-    private func corridorPath(
-        side: CGFloat,
-        verticalOffset: CGFloat = 0
-    ) -> Path {
+    private func upperPlatePath(side: CGFloat) -> Path {
         Path { path in
-            path.move(
-                to: CGPoint(
-                    x: side * 0.24,
-                    y: side * 0.59 + verticalOffset
-                )
-            )
-            path.addLine(
-                to: CGPoint(
-                    x: side * 0.455,
-                    y: side * 0.59 + verticalOffset
-                )
-            )
-            path.addLine(
-                to: CGPoint(
-                    x: side * 0.56,
-                    y: side * 0.645 + verticalOffset
-                )
-            )
-            path.addLine(
-                to: CGPoint(
-                    x: side * 0.76,
-                    y: side * 0.645 + verticalOffset
-                )
-            )
+            path.move(to: CGPoint(x: side * 0.375, y: side * 0.125))
+            path.addLine(to: CGPoint(x: side * 0.875, y: side * 0.125))
+            path.addLine(to: CGPoint(x: side * 0.875, y: side * 0.6875))
+            path.addLine(to: CGPoint(x: side * 0.546875, y: side * 0.5234375))
+            path.addLine(to: CGPoint(x: side * 0.546875, y: side * 0.4296875))
+            path.addLine(to: CGPoint(x: side * 0.375, y: side * 0.34375))
+            path.closeSubpath()
+        }
+    }
+
+    private func lowerPlatePath(side: CGFloat) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: side * 0.125, y: side * 0.3125))
+            path.addLine(to: CGPoint(x: side * 0.453125, y: side * 0.4765625))
+            path.addLine(to: CGPoint(x: side * 0.453125, y: side * 0.5703125))
+            path.addLine(to: CGPoint(x: side * 0.625, y: side * 0.65625))
+            path.addLine(to: CGPoint(x: side * 0.625, y: side * 0.875))
+            path.addLine(to: CGPoint(x: side * 0.125, y: side * 0.875))
+            path.closeSubpath()
+        }
+    }
+
+    private func upperCorridorPath(side: CGFloat) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: side * 0.375, y: side * 0.15625))
+            path.addLine(to: CGPoint(x: side * 0.609375, y: side * 0.2734375))
+            path.addLine(to: CGPoint(x: side * 0.609375, y: side * 0.3359375))
+            path.addLine(to: CGPoint(x: side * 0.875, y: side * 0.46875))
+            path.addLine(to: CGPoint(x: side * 0.875, y: side * 0.578125))
+            path.addLine(to: CGPoint(x: side * 0.515625, y: side * 0.3984375))
+            path.addLine(to: CGPoint(x: side * 0.515625, y: side * 0.3359375))
+            path.addLine(to: CGPoint(x: side * 0.375, y: side * 0.265625))
+            path.closeSubpath()
+        }
+    }
+
+    private func lowerCorridorPath(side: CGFloat) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: side * 0.125, y: side * 0.4375))
+            path.addLine(to: CGPoint(x: side * 0.40625, y: side * 0.578125))
+            path.addLine(to: CGPoint(x: side * 0.40625, y: side * 0.640625))
+            path.addLine(to: CGPoint(x: side * 0.625, y: side * 0.734375))
+            path.addLine(to: CGPoint(x: side * 0.625, y: side * 0.84375))
+            path.addLine(to: CGPoint(x: side * 0.34375, y: side * 0.703125))
+            path.addLine(to: CGPoint(x: side * 0.34375, y: side * 0.640625))
+            path.addLine(to: CGPoint(x: side * 0.125, y: side * 0.546875))
+            path.closeSubpath()
         }
     }
 
@@ -381,7 +365,7 @@ public struct NoctwebProductIcon: View {
                 )
                 path.closeSubpath()
             }
-            .fill(NoctwebTheme.quantumViolet)
+            .fill(NoctwebTheme.deepWine)
 
             Path { path in
                 path.move(
@@ -404,27 +388,19 @@ public struct NoctwebProductIcon: View {
                 )
                 path.closeSubpath()
             }
-            .fill(NoctwebTheme.signalTeal)
+            .fill(NoctwebTheme.mutedCoral)
         }
     }
 
     private var backgroundColors: [Color] {
         switch product {
         case .browser:
-            [NoctwebTheme.raised, NoctwebTheme.night]
+            [NoctwebTheme.plumBlack, Color(red: 18.0 / 255.0, green: 11.0 / 255.0, blue: 15.0 / 255.0)]
         case .lab:
             [NoctwebTheme.primaryText, NoctwebTheme.secondaryText]
         }
     }
 
-    private var borderColor: Color {
-        switch product {
-        case .browser:
-            NoctwebTheme.transitBlue.opacity(0.16)
-        case .lab:
-            NoctwebTheme.quantumViolet.opacity(0.16)
-        }
-    }
 }
 
 public struct NoctwebChromeModifier: ViewModifier {

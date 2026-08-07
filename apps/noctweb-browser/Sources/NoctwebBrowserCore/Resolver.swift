@@ -311,24 +311,24 @@ public actor DeterministicNoctwebResolver: NoctwebResolving {
                     mediaType: "text/css; charset=utf-8",
                     bytes: Data(
                         """
-                        :root { color-scheme: light dark; --violet: #674dd9; --blue: #397ccf; --teal: #168f83; --canvas: #f5f7fc; --ink: #151827; --muted: #62697a; --surface: rgba(255,255,255,.82); font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: var(--canvas); color: var(--ink); }
+                        :root { color-scheme: light dark; --wine: #922d35; --coral: #a84f4b; --sand: #9c6b55; --canvas: #faf6f2; --ink: #25191e; --muted: #765f64; --surface: rgba(255,253,251,.86); font: 16px/1.6 -apple-system, BlinkMacSystemFont, sans-serif; background: var(--canvas); color: var(--ink); }
                         * { box-sizing: border-box; }
-                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #7b61ff35, transparent 38rem), var(--canvas); }
+                        body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 48px; background: radial-gradient(circle at 20% 0%, #c96a6135, transparent 38rem), var(--canvas); }
                         main { width: min(780px, 100%); }
-                        .eyebrow { color: var(--violet); font-size: 12px; font-weight: 800; letter-spacing: .2em; }
+                        .eyebrow { color: var(--wine); font-size: 12px; font-weight: 800; letter-spacing: .2em; }
                         h1 { margin: 14px 0 20px; max-width: 760px; font-size: clamp(42px, 8vw, 82px); line-height: .98; letter-spacing: -.055em; }
                         .lede { max-width: 660px; color: var(--muted); font-size: 20px; }
                         section { margin-top: 42px; padding: 18px 20px; display: grid; gap: 3px; border: 1px solid #15182722; border-radius: 14px; background: var(--surface); }
-                        section strong { color: var(--blue); }
+                        section strong { color: var(--coral); }
                         section span { color: var(--muted); }
-                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #15182730; border-radius: 9px; background: #ffffff80; color: var(--violet); font: inherit; font-weight: 650; cursor: pointer; }
+                        button { margin-top: 20px; padding: 10px 14px; border: 1px solid #25191e30; border-radius: 9px; background: #fffdfbcc; color: var(--wine); font: inherit; font-weight: 650; cursor: pointer; }
                         button:hover { background: #ffffffcc; }
                         @media (prefers-color-scheme: dark) {
-                          :root { --violet: #7b61ff; --blue: #5b9cfa; --teal: #3dd5c5; --ink: #f3f5fa; --muted: #a8adbd; --canvas: #080b16; --surface: rgba(255,255,255,.07); }
-                          body { background: radial-gradient(circle at 20% 0%, #7b61ff35, transparent 38rem), var(--canvas); }
+                          :root { --wine: #b55250; --coral: #c96a61; --sand: #ebc7af; --ink: #faf3ea; --muted: #bda9aa; --canvas: #120b0f; --surface: rgba(255,255,255,.07); }
+                          body { background: radial-gradient(circle at 20% 0%, #c96a6130, transparent 38rem), var(--canvas); }
                           section { border-color: #ffffff20; }
-                          section strong { color: var(--blue); }
-                          button { border-color: #ffffff25; background: #ffffff0c; color: var(--blue); }
+                          section strong { color: var(--coral); }
+                          button { border-color: #ffffff25; background: #ffffff0c; color: var(--coral); }
                           button:hover { background: #ffffff18; }
                         }
                         """.utf8

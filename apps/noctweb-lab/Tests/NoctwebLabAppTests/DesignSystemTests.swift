@@ -15,9 +15,9 @@ final class DesignSystemTests: XCTestCase {
 
         XCTAssertTrue(source.contains("color-scheme: light dark"))
         XCTAssertTrue(source.contains("@media (prefers-color-scheme: dark)"))
-        XCTAssertTrue(source.contains("--violet: #674dd9"))
-        XCTAssertTrue(source.contains("--blue: #397ccf"))
-        XCTAssertTrue(source.contains("--teal: #168f83"))
+        XCTAssertTrue(source.contains("--wine: #922d35"))
+        XCTAssertTrue(source.contains("--coral: #a84f4b"))
+        XCTAssertTrue(source.contains("--sand: #9c6b55"))
 
         let legacySource = WebsiteProjectBuilder.legacyCSS(
             accentHex: "#4F8F77"

@@ -200,7 +200,7 @@ private struct BrowserSettingsCard<Content: View>: View {
             Label(title, systemImage: systemImage)
                 .font(.headline)
                 .symbolRenderingMode(.hierarchical)
-                .tint(NoctwebTheme.quantumViolet)
+                .tint(NoctwebTheme.accent)
 
             content
         }

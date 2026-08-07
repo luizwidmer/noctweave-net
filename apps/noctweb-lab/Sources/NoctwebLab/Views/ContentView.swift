@@ -143,7 +143,7 @@ struct ContentView: View {
             )
             .padding(.horizontal, 10)
             .padding(.top, 10)
-            .disabled(model.activeWorkspace == nil)
+            .disabled(!canCreateSite)
 
             VStack(spacing: 5) {
                 ForEach(primarySections) { destination in
@@ -256,6 +256,10 @@ struct ContentView: View {
 
     private var primarySections: [ProductSection] {
         [.sites, .runtime, .network]
+    }
+
+    private var canCreateSite: Bool {
+        model.activeWorkspace?.relays.contains { $0.supports(.host) } == true
     }
 
     private func relaySummary(_ workspace: Workspace) -> String {

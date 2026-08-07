@@ -40,6 +40,8 @@ struct SitesView: View {
         GeometryReader { proxy in
             if model.activeWorkspace == nil {
                 selectedWorkspace(width: proxy.size.width)
+            } else if model.activeWorkspace?.sites.isEmpty != false {
+                selectedWorkspace(width: proxy.size.width)
             } else if proxy.size.width >= siteLibraryBreakpoint {
                 HStack(spacing: 0) {
                     siteLibrary
@@ -117,7 +119,7 @@ struct SitesView: View {
         } else if let site = model.selectedSite {
             siteWorkspace(site, width: width)
                 .id(site.id)
-        } else if model.activeWorkspace?.relays.isEmpty != false {
+        } else if model.activeWorkspace?.relays.contains(where: { $0.supports(.host) }) != true {
             VStack(spacing: 16) {
                 Image(systemName: "network.slash")
                     .font(.system(size: 34, weight: .medium))
@@ -139,6 +141,18 @@ struct SitesView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+            .padding(.horizontal, 36)
+            .padding(.vertical, 32)
+            .frame(maxWidth: 520)
+            .background(
+                NoctwebTheme.card,
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(NoctwebTheme.border, lineWidth: 1)
+            }
+            .shadow(color: NoctwebTheme.softShadow, radius: 22, y: 10)
             .padding(32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -161,6 +175,18 @@ struct SitesView: View {
                 }
                 .buttonStyle(.borderedProminent)
             }
+            .padding(.horizontal, 36)
+            .padding(.vertical, 32)
+            .frame(maxWidth: 520)
+            .background(
+                NoctwebTheme.card,
+                in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(NoctwebTheme.border, lineWidth: 1)
+            }
+            .shadow(color: NoctwebTheme.softShadow, radius: 22, y: 10)
             .padding(32)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }

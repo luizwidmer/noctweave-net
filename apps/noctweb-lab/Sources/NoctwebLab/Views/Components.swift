@@ -180,7 +180,7 @@ struct PublicationPipeline: View {
 
                     if stage != PublicationStage.allCases.last {
                         Rectangle()
-                            .fill(stage.rawValue < activeStage.rawValue ? NoctwebTheme.quantumViolet : Color.secondary.opacity(0.25))
+                            .fill(stage.rawValue < activeStage.rawValue ? NoctwebTheme.accent : Color.secondary.opacity(0.25))
                             .frame(width: 34, height: 1)
                             .padding(.bottom, 21)
                 }
@@ -194,7 +194,7 @@ struct PublicationPipeline: View {
             HStack(spacing: 8) {
                 Label(activeStage.title, systemImage: activeStage.systemImage)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(outcome == .failed ? .red : NoctwebTheme.quantumViolet)
+                    .foregroundStyle(outcome == .failed ? .red : NoctwebTheme.accent)
                 Spacer(minLength: 8)
                 Text("\(activeStage.rawValue + 1) of \(PublicationStage.allCases.count)")
                     .font(.caption.monospacedDigit())
@@ -204,14 +204,14 @@ struct PublicationPipeline: View {
                 value: Double(activeStage.rawValue + 1),
                 total: Double(PublicationStage.allCases.count)
             )
-            .tint(outcome == .failed ? .red : NoctwebTheme.quantumViolet)
+            .tint(outcome == .failed ? .red : NoctwebTheme.accent)
         }
         .frame(maxWidth: .infinity)
     }
 
     private func foreground(for stage: PublicationStage) -> Color {
         if outcome == .failed && stage == activeStage { return .red }
-        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.quantumViolet }
+        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.accent }
         return .secondary
     }
 
@@ -223,7 +223,7 @@ struct PublicationPipeline: View {
 
     private func border(for stage: PublicationStage) -> Color {
         if outcome == .failed && stage == activeStage { return .red.opacity(0.45) }
-        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.quantumViolet.opacity(0.45) }
+        if stage.rawValue <= activeStage.rawValue { return NoctwebTheme.accent.opacity(0.45) }
         return .secondary.opacity(0.2)
     }
 }

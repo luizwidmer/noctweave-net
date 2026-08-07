@@ -1259,11 +1259,11 @@ struct WebsiteProjectEditorView: View {
     }
 
     private let accentChoices = [
-        "#7B61FF",
-        "#5B9CFA",
-        "#3DD5C5",
-        "#62697A",
-        "#1C2030",
+        "#C96A61",
+        "#922D35",
+        "#EBC7AF",
+        "#765F64",
+        "#1B1217",
     ]
 }
 

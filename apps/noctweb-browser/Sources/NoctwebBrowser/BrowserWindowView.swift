@@ -277,13 +277,46 @@ struct BrowserWindowView: View {
                     }
                 }
             } else {
-                ContentUnavailableView(
-                    "Enter a Noctweb address",
-                    systemImage: "network",
-                    description: Text(
-                        "Open a noct:// address or a trusted .noctlink file."
-                    )
+                VStack(spacing: 16) {
+                    NoctwebProductIcon(.browser)
+                        .frame(width: 58, height: 58)
+                    VStack(spacing: 6) {
+                        Text("Browse Noctweb")
+                            .font(.title2.weight(.semibold))
+                        Text("Enter a noct:// address or open a trusted .noctlink file.")
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    HStack(spacing: 10) {
+                        Button {
+                            addressFieldIsFocused = true
+                        } label: {
+                            Label("Enter Address", systemImage: "text.cursor")
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        Button {
+                            showsRelayPanel = true
+                        } label: {
+                            Label("Relay", systemImage: "network")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(.horizontal, 34)
+                .padding(.vertical, 30)
+                .frame(maxWidth: 500)
+                .background(
+                    NoctwebTheme.card,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
                 )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(NoctwebTheme.border, lineWidth: 1)
+                }
+                .shadow(color: NoctwebTheme.softShadow, radius: 22, y: 10)
+                .padding(32)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         }
@@ -396,7 +429,7 @@ private struct RelayConnectionPanel: View {
                         LinearGradient(
                             colors: [
                                 NoctwebTheme.accent,
-                                NoctwebTheme.signalTeal,
+                                NoctwebTheme.success,
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -758,12 +791,11 @@ private struct BrowserSidebar: View {
     @ViewBuilder
     private var bookmarkList: some View {
         if model.session.bookmarks.isEmpty {
-            ContentUnavailableView(
-                "No Bookmarks",
-                systemImage: "bookmark",
-                description: Text("Save verified sites from the toolbar.")
+            SidebarEmptyState(
+                title: "No bookmarks",
+                detail: "Verified sites you save appear here.",
+                systemImage: "bookmark"
             )
-            .controlSize(.small)
         } else {
             List {
                 ForEach(model.session.bookmarks) { bookmark in
@@ -783,12 +815,11 @@ private struct BrowserSidebar: View {
     @ViewBuilder
     private var historyList: some View {
         if model.session.history.isEmpty {
-            ContentUnavailableView(
-                "No History",
-                systemImage: "clock",
-                description: Text("Verified visits appear here.")
+            SidebarEmptyState(
+                title: "No history",
+                detail: "Verified visits appear here.",
+                systemImage: "clock"
             )
-            .controlSize(.small)
         } else {
             VStack(spacing: 0) {
                 HStack {
@@ -821,6 +852,37 @@ private struct BrowserSidebar: View {
                 .listStyle(.sidebar)
             }
         }
+    }
+}
+
+private struct SidebarEmptyState: View {
+    let title: String
+    let detail: String
+    let systemImage: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(NoctwebTheme.accent)
+                .frame(width: 34, height: 34)
+                .background(NoctwebTheme.status, in: RoundedRectangle(cornerRadius: 10))
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NoctwebTheme.card, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(NoctwebTheme.border, lineWidth: 1)
+        }
+        .padding(12)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 
