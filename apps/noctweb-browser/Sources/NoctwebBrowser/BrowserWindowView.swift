@@ -291,16 +291,22 @@ struct BrowserWindowView: View {
                         Button {
                             addressFieldIsFocused = true
                         } label: {
-                            Label("Enter Address", systemImage: "text.cursor")
+                            Label("Enter Address", systemImage: "arrow.right.circle.fill")
+                                .frame(minWidth: 124)
                         }
                         .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(NoctwebTheme.accent)
 
                         Button {
                             showsRelayPanel = true
                         } label: {
-                            Label("Relay", systemImage: "network")
+                            Label("Choose Relay", systemImage: "server.rack")
+                                .frame(minWidth: 124)
                         }
                         .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .tint(NoctwebTheme.accentStrong)
                     }
                 }
                 .padding(.horizontal, 34)
