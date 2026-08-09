@@ -205,7 +205,7 @@ struct BrowserWindowView: View {
                 Text("Choose a relay")
                     .font(.title2.weight(.semibold))
                 Text(
-                    "The Browser connects only to a relay you select and verifies its signed identity before resolving any Noctweb address."
+                    "Enter a relay address once. The Browser verifies its identity before opening any Noctweb site."
                 )
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -213,7 +213,7 @@ struct BrowserWindowView: View {
                 Button {
                     showsRelayPanel = true
                 } label: {
-                    Label("Connect Relay", systemImage: "network")
+                    Label("Connect and Verify Relay", systemImage: "network")
                 }
                 .buttonStyle(.borderedProminent)
             }
@@ -446,9 +446,9 @@ private struct RelayConnectionPanel: View {
                         )
                     )
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Relay Connection")
+                    Text("Connect a Relay")
                         .font(.headline)
-                    Text("Choose where Noctweb resolves")
+                    Text("The Browser verifies it before use")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -483,8 +483,8 @@ private struct RelayConnectionPanel: View {
                                 .controlSize(.small)
                                 .frame(width: 52)
                         } else {
-                            Text(model.relayIsConfigured ? "Verify" : "Connect")
-                                .frame(width: 52)
+                            Text(model.relayIsConfigured ? "Verify Again" : "Connect")
+                                .frame(minWidth: 72)
                         }
                     }
                     .buttonStyle(.borderedProminent)

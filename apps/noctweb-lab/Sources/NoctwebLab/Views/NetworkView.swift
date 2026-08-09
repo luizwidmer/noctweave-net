@@ -5,6 +5,7 @@ import SwiftUI
 struct NetworkView: View {
     @EnvironmentObject private var model: AppModel
     @State private var endpoint = "http://127.0.0.1:9440"
+    @State private var showsPublishingDetails = false
 
     var body: some View {
         ScrollView {
@@ -12,7 +13,7 @@ struct NetworkView: View {
                 PageHeader(
                     "Host relays",
                     subtitle:
-                        "Connect Noctweb Lab directly to real nw.net-host@1 endpoints."
+                        "Connect a relay to publish and verify your Noctweb sites."
                 ) {
                     StatusPill(
                         title: connectedRelays.isEmpty
@@ -38,10 +39,17 @@ struct NetworkView: View {
     private var connectionCard: some View {
         SectionCard("Connect a host relay", systemImage: "link") {
             Text(
-                "The Lab reads the relay namespace from /noctweb/config.json, publishes through /relay, then fetches the stored object and verifies its signed receipt."
+                "Enter the address shown by your relay operator. The Lab checks hosting support and relay identity before saving it."
             )
             .font(.callout)
             .foregroundStyle(.secondary)
+
+            DisclosureGroup("How publishing is verified", isExpanded: $showsPublishingDetails) {
+                Text("The Lab reads the signed namespace configuration, publishes through the relay API, fetches the stored object, and verifies the returned receipt before reporting success.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+            }
 
             HStack(spacing: 10) {
                 TextField(
@@ -53,7 +61,7 @@ struct NetworkView: View {
                 .onSubmit(addRelay)
 
                 Button(action: addRelay) {
-                    Label("Add relay", systemImage: "plus")
+                    Label("Connect & Verify", systemImage: "checkmark.shield")
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -88,7 +96,7 @@ struct NetworkView: View {
                     "No host relays",
                     systemImage: "externaldrive.badge.plus",
                     description: Text(
-                        "Add a relay endpoint above before creating and publishing a site."
+                        "Enter a host relay address above. It will be verified before you create or publish a site."
                     )
                 )
                 .frame(minHeight: 180)
