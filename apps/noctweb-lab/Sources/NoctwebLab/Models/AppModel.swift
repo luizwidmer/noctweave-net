@@ -2525,8 +2525,9 @@ final class AppModel: ObservableObject {
         )
         try encoded.write(
             to: workspaceFileURL,
-            options: [.atomic, .completeFileProtection]
+            options: .atomic
         )
+        try restrictFileToCurrentUser(at: workspaceFileURL)
     }
 
     nonisolated private static func writeWorkspaceData(
@@ -2557,7 +2558,17 @@ final class AppModel: ObservableObject {
         let encoded = try JSONEncoder().encode(journal)
         try encoded.write(
             to: journalFileURL,
-            options: [.atomic, .completeFileProtection]
+            options: .atomic
+        )
+        try restrictFileToCurrentUser(at: journalFileURL)
+    }
+
+    nonisolated private static func restrictFileToCurrentUser(
+        at fileURL: URL
+    ) throws {
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: 0o600)],
+            ofItemAtPath: fileURL.path
         )
     }
 

@@ -78,7 +78,11 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
                 withIntermediateDirectories: true
             )
             let data = try CanonicalJSON.encode(snapshot)
-            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+            try data.write(to: fileURL, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o600)],
+                ofItemAtPath: fileURL.path
+            )
         } catch let error as NoctwebLabError {
             throw error
         } catch {

@@ -1229,5 +1229,12 @@ final class NoctwebLabCoreTests: XCTestCase {
         )
         try repository.save(snapshot)
         XCTAssertEqual(try repository.load(), snapshot)
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: repository.fileURL.path
+        )
+        XCTAssertEqual(
+            (attributes[.posixPermissions] as? NSNumber)?.intValue,
+            0o600
+        )
     }
 }
