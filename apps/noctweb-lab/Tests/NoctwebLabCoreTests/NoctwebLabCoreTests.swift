@@ -338,7 +338,11 @@ final class NoctwebLabCoreTests: XCTestCase {
             publications: [],
             relays: RelayTopology.labDefault.nodes
         )
-        try CanonicalJSON.encode(legacy).write(to: fileURL)
+        try NoctwebSecureFileIO.writePrivate(
+            CanonicalJSON.encode(legacy),
+            to: fileURL,
+            maximumBytes: 32 * 1_024 * 1_024
+        )
 
         let loaded = try JSONWorkspaceRepository(fileURL: fileURL).load()
 
@@ -1271,6 +1275,44 @@ final class NoctwebLabCoreTests: XCTestCase {
         XCTAssertEqual(
             (attributes[.posixPermissions] as? NSNumber)?.intValue,
             0o600
+        )
+    }
+
+    func testWorkspaceRepositoryDoesNotFollowFinalSymlink() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let victimURL = directory.appendingPathComponent("victim.txt")
+        let sentinel = Data("must remain unchanged".utf8)
+        try sentinel.write(to: victimURL)
+        let workspaceURL = directory.appendingPathComponent("workspace.json")
+        try FileManager.default.createSymbolicLink(
+            at: workspaceURL,
+            withDestinationURL: victimURL
+        )
+        let repository = JSONWorkspaceRepository(fileURL: workspaceURL)
+        let snapshot = WorkspaceSnapshot(
+            selectedPublicationID: nil,
+            publications: [],
+            relays: RelayTopology.labDefault.nodes
+        )
+
+        try repository.save(snapshot)
+
+        XCTAssertEqual(try Data(contentsOf: victimURL), sentinel)
+        XCTAssertEqual(try repository.load(), snapshot)
+
+        let aliasURL = directory.appendingPathComponent("workspace-alias.json")
+        try FileManager.default.createSymbolicLink(
+            at: aliasURL,
+            withDestinationURL: workspaceURL
+        )
+        XCTAssertThrowsError(
+            try JSONWorkspaceRepository(fileURL: aliasURL).load()
         )
     }
 }

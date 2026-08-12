@@ -312,6 +312,7 @@ final class PublicationSchemeHandler: NSObject, WKURLSchemeHandler, @unchecked S
             "Cross-Origin-Resource-Policy": "same-origin",
             "Referrer-Policy": "no-referrer",
             "X-Content-Type-Options": "nosniff",
+            "X-DNS-Prefetch-Control": "off",
             "Cache-Control": "no-store"
         ]
 
@@ -355,7 +356,8 @@ struct BundleSnapshot: @unchecked Sendable {
         "child-src 'self' blob:",
         "frame-src 'self'",
         "form-action 'self'",
-        "manifest-src 'self'"
+        "manifest-src 'self'",
+        "prefetch-src 'none'"
     ].joined(separator: "; ")
 
     static let networkIsolationScript = """

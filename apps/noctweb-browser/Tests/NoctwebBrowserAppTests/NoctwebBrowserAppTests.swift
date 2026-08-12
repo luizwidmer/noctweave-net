@@ -177,7 +177,11 @@ final class NoctwebBrowserAppTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: root) }
         let workspaceURL = root.appending(path: "workspaces.json")
-        try workspaceData.write(to: workspaceURL, options: .atomic)
+        try NoctwebSecureFileIO.writePrivate(
+            workspaceData,
+            to: workspaceURL,
+            maximumBytes: 32 * 1_024 * 1_024
+        )
 
         let environment = try DeterministicNoctwebResolver
             .developmentEnvironment()

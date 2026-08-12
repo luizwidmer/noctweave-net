@@ -6,6 +6,21 @@ import XCTest
 
 @MainActor
 final class VerifiedWebsiteWebViewTests: XCTestCase {
+    func testRendererDisablesSpeculativeDNSAndPrefetch() {
+        XCTAssertTrue(
+            BundleSnapshot.contentSecurityPolicy.contains(
+                "prefetch-src 'none'"
+            )
+        )
+        let source = try? String(
+            contentsOfFile: #filePath
+                .components(separatedBy: "/Tests/")[0]
+                + "/Sources/NoctwebLab/Views/VerifiedWebsiteWebView.swift",
+            encoding: .utf8
+        )
+        XCTAssertTrue(source?.contains("X-DNS-Prefetch-Control") == true)
+    }
+
     func testInternalRendererURLRejectsAuthorityVariantsAndBackslashes() throws {
         let host = "publication-test"
         XCTAssertTrue(BundleSnapshot.isInternalURL(

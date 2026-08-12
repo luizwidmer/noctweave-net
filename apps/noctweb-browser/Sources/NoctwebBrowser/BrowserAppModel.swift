@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 @preconcurrency import NoctweaveCore
 import NoctwebBrowserCore
+import enum NoctwebLabCore.NoctwebSecureFileIO
 import SwiftUI
 
 enum BrowserSidebarSection: String, CaseIterable, Identifiable {
@@ -683,18 +684,12 @@ final class BrowserAppModel: ObservableObject {
             }
         }
         do {
-            let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
-            guard
-                let fileSize = values.fileSize,
-                fileSize > 0,
-                fileSize <= NoctwebAccessDescriptor.maximumEncodedBytes
-            else {
-                throw NoctwebBrowserError.invalidAccessDescriptor(
-                    "descriptor size is invalid"
-                )
-            }
+            let data = try NoctwebSecureFileIO.read(
+                from: fileURL,
+                maximumBytes: NoctwebAccessDescriptor.maximumEncodedBytes
+            )
             let descriptor = try NoctwebAccessDescriptor.decodeExactJSON(
-                Data(contentsOf: fileURL, options: [.mappedIfSafe])
+                data
             )
             let matches = session.profiles.filter {
                 $0.routingTrustDomainID == descriptor.routingTrustDomainID

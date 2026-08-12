@@ -144,28 +144,16 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     }
 
     private func loadSiteRecord(address: String) throws -> LabSiteRecord {
-        guard FileManager.default.fileExists(atPath: labWorkspaceURL.path) else {
-            throw NoctwebBrowserError.unresolvedName(address)
-        }
-        let values: URLResourceValues
+        let data: Data
         do {
-            values = try labWorkspaceURL.resourceValues(
-                forKeys: [.fileSizeKey, .isRegularFileKey]
+            data = try NoctwebSecureFileIO.read(
+                from: labWorkspaceURL,
+                maximumBytes: Self.maximumWorkspaceBytes,
+                requirePrivateOwner: true
             )
         } catch {
             throw NoctwebBrowserError.unresolvedName(address)
         }
-        guard values.isRegularFile == true,
-              let fileSize = values.fileSize,
-              (1...Self.maximumWorkspaceBytes).contains(fileSize) else {
-            throw NoctwebBrowserError.verificationFailed(
-                "the local Lab workspace exceeds its profile bounds"
-            )
-        }
-        let data = try Data(
-            contentsOf: labWorkspaceURL,
-            options: [.mappedIfSafe]
-        )
         let workspaces = try JSONDecoder().decode(
             [LabWorkspaceRecord].self,
             from: data

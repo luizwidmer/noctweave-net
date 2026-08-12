@@ -829,9 +829,10 @@ final class AppModelTests: XCTestCase {
         _ workspaces: [Workspace],
         to url: URL
     ) throws {
-        try JSONEncoder().encode(workspaces).write(
+        try NoctwebSecureFileIO.writePrivate(
+            JSONEncoder().encode(workspaces),
             to: url,
-            options: .atomic
+            maximumBytes: 32 * 1_024 * 1_024
         )
     }
 

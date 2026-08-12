@@ -1,6 +1,8 @@
 import Foundation
 
 public struct JSONWorkspaceRepository: @unchecked Sendable {
+    private static let maximumWorkspaceBytes = 32 * 1_024 * 1_024
+
     public let fileURL: URL
 
     public init(fileURL: URL) {
@@ -25,11 +27,12 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
     }
 
     public func load() throws -> WorkspaceSnapshot {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return .empty
-        }
         do {
-            let data = try Data(contentsOf: fileURL)
+            let data = try NoctwebSecureFileIO.read(
+                from: fileURL,
+                maximumBytes: Self.maximumWorkspaceBytes,
+                requirePrivateOwner: true
+            )
             let snapshot = try JSONDecoder().decode(
                 WorkspaceSnapshot.self,
                 from: data
@@ -54,6 +57,8 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
                 relays: snapshot.relays,
                 federationPolicy: snapshot.federationPolicy
             )
+        } catch NoctwebSecureFileIOError.notFound {
+            return .empty
         } catch let error as NoctwebLabError {
             throw error
         } catch {
@@ -73,15 +78,11 @@ public struct JSONWorkspaceRepository: @unchecked Sendable {
             federationPolicy: snapshot.federationPolicy
         )
         do {
-            try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
             let data = try CanonicalJSON.encode(snapshot)
-            try data.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: NSNumber(value: 0o600)],
-                ofItemAtPath: fileURL.path
+            try NoctwebSecureFileIO.writePrivate(
+                data,
+                to: fileURL,
+                maximumBytes: Self.maximumWorkspaceBytes
             )
         } catch let error as NoctwebLabError {
             throw error

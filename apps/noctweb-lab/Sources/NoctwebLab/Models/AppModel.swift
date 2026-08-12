@@ -3,6 +3,12 @@ import Foundation
 import NoctwebLabCore
 import SwiftUI
 
+private let maximumPersistedWorkspaceBytes = 32 * 1_024 * 1_024
+private let maximumPersistedWorkspaceCount = 32
+private let maximumPersistedSiteCount = 256
+private let maximumIdentityDeletionJournalBytes = 1 * 1_024 * 1_024
+private let maximumIdentityDeletionCount = 4_096
+
 @MainActor
 final class AppModel: ObservableObject {
     @Published var selection: ProductSection? = .sites
@@ -91,13 +97,16 @@ final class AppModel: ObservableObject {
             )
 
         if
-            let data = try? Data(
-                contentsOf: self.identityDeletionJournalFileURL
+            let data = try? NoctwebSecureFileIO.read(
+                from: self.identityDeletionJournalFileURL,
+                maximumBytes: maximumIdentityDeletionJournalBytes,
+                requirePrivateOwner: true
             ),
             let journal = try? JSONDecoder().decode(
                 PublisherIdentityDeletionJournal.self,
                 from: data
-            )
+            ),
+            journal.pending.count <= maximumIdentityDeletionCount
         {
             var seenSiteIDs = Set<UUID>()
             pendingPublisherIdentityDeletions = journal.pending.filter {
@@ -107,8 +116,14 @@ final class AppModel: ObservableObject {
 
         let initialWorkspaces: [Workspace]
         if
-            let data = try? Data(contentsOf: self.workspaceFileURL),
-            let decoded = try? JSONDecoder().decode([Workspace].self, from: data)
+            let data = try? NoctwebSecureFileIO.read(
+                from: self.workspaceFileURL,
+                maximumBytes: maximumPersistedWorkspaceBytes,
+                requirePrivateOwner: true
+            ),
+            let decoded = try? JSONDecoder().decode([Workspace].self, from: data),
+            decoded.count <= maximumPersistedWorkspaceCount,
+            decoded.reduce(0, { $0 + $1.sites.count }) <= maximumPersistedSiteCount
         {
             initialWorkspaces = decoded
         } else {
@@ -2519,15 +2534,11 @@ final class AppModel: ObservableObject {
         _ encoded: Data,
         to workspaceFileURL: URL
     ) throws {
-        try FileManager.default.createDirectory(
-            at: workspaceFileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try encoded.write(
+        try NoctwebSecureFileIO.writePrivate(
+            encoded,
             to: workspaceFileURL,
-            options: .atomic
+            maximumBytes: maximumPersistedWorkspaceBytes
         )
-        try restrictFileToCurrentUser(at: workspaceFileURL)
     }
 
     nonisolated private static func writeWorkspaceData(
@@ -2551,24 +2562,14 @@ final class AppModel: ObservableObject {
         _ journal: PublisherIdentityDeletionJournal,
         to journalFileURL: URL
     ) throws {
-        try FileManager.default.createDirectory(
-            at: journalFileURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
+        guard journal.pending.count <= maximumIdentityDeletionCount else {
+            throw NoctwebSecureFileIOError.tooLarge
+        }
         let encoded = try JSONEncoder().encode(journal)
-        try encoded.write(
+        try NoctwebSecureFileIO.writePrivate(
+            encoded,
             to: journalFileURL,
-            options: .atomic
-        )
-        try restrictFileToCurrentUser(at: journalFileURL)
-    }
-
-    nonisolated private static func restrictFileToCurrentUser(
-        at fileURL: URL
-    ) throws {
-        try FileManager.default.setAttributes(
-            [.posixPermissions: NSNumber(value: 0o600)],
-            ofItemAtPath: fileURL.path
+            maximumBytes: maximumIdentityDeletionJournalBytes
         )
     }
 
