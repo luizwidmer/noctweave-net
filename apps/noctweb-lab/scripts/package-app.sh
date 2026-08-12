@@ -34,13 +34,24 @@ cp "$PACKAGE_ROOT/Packaging/Info.plist" "$CONTENTS_ROOT/Info.plist"
 cp "$PACKAGE_ROOT/Packaging/NoctwebLab.icns" "$RESOURCES_ROOT/NoctwebLab.icns"
 chmod 755 "$MACOS_ROOT/NoctwebLab"
 
-codesign \
-  --force \
-  --deep \
-  --entitlements "$PACKAGE_ROOT/Packaging/NoctwebLab.entitlements" \
-  --sign "$SIGNING_IDENTITY" \
-  "$APP_ROOT"
+if [[ "$SIGNING_IDENTITY" == "-" ]]; then
+  codesign \
+    --force \
+    --options runtime \
+    --timestamp=none \
+    --entitlements "$PACKAGE_ROOT/Packaging/NoctwebLab.entitlements" \
+    --sign - \
+    "$APP_ROOT"
+else
+  codesign \
+    --force \
+    --options runtime \
+    --timestamp \
+    --entitlements "$PACKAGE_ROOT/Packaging/NoctwebLab.entitlements" \
+    --sign "$SIGNING_IDENTITY" \
+    "$APP_ROOT"
+fi
 
-codesign --verify --deep --strict --verbose=2 "$APP_ROOT"
+codesign --verify --strict --verbose=2 "$APP_ROOT"
 
 echo "$APP_ROOT"

@@ -436,7 +436,7 @@ struct BundleSnapshot: @unchecked Sendable {
     static func normalizePath(_ rawPath: String) -> String? {
         var candidate = rawPath
         candidate = candidate.removingPercentEncoding ?? candidate
-        candidate = candidate.replacingOccurrences(of: "\\", with: "/")
+        guard !candidate.contains("\\") else { return nil }
 
         var components: [Substring] = []
         for component in candidate.split(separator: "/", omittingEmptySubsequences: true) {
@@ -463,6 +463,9 @@ struct BundleSnapshot: @unchecked Sendable {
     static func isInternalURL(_ url: URL, expectedHost: String) -> Bool {
         url.scheme?.lowercased() == scheme
             && url.host?.caseInsensitiveCompare(expectedHost) == .orderedSame
+            && url.user == nil
+            && url.password == nil
+            && url.port == nil
     }
 
     static func escapeHTML(_ value: String) -> String {

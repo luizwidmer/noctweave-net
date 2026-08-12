@@ -453,9 +453,22 @@ actor FederatedNoctwebResolver: NoctwebResolving {
 
     private func isLoopback(_ endpoint: RelayEndpoint) -> Bool {
         let host = endpoint.host.lowercased()
-        return host == "localhost"
-            || host == "::1"
-            || host.hasPrefix("127.")
+        if host == "localhost" || host == "::1" {
+            return true
+        }
+        let octets = host.split(
+            separator: ".",
+            omittingEmptySubsequences: false
+        )
+        guard octets.count == 4, octets[0] == "127" else {
+            return false
+        }
+        return octets.allSatisfy { component in
+            guard let value = UInt8(component), String(value) == component else {
+                return false
+            }
+            return true
+        }
     }
 
     private func browserDirective(

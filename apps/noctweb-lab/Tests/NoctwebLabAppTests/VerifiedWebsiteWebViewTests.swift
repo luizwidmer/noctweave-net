@@ -6,6 +6,25 @@ import XCTest
 
 @MainActor
 final class VerifiedWebsiteWebViewTests: XCTestCase {
+    func testInternalRendererURLRejectsAuthorityVariantsAndBackslashes() throws {
+        let host = "publication-test"
+        XCTAssertTrue(BundleSnapshot.isInternalURL(
+            try XCTUnwrap(URL(string: "noctweb-site://\(host)/index.html")),
+            expectedHost: host
+        ))
+        for value in [
+            "noctweb-site://user@\(host)/index.html",
+            "noctweb-site://\(host):443/index.html",
+            "noctweb-site://other/index.html",
+        ] {
+            XCTAssertFalse(BundleSnapshot.isInternalURL(
+                try XCTUnwrap(URL(string: value)),
+                expectedHost: host
+            ))
+        }
+        XCTAssertNil(BundleSnapshot.normalizePath("/assets%5csecret.js"))
+    }
+
     func testProductionModuleBundleExecutesInsideVerifiedRuntime() async throws {
         let bundle = WebsiteBundle(
             entryPath: "index.html",

@@ -153,9 +153,12 @@ public enum NoctwebHostRelayError: LocalizedError, Sendable {
 }
 
 public actor NoctwebHostRelayClient {
+    private static let maximumConfigurationBytes = 64 * 1_024
+    private static let maximumRelayResponseBytes = 2 * 1_024 * 1_024
+
     public let baseURL: URL
     private let relayEndpoint: RelayEndpoint
-    private let session: URLSession
+    private let sessionConfiguration: URLSessionConfiguration
     private var cachedConfiguration: NoctwebHostRelayConfiguration?
     private var cachedRelayIdentity: SignedRelayIdentityClaimV1?
 
@@ -165,7 +168,11 @@ public actor NoctwebHostRelayClient {
         guard var components = URLComponents(string: candidate),
               let scheme = components.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
-              let host = components.host, !host.isEmpty else {
+              let host = components.host, !host.isEmpty,
+              components.user == nil,
+              components.password == nil,
+              components.query == nil,
+              components.fragment == nil else {
             throw NoctwebHostRelayError.invalidEndpoint
         }
         if scheme == "http", !Self.isLoopback(host) {
@@ -186,7 +193,7 @@ public actor NoctwebHostRelayClient {
         configuration.timeoutIntervalForResource = 12
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         configuration.urlCache = nil
-        self.session = URLSession(configuration: configuration)
+        self.sessionConfiguration = configuration
     }
 
     public func discover(force: Bool = false) async throws
@@ -199,7 +206,11 @@ public actor NoctwebHostRelayClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await BoundedHTTPResponseLoader.load(
+            request,
+            configuration: sessionConfiguration,
+            maximumBytes: Self.maximumConfigurationBytes
+        )
         guard let response = response as? HTTPURLResponse,
               response.statusCode == 200 else {
             throw NoctwebHostRelayError.requestFailed(
@@ -435,7 +446,11 @@ public actor NoctwebHostRelayClient {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try Self.encoder().encode(envelope)
-        let (data, urlResponse) = try await session.data(for: request)
+        let (data, urlResponse) = try await BoundedHTTPResponseLoader.load(
+            request,
+            configuration: sessionConfiguration,
+            maximumBytes: Self.maximumRelayResponseBytes
+        )
         guard let http = urlResponse as? HTTPURLResponse,
               http.statusCode == 200 else {
             throw NoctwebHostRelayError.requestFailed(
@@ -489,9 +504,22 @@ public actor NoctwebHostRelayClient {
 
     private static func isLoopback(_ host: String) -> Bool {
         let normalized = host.lowercased()
-        return normalized == "localhost"
-            || normalized == "::1"
-            || normalized.hasPrefix("127.")
+        if normalized == "localhost" || normalized == "::1" {
+            return true
+        }
+        let octets = normalized.split(
+            separator: ".",
+            omittingEmptySubsequences: false
+        )
+        guard octets.count == 4, octets[0] == "127" else {
+            return false
+        }
+        return octets.allSatisfy { component in
+            guard let value = UInt8(component), String(value) == component else {
+                return false
+            }
+            return true
+        }
     }
 }
 

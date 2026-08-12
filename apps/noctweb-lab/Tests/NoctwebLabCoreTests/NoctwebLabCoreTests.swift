@@ -4,6 +4,42 @@ import XCTest
 @testable import NoctwebLabCore
 
 final class NoctwebLabCoreTests: XCTestCase {
+    func testHostRelayEndpointRejectsLookalikeLoopbackAndURLCredentials() throws {
+        XCTAssertNoThrow(
+            try NoctwebHostRelayClient(endpoint: "http://127.42.0.9:9340")
+        )
+        XCTAssertNoThrow(
+            try NoctwebHostRelayClient(endpoint: "http://localhost:9340")
+        )
+
+        for endpoint in [
+            "http://127.attacker.example:9340",
+            "http://127.0.0.1.attacker.example:9340",
+        ] {
+            XCTAssertThrowsError(
+                try NoctwebHostRelayClient(endpoint: endpoint)
+            ) { error in
+                guard case NoctwebHostRelayError.insecureRemoteEndpoint = error else {
+                    return XCTFail("unexpected error for \(endpoint): \(error)")
+                }
+            }
+        }
+
+        for endpoint in [
+            "https://publisher:secret@relay.example",
+            "https://relay.example?token=secret",
+            "https://relay.example#secret",
+        ] {
+            XCTAssertThrowsError(
+                try NoctwebHostRelayClient(endpoint: endpoint)
+            ) { error in
+                guard case NoctwebHostRelayError.invalidEndpoint = error else {
+                    return XCTFail("unexpected error for \(endpoint): \(error)")
+                }
+            }
+        }
+    }
+
     func testPublisherIdentityCanBePreparedBeforeFirstPublication() async throws {
         let engine = try NoctwebLabEngine(
             identityStore: InMemoryPublicationPrivateKeyStore()
