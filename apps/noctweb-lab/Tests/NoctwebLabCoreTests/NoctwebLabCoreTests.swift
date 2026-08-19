@@ -1013,6 +1013,29 @@ final class NoctwebLabCoreTests: XCTestCase {
                     ),
                 ]
             ),
+            WebsiteBundle(
+                entryPath: String(repeating: "a", count: WebsiteBundle.maximumPathBytes + 1),
+                files: [
+                    WebsiteFile(
+                        path: String(repeating: "a", count: WebsiteBundle.maximumPathBytes + 1),
+                        mediaType: "text/html",
+                        bytes: Data()
+                    ),
+                ]
+            ),
+            WebsiteBundle(
+                entryPath: "index.html",
+                files: [
+                    WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/" + String(
+                            repeating: "a",
+                            count: WebsiteBundle.maximumMediaTypeBytes
+                        ),
+                        bytes: Data()
+                    ),
+                ]
+            ),
         ]
 
         for candidate in candidates {

@@ -18,6 +18,8 @@ public struct WebsiteFile: Codable, Equatable, Sendable {
 public struct WebsiteBundle: Codable, Equatable, Sendable {
     public static let maximumFileCount = 512
     public static let maximumTotalBytes = 16 * 1_024 * 1_024
+    public static let maximumPathBytes = 2_048
+    public static let maximumMediaTypeBytes = 128
 
     public var entryPath: String
     public var files: [WebsiteFile]
@@ -78,6 +80,7 @@ enum WebsiteBundleValidation {
             guard
                 !mediaType.isEmpty,
                 mediaType.contains("/"),
+                mediaType.utf8.count <= WebsiteBundle.maximumMediaTypeBytes,
                 mediaType.unicodeScalars.allSatisfy({
                     !CharacterSet.controlCharacters.contains($0)
                 })
@@ -111,9 +114,12 @@ enum WebsiteBundleValidation {
     }
 
     private static func normalizedRelativePath(_ rawPath: String) throws -> String {
-        guard !rawPath.isEmpty else {
+        guard
+            !rawPath.isEmpty,
+            rawPath.utf8.count <= WebsiteBundle.maximumPathBytes
+        else {
             throw NoctwebLabError.invalidWebsiteBundle(
-                "website paths must not be empty"
+                "website paths must be non-empty and at most \(WebsiteBundle.maximumPathBytes) UTF-8 bytes"
             )
         }
 
