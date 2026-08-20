@@ -35,6 +35,7 @@ struct SitesView: View {
     @EnvironmentObject private var model: AppModel
 
     @State private var destructiveAction: SiteDestructiveAction?
+    @State private var showsRelayAuthorization = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -47,14 +48,16 @@ struct SitesView: View {
                     siteLibrary
                         .frame(width: 264)
                     Divider()
-                    selectedWorkspace(width: proxy.size.width - 265)
+                    selectedWorkspace(
+                        width: proxy.size.width - 265,
+                        showsSitePicker: false
+                    )
                 }
             } else {
-                VStack(spacing: 0) {
-                    compactSiteSelector
-                    Divider()
-                    selectedWorkspace(width: proxy.size.width)
-                }
+                selectedWorkspace(
+                    width: proxy.size.width,
+                    showsSitePicker: true
+                )
             }
         }
         .confirmationDialog(
@@ -102,7 +105,10 @@ struct SitesView: View {
     }
 
     @ViewBuilder
-    private func selectedWorkspace(width: CGFloat) -> some View {
+    private func selectedWorkspace(
+        width: CGFloat,
+        showsSitePicker: Bool = false
+    ) -> some View {
         if model.activeWorkspace == nil {
             VStack(spacing: 14) {
                 ContentUnavailableView(
@@ -117,7 +123,11 @@ struct SitesView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let site = model.selectedSite {
-            siteWorkspace(site, width: width)
+            siteWorkspace(
+                site,
+                width: width,
+                showsSitePicker: showsSitePicker
+            )
                 .id(site.id)
         } else if model.activeWorkspace?.relays.contains(where: { $0.supports(.host) }) != true {
             VStack(spacing: 16) {
@@ -258,65 +268,136 @@ struct SitesView: View {
         .background(.ultraThinMaterial)
     }
 
-    private var compactSiteSelector: some View {
-        HStack(spacing: 10) {
-            Menu {
-                ForEach(model.activeWorkspace?.sites ?? []) { site in
-                    Button {
-                        selectSiteAfterInteraction(site.id)
-                    } label: {
-                        if site.id == model.selectedSiteID {
-                            Label(site.title, systemImage: "checkmark")
-                        } else {
-                            Text(site.title)
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "rectangle.stack")
-                        .foregroundStyle(.secondary)
-                    Text(model.selectedSite?.title ?? "Select a site")
-                        .lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .contentShape(Rectangle())
-            }
-            .menuStyle(.borderlessButton)
-            .buttonStyle(.plain)
-            .frame(maxWidth: 330, alignment: .leading)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.1))
-            }
-            .accessibilityLabel("Site")
-            .accessibilityValue(model.selectedSite?.title ?? "No site selected")
-
-            Spacer(minLength: 6)
-
-            Button {
-                model.createSite()
-            } label: {
-                Label("New Site", systemImage: "plus")
-            }
-            .help("Create a site")
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 48)
-        .background(.regularMaterial)
-    }
-
-    private func siteWorkspace(_ site: SiteProject, width: CGFloat) -> some View {
+    private func siteWorkspace(
+        _ site: SiteProject,
+        width: CGFloat,
+        showsSitePicker: Bool
+    ) -> some View {
         VStack(spacing: 0) {
-            publicationHeader(site, compact: width < headerBreakpoint)
+            if showsSitePicker {
+                compactWorkspaceHeader(site)
+            } else {
+                publicationHeader(site, compact: width < headerBreakpoint)
+            }
             Divider()
             WebsiteProjectEditorView(site: site)
         }
+    }
+
+    private func compactWorkspaceHeader(_ site: SiteProject) -> some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 8) {
+                compactSitePicker(site)
+                    .layoutPriority(1)
+
+                Button {
+                    model.createSite()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .help("Create a site")
+
+                publisherIdentityBadge(site)
+                relayAuthorizationButton
+
+                Button {
+                    model.publishSelectedSite()
+                } label: {
+                    Label(
+                        model.publicationInFlight ? "Publishing…" : "Publish",
+                        systemImage: "paperplane.fill"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(
+                    model.publicationInFlight ||
+                        site.publicationIdentity != .ready
+                )
+
+                siteActionMenu(site, iconOnly: true)
+            }
+
+            compactPublicationStatus
+        }
+        .controlSize(.regular)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial)
+    }
+
+    private func compactSitePicker(_ site: SiteProject) -> some View {
+        Menu {
+            ForEach(model.activeWorkspace?.sites ?? []) { candidate in
+                Button {
+                    selectSiteAfterInteraction(candidate.id)
+                } label: {
+                    if candidate.id == model.selectedSiteID {
+                        Label(candidate.title, systemImage: "checkmark")
+                    } else {
+                        Text(candidate.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: "rectangle.stack")
+                    .foregroundStyle(NoctwebTheme.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(site.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text(site.address)
+                        .font(.system(.caption2, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                Spacer(minLength: 2)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 40)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .frame(minWidth: 180, maxWidth: 330, alignment: .leading)
+        .background(
+            .thinMaterial,
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1))
+        }
+        .accessibilityLabel("Site")
+        .accessibilityValue(site.title)
+    }
+
+    private func publisherIdentityBadge(_ site: SiteProject) -> some View {
+        Image(systemName: site.publicationIdentity.systemImage)
+            .foregroundStyle(
+                site.publicationIdentity == .ready ? Color.green : Color.orange
+            )
+            .frame(width: 32, height: 32)
+            .background(
+                (site.publicationIdentity == .ready ? Color.green : Color.orange)
+                    .opacity(0.12),
+                in: Circle()
+            )
+            .help(
+                site.publicationIdentity == .ready
+                    ? "Publisher secured"
+                    : site.publicationIdentity.title
+            )
+            .accessibilityLabel(
+                site.publicationIdentity == .ready
+                    ? "Publisher secured"
+                    : site.publicationIdentity.title
+            )
     }
 
     private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {
@@ -363,21 +444,7 @@ struct SitesView: View {
 
     private func publicationActions(_ site: SiteProject) -> some View {
         HStack(spacing: 8) {
-            SecureField(
-                "Relay password",
-                text: $model.relayPublisherAuthorization
-            )
-            .textFieldStyle(.plain)
-            .padding(.horizontal, 11)
-            .frame(width: 190, height: 34)
-            .background(
-                NoctwebTheme.input,
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-            .privacySensitive()
-            .onSubmit {
-                model.publishSelectedSite()
-            }
+            relayAuthorizationButton
 
             if model.publicationInFlight {
                 ProgressView()
@@ -401,6 +468,53 @@ struct SitesView: View {
         }
     }
 
+    private var relayAuthorizationButton: some View {
+        Button {
+            showsRelayAuthorization.toggle()
+        } label: {
+            Image(
+                systemName: model.relayPublisherAuthorization.isEmpty
+                    ? "key.horizontal"
+                    : "key.horizontal.fill"
+            )
+        }
+        .buttonStyle(.bordered)
+        .help("Relay publishing access")
+        .accessibilityLabel("Relay publishing access")
+        .popover(isPresented: $showsRelayAuthorization, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Relay access", systemImage: "key.horizontal")
+                    .font(.headline)
+                Text(
+                    "Only needed when this host relay requires a publisher password. It stays in memory for this app session."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                SecureField(
+                    "Relay password",
+                    text: $model.relayPublisherAuthorization
+                )
+                .textFieldStyle(.roundedBorder)
+                .privacySensitive()
+                .onSubmit {
+                    showsRelayAuthorization = false
+                }
+
+                HStack {
+                    Spacer()
+                    Button("Done") {
+                        showsRelayAuthorization = false
+                    }
+                    .keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(16)
+            .frame(width: 300)
+        }
+    }
+
     private var publicationStatus: some View {
         HStack(alignment: .top, spacing: 7) {
             Image(systemName: outcomeImage)
@@ -411,6 +525,20 @@ struct SitesView: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var compactPublicationStatus: some View {
+        HStack(spacing: 7) {
+            Image(systemName: outcomeImage)
+                .foregroundStyle(outcomeColor)
+            Text(model.publicationMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(model.publicationMessage)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func siteActionMenu(_ site: SiteProject, iconOnly: Bool) -> some View {
@@ -425,6 +553,7 @@ struct SitesView: View {
             }
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .help("Site actions")
     }

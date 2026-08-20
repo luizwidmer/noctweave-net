@@ -131,6 +131,13 @@ suffix. The Lab verifies that signed identity before publishing. It uploads the
 immutable object first and requests the strict name binding only after the
 hosting receipt succeeds.
 
+Relay discovery does not require the optional embedded publisher UI. The Lab
+uses `/noctweb/config.json` when an operator exposes it, then falls back to the
+canonical `/relay` info request and derives the bounded host configuration only
+from the verified relay identity and signed `nw.net-host@1` capability limits.
+This supports reverse proxies that intentionally expose only the public relay
+protocol endpoint without weakening relay-identity verification.
+
 Site labels are unique only within one suffix, so two different suffixes may
 each allocate the same label. The signed binding resolves to the site's
 publication-scoped publisher identity, head, revision, and object. The relay

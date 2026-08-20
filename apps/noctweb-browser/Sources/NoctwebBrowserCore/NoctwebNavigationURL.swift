@@ -107,6 +107,48 @@ public struct NoctwebNavigationURL:
         )
     }
 
+    /// Parses human-entered address-bar text without weakening the canonical
+    /// URL parser used by persisted state, descriptors, or protocol messages.
+    public init(userInput value: String) throws {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard
+            !trimmed.isEmpty,
+            trimmed.utf8.count <= Self.maximumUTF8Bytes,
+            !Self.containsControlCharacter(trimmed)
+        else {
+            throw NoctwebBrowserError.invalidURL(
+                "enter a site.relay address or noct://site.relay/"
+            )
+        }
+
+        let candidate: String
+        if trimmed.contains("://") {
+            candidate = trimmed
+        } else {
+            guard !trimmed.contains(":") else {
+                throw NoctwebBrowserError.invalidURL(
+                    "unsupported URL scheme; use a site.relay address"
+                )
+            }
+            candidate = "noct://\(trimmed)"
+        }
+
+        guard var components = URLComponents(string: candidate) else {
+            throw NoctwebBrowserError.invalidURL(
+                "enter a site.relay address or noct://site.relay/"
+            )
+        }
+        if components.percentEncodedPath.isEmpty {
+            components.percentEncodedPath = "/"
+        }
+        guard let normalized = components.string else {
+            throw NoctwebBrowserError.invalidURL(
+                "enter a site.relay address or noct://site.relay/"
+            )
+        }
+        try self.init(parsing: normalized)
+    }
+
     public func withPath(_ percentEncodedPath: String) throws -> Self {
         try Self(
             siteLabel: siteLabel,

@@ -2,6 +2,22 @@ import XCTest
 @testable import NoctwebLabCore
 
 final class LiveHostRelayTests: XCTestCase {
+    func testLiveHostRelayDiscoveryWhenConfigured() async throws {
+        guard let endpoint = ProcessInfo.processInfo.environment[
+            "NOCTWEB_LIVE_HOST_RELAY"
+        ] else {
+            throw XCTSkip("Set NOCTWEB_LIVE_HOST_RELAY.")
+        }
+
+        let client = try NoctwebHostRelayClient(endpoint: endpoint)
+        let configuration = try await client.discover(force: true)
+
+        XCTAssertTrue(configuration.isValid)
+        XCTAssertNotNil(configuration.relayNamespace)
+        XCTAssertEqual(configuration.hostModule, "nw.net-host")
+        XCTAssertEqual(configuration.hostModuleVersion, 1)
+    }
+
     func testHostedEnvelopeHasNoFinalityClaimAndRejectsTampering() async throws {
         let engine = try NoctwebLabEngine(
             identityStore: InMemoryPublicationPrivateKeyStore()

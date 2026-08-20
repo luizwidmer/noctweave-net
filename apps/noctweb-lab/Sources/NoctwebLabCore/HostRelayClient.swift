@@ -121,6 +121,7 @@ public enum NoctwebHostRelayError: LocalizedError, Sendable {
     case invalidEndpoint
     case insecureRemoteEndpoint
     case invalidConfiguration
+    case hostCapabilityUnavailable
     case requestFailed(Int)
     case invalidResponse
     case relayRejected(String)
@@ -136,6 +137,8 @@ public enum NoctwebHostRelayError: LocalizedError, Sendable {
             "Cleartext HTTP is allowed only for loopback development relays."
         case .invalidConfiguration:
             "The endpoint does not advertise a valid nw.net-host@1 configuration."
+        case .hostCapabilityUnavailable:
+            "The relay is reachable, but it does not advertise the signed nw.net-host@1 capability required for publishing."
         case .requestFailed(let status):
             "The relay HTTP request failed with status \(status)."
         case .invalidResponse:
@@ -211,11 +214,13 @@ public actor NoctwebHostRelayClient {
             configuration: sessionConfiguration,
             maximumBytes: Self.maximumConfigurationBytes
         )
-        guard let response = response as? HTTPURLResponse,
-              response.statusCode == 200 else {
-            throw NoctwebHostRelayError.requestFailed(
-                (response as? HTTPURLResponse)?.statusCode ?? 0
-            )
+        guard let response = response as? HTTPURLResponse else {
+            throw NoctwebHostRelayError.requestFailed(0)
+        }
+        if response.statusCode != 200 {
+            let configuration = try await discoverFromSignedRelayInfo()
+            cachedConfiguration = configuration
+            return configuration
         }
         let configuration = try JSONDecoder().decode(
             NoctwebHostRelayConfiguration.self,
@@ -226,6 +231,85 @@ public actor NoctwebHostRelayClient {
         }
         cachedConfiguration = configuration
         return configuration
+    }
+
+    /// Some production reverse proxies expose only the canonical `/relay`
+    /// protocol endpoint, not the optional embedded publisher UI. The signed
+    /// relay identity and capability manifest carry everything the native Lab
+    /// needs to derive the same bounded host configuration.
+    private func discoverFromSignedRelayInfo() async throws
+        -> NoctwebHostRelayConfiguration
+    {
+        let response = try await RelayClient(endpoint: relayEndpoint)
+            .send(.info())
+        guard case .relayInfo(let info)? = response.successBody else {
+            throw NoctwebHostRelayError.invalidResponse
+        }
+        let result = try Self.configuration(from: info)
+        cachedRelayIdentity = result.identity
+        return result.configuration
+    }
+
+    static func configuration(
+        from info: RelayInfo
+    ) throws -> (
+        configuration: NoctwebHostRelayConfiguration,
+        identity: SignedRelayIdentityClaimV1
+    ) {
+        guard try info.isStructurallyValidThrowing,
+              let capabilities = info.protocolCapabilities,
+              let hostCapability = capabilities.modules.first(where: {
+                  $0.module == "nw.net-host" && $0.versions.contains(1)
+              }) else {
+            throw NoctwebHostRelayError.hostCapabilityUnavailable
+        }
+        guard let identity = info.relayIdentity,
+              try identity.verifyThrowing(at: info.advertisedAt),
+              info.authenticatedRelayID == identity.claim.relayID,
+              info.authenticatedNoctwebSuffix == identity.claim.noctwebSuffix,
+              let suffixValue = identity.claim.noctwebSuffix?.rawValue,
+              suffixValue.hasPrefix("."),
+              let hostSigningPublicKey = identity.claim.hostSigningPublicKey,
+              let maximumObjectValue = hostCapability.limits["maxObjectBytes"],
+              let maximumRetentionValue = hostCapability.limits["maxRetentionSeconds"],
+              let maximumObjectBytes = Int(exactly: maximumObjectValue),
+              let maximumRetentionSeconds = Int(exactly: maximumRetentionValue) else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+
+        let advertisedSuffix = String(suffixValue.dropFirst())
+        let automaticNamespace = try RelayNamespace(
+            publicKey: hostSigningPublicKey
+        )
+        let namespace: RelayNamespace
+        if automaticNamespace.suffix == advertisedSuffix {
+            namespace = automaticNamespace
+        } else {
+            namespace = try RelayNamespace(
+                publicKey: hostSigningPublicKey,
+                operatorSuffix: advertisedSuffix
+            )
+        }
+        guard namespace.suffix == advertisedSuffix else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+
+        let configuration = NoctwebHostRelayConfiguration(
+            version: 1,
+            relayNamespaceID: namespace.id,
+            relaySuffix: namespace.suffix,
+            usesCustomSuffix: namespace.usesCustomSuffix,
+            hostSigningPublicKey: hostSigningPublicKey.base64EncodedString(),
+            hostModule: "nw.net-host",
+            hostModuleVersion: 1,
+            maximumObjectBytes: maximumObjectBytes,
+            minimumRetentionSeconds: NoctweaveNetLimits.minimumHostRetentionSeconds,
+            maximumRetentionSeconds: maximumRetentionSeconds
+        )
+        guard configuration.isValid else {
+            throw NoctwebHostRelayError.invalidConfiguration
+        }
+        return (configuration, identity)
     }
 
     public func put(
@@ -407,16 +491,8 @@ public actor NoctwebHostRelayClient {
         let response = try await RelayClient(endpoint: relayEndpoint)
             .send(.info())
         guard case .relayInfo(let info)? = response.successBody,
-              let identity = info.relayIdentity,
-              try identity.verifyThrowing(at: info.advertisedAt),
-              info.authenticatedRelayID == identity.claim.relayID,
-              info.authenticatedNoctwebSuffix
-                == identity.claim.noctwebSuffix,
-              info.protocolCapabilities?.supports(
-                module: "nw.net-host",
-                version: 1
-              ) == true else {
-            throw NoctwebHostRelayError.invalidConfiguration
+              let identity = try? Self.configuration(from: info).identity else {
+            throw NoctwebHostRelayError.hostCapabilityUnavailable
         }
         let configuration = try await discover()
         guard identity.claim.noctwebSuffix?.rawValue

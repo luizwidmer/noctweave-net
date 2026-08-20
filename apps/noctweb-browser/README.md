@@ -25,6 +25,8 @@ The first implementation provides:
   name and immutable object reads;
 - deterministic signed fixture resolution for isolated development;
 - tabs, address navigation, bookmarks, history, and verification states;
+- forgiving address-bar entry: `site.relay` and `noct://site.relay` are
+  normalized to the canonical `noct://site.relay/` form;
 - a trust panel exposing publisher, trust domain, route, and verification
   evidence; and
 - a publication-scoped, non-persistent WebKit renderer with external network,
@@ -80,6 +82,11 @@ Local history and bookmarks retain the routing trust-domain identifier with the
 canonical address so the same URL cannot silently change meaning between
 profiles. Capability-bearing links are not eligible for ordinary history or
 telemetry.
+
+Only direct address-bar input receives the scheme/root-path convenience.
+Persisted state, `.noctlink` descriptors, history, bookmarks, and protocol
+objects continue through the strict canonical parser; foreign or ambiguous
+schemes are rejected rather than rewritten.
 
 Until the capability URL grammar is frozen, the MVP conservatively excludes
 every address containing a query or fragment from bookmarks and history.

@@ -1,9 +1,63 @@
 import CryptoKit
 import Foundation
+@preconcurrency import NoctweaveCore
 import XCTest
 @testable import NoctwebLabCore
 
 final class NoctwebLabCoreTests: XCTestCase {
+    func testSignedRelayInfoDerivesHostConfigurationWithoutPublisherUI() throws {
+        let hostSigningPublicKey = Data(repeating: 0x42, count: 32)
+        let suffix = try XCTUnwrap(
+            NoctwebRelaySuffixV1(rawValue: ".quietrelay")
+        )
+        let capabilities = RelayCapabilityManifestV2.advertised(
+            attachmentsEnabled: true,
+            wakeEnabled: false,
+            hiddenRetrievalEnabled: false,
+            onionEnabled: false,
+            mixnetEnabled: false,
+            netHostEnabled: true
+        )
+        let keyMaterial = try RelayIdentityKeyMaterialV1.generate()
+        let advertisedAt = Date(timeIntervalSince1970: 1_787_225_200)
+        let endpoint = RelayEndpoint(
+            host: "relay.example",
+            port: 443,
+            useTLS: true,
+            transport: .http
+        )
+        let unsigned = RelayInfo(
+            kind: .standard,
+            federation: FederationDescriptor(mode: .solo),
+            temporalBucketSeconds: 0,
+            protocolCapabilities: capabilities,
+            advertisedAt: advertisedAt
+        )
+        let info = try unsigned.authenticated(
+            by: keyMaterial,
+            sequence: 1,
+            advertisedEndpoints: [endpoint],
+            noctwebSuffix: suffix,
+            hostSigningPublicKey: hostSigningPublicKey,
+            lifetime: 3_600
+        )
+
+        let result = try NoctwebHostRelayClient.configuration(from: info)
+
+        XCTAssertEqual(result.identity.claim.relayID, keyMaterial.relayID)
+        XCTAssertEqual(result.configuration.relaySuffix, "quietrelay")
+        XCTAssertTrue(result.configuration.usesCustomSuffix)
+        XCTAssertEqual(
+            result.configuration.maximumObjectBytes,
+            NoctweaveNetLimits.maximumHostObjectBytes
+        )
+        XCTAssertEqual(
+            result.configuration.maximumRetentionSeconds,
+            NoctweaveNetLimits.maximumHostRetentionSeconds
+        )
+        XCTAssertTrue(result.configuration.isValid)
+    }
+
     func testHostRelayEndpointRejectsLookalikeLoopbackAndURLCredentials() throws {
         XCTAssertNoThrow(
             try NoctwebHostRelayClient(endpoint: "http://127.42.0.9:9340")

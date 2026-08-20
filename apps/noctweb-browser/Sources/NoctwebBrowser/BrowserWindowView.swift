@@ -77,7 +77,7 @@ struct BrowserWindowView: View {
                 .help(verificationLabel)
 
                 TextField(
-                    "noct://site.relay/",
+                    "site.relay or noct://site.relay/",
                     text: $model.addressText
                 )
                 .textFieldStyle(.plain)
@@ -283,7 +283,7 @@ struct BrowserWindowView: View {
                     VStack(spacing: 6) {
                         Text("Browse Noctweb")
                             .font(.title2.weight(.semibold))
-                        Text("Enter a noct:// address or open a trusted .noctlink file.")
+                        Text("Enter a site.relay address or open a trusted .noctlink file.")
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }

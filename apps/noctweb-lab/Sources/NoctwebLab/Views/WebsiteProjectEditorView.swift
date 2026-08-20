@@ -239,16 +239,16 @@ struct WebsiteProjectEditorView: View {
     }
 
     private var editorToolbar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             HStack(spacing: 4) {
                 ForEach(WebsiteEditorMode.allCases) { editorMode in
                     Button {
                         mode = editorMode
                     } label: {
                         Label(editorMode.title, systemImage: editorMode.systemImage)
-                            .font(.callout.weight(.semibold))
+                            .font(.subheadline.weight(.semibold))
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
+                            .padding(.vertical, 6)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -261,11 +261,11 @@ struct WebsiteProjectEditorView: View {
                     .accessibilityValue(mode == editorMode ? "Selected" : "Not selected")
                 }
             }
-            .padding(4)
-            .frame(width: 340)
-            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .padding(3)
+            .frame(width: 300)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .strokeBorder(Color.primary.opacity(0.1))
             }
             .accessibilityElement(children: .contain)
@@ -285,16 +285,9 @@ struct WebsiteProjectEditorView: View {
                     )
                 }
                 .buttonStyle(.bordered)
+                .controlSize(.small)
                 .tint(showsDesignInspector ? .accentColor : .secondary)
             }
-
-            StatusPill(
-                title: site.resolvedProjectKind.title,
-                systemImage: site.resolvedProjectKind == .visual
-                    ? "square.grid.2x2"
-                    : "folder",
-                color: site.resolvedProjectKind == .visual ? .accentColor : .blue
-            )
 
             Menu {
                 Button {
@@ -311,14 +304,16 @@ struct WebsiteProjectEditorView: View {
                     Label("New File…", systemImage: "doc.badge.plus")
                 }
             } label: {
-                Label("Project", systemImage: "ellipsis.circle")
+                Image(systemName: "ellipsis.circle")
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
+            .accessibilityLabel("Project actions")
             .help("Import an agent-built site or manage project files")
         }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 52)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 46)
         .background(.bar)
     }
 
@@ -402,7 +397,7 @@ struct WebsiteProjectEditorView: View {
     private var compactBlockNavigator: some View {
         HStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
                     ForEach(Array(site.resolvedBlocks.enumerated()), id: \.element.id) {
                         index,
                         block in
@@ -416,21 +411,36 @@ struct WebsiteProjectEditorView: View {
                                     : block.heading,
                                 systemImage: block.kind.systemImage
                             )
+                            .font(.subheadline.weight(.medium))
                             .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .foregroundStyle(
+                                selectedBlockID == block.id
+                                    ? Color.white
+                                    : Color.primary
+                            )
+                            .background {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(
+                                        selectedBlockID == block.id
+                                            ? Color.accentColor
+                                            : Color.secondary.opacity(0.09)
+                                    )
+                            }
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.08))
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .tint(
-                            selectedBlockID == block.id
-                                ? Color.accentColor
-                                : Color.secondary
-                        )
+                        .buttonStyle(.plain)
                     }
                 }
             }
             addBlockMenu
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 50)
+        .frame(minHeight: 42)
         .background(.regularMaterial)
     }
 
@@ -470,6 +480,7 @@ struct WebsiteProjectEditorView: View {
             Image(systemName: "plus")
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .help("Add a page block")
     }
 
@@ -675,18 +686,7 @@ struct WebsiteProjectEditorView: View {
     }
 
     private var designCanvas: some View {
-        VStack(spacing: 0) {
-            paneHeader("Live Canvas", systemImage: "macwindow") {
-                Button {
-                    mode = .preview
-                } label: {
-                    Label("Open Preview", systemImage: "arrow.up.left.and.arrow.down.right")
-                }
-                .buttonStyle(.borderless)
-            }
-            Divider()
-            websitePreview(showViewportControls: false)
-        }
+        websitePreview(showViewportControls: false)
     }
 
     private var codeWorkspace: some View {
@@ -918,7 +918,7 @@ struct WebsiteProjectEditorView: View {
                     .help("Reload website")
                 }
                 .padding(.horizontal, 14)
-                .frame(minHeight: 48)
+                .frame(minHeight: 44)
                 .background(.bar)
                 Divider()
             }
@@ -944,7 +944,7 @@ struct WebsiteProjectEditorView: View {
                                 .help("Publisher-scoped verified preview")
                         }
                         .padding(.horizontal, 11)
-                        .frame(height: 34)
+                        .frame(height: 32)
                         .background(Color(nsColor: .windowBackgroundColor))
 
                         Divider()
@@ -967,7 +967,7 @@ struct WebsiteProjectEditorView: View {
                     }
                     .frame(
                         width: width,
-                        height: max(480, proxy.size.height - 44)
+                        height: max(420, proxy.size.height - 32)
                     )
                     .background(Color(nsColor: .textBackgroundColor))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -976,7 +976,7 @@ struct WebsiteProjectEditorView: View {
                             .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                     }
                     .shadow(color: .black.opacity(0.14), radius: 18, y: 8)
-                    .padding(22)
+                    .padding(16)
                 }
                 .background(Color(nsColor: .underPageBackgroundColor))
             }
@@ -995,7 +995,7 @@ struct WebsiteProjectEditorView: View {
             actions()
         }
         .padding(.horizontal, 12)
-        .frame(minHeight: 46)
+        .frame(minHeight: 44)
         .background(.bar)
     }
 

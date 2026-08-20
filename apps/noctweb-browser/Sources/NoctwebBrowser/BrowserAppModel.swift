@@ -252,12 +252,17 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func navigateFromAddressBar() {
-        navigate(to: addressText, pushCurrentAddress: true)
+        navigate(
+            to: addressText,
+            pushCurrentAddress: true,
+            normalizeUserInput: true
+        )
     }
 
     func navigate(
         to rawAddress: String,
-        pushCurrentAddress: Bool = true
+        pushCurrentAddress: Bool = true,
+        normalizeUserInput: Bool = false
     ) {
         guard relayIsConfigured else {
             failSelectedTab(
@@ -269,9 +274,10 @@ final class BrowserAppModel: ObservableObject {
         }
         let parsed: NoctwebNavigationURL
         do {
-            parsed = try NoctwebNavigationURL(
-                parsing: rawAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
+            let trimmed = rawAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+            parsed = normalizeUserInput
+                ? try NoctwebNavigationURL(userInput: trimmed)
+                : try NoctwebNavigationURL(parsing: trimmed)
         } catch {
             failSelectedTab(error)
             return

@@ -75,6 +75,28 @@ final class NoctwebBrowserAppTests: XCTestCase {
         XCTAssertNil(model.selectedBlockedNotice)
     }
 
+    @MainActor
+    func testAddressBarCanonicalizesFriendlySiteAddress() async throws {
+        let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = BrowserAppModel(
+            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            useDevelopmentFixtures: true
+        )
+
+        model.addressText = "welcome.local-dev"
+        model.navigateFromAddressBar()
+
+        XCTAssertEqual(model.addressText, "noct://welcome.local-dev/")
+        for _ in 0..<200
+        where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(model.selectedTab.verificationState, .fixtureVerified)
+        XCTAssertNil(model.selectedError)
+    }
+
     func testPublicationOriginIncludesVerifiedIdentityMaterial() async throws {
         let environment = try DeterministicNoctwebResolver
             .developmentEnvironment()

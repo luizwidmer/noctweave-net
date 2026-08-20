@@ -45,6 +45,40 @@ final class NoctwebBrowserCoreTests: XCTestCase {
         }
     }
 
+    func testAddressBarInputAddsNoctSchemeAndRootPath() throws {
+        XCTAssertEqual(
+            try NoctwebNavigationURL(userInput: "welcome.local-dev")
+                .canonicalString,
+            "noct://welcome.local-dev/"
+        )
+        XCTAssertEqual(
+            try NoctwebNavigationURL(userInput: "noct://welcome.local-dev")
+                .canonicalString,
+            "noct://welcome.local-dev/"
+        )
+        XCTAssertEqual(
+            try NoctwebNavigationURL(
+                userInput: "  welcome.local-dev/docs/start?mode=compact#install  "
+            ).canonicalString,
+            "noct://welcome.local-dev/docs/start?mode=compact#install"
+        )
+    }
+
+    func testAddressBarInputDoesNotRewriteForeignOrAmbiguousSchemes() {
+        for value in [
+            "https://welcome.local-dev",
+            "javascript:alert(1)",
+            "noct:welcome.local-dev",
+            "user@welcome.local-dev",
+            "welcome.local-dev:443",
+        ] {
+            XCTAssertThrowsError(
+                try NoctwebNavigationURL(userInput: value),
+                "unexpectedly accepted \(value)"
+            )
+        }
+    }
+
     func testNetworkProfileEnforcesTrustAndBootstrapBounds() throws {
         let environment = try DeterministicNoctwebResolver
             .developmentEnvironment()
