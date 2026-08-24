@@ -383,7 +383,7 @@ struct SiteProject: Identifiable, Codable, Hashable {
     var subtitle: String
     var body: String
     var accentHex: String
-    var revision: Int
+    var revision: UInt64
     var lastPublishedAt: Date?
     var objectID: String?
     var headID: String?

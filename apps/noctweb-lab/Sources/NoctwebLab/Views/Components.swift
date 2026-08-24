@@ -307,7 +307,7 @@ struct RenderedSiteView: View {
     let subtitle: String
     let content: String
     let accentHex: String
-    let revision: Int
+    let revision: UInt64
     let isVerified: Bool
 
     init(site: SiteProject) {
@@ -324,7 +324,7 @@ struct RenderedSiteView: View {
         self.subtitle = snapshot.subtitle
         self.content = snapshot.body
         self.accentHex = snapshot.accentHex
-        self.revision = Int(snapshot.revision)
+        self.revision = snapshot.revision
         self.isVerified = true
     }
 

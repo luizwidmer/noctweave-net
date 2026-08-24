@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import LocalAuthentication
 import Security
 
 public protocol PublicationPrivateKeyStore: Sendable {
@@ -188,6 +189,8 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
     public func loadPrivateKey(for publicationID: String) throws -> Data? {
         try PublicationValidation.validateID(publicationID)
         let account = publicationID.lowercased()
+        let context = LAContext()
+        context.interactionNotAllowed = true
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -196,6 +199,8 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
             kSecReturnData as String: kCFBooleanTrue as Any,
             kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
         ]
 
         var result: CFTypeRef?
@@ -246,12 +251,16 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
 
     public func deletePrivateKey(for publicationID: String) throws {
         try PublicationValidation.validateID(publicationID)
+        let context = LAContext()
+        context.interactionNotAllowed = true
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: publicationID.lowercased(),
             kSecAttrGeneric as String: Data("ed25519-v1".utf8),
             kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
+            kSecUseAuthenticationContext as String: context,
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
         ]
         let status = SecItemDelete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -261,6 +270,27 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
 }
 
 enum PublicationValidation {
+    static func nextRevision(after previous: UInt64?) throws -> UInt64 {
+        let (revision, overflow) = (previous ?? 0).addingReportingOverflow(1)
+        guard !overflow else {
+            throw NoctwebLabError.canonicalEncoding(
+                "publisher revision is exhausted"
+            )
+        }
+        return revision
+    }
+
+    static func issuedAtMilliseconds(_ date: Date) throws -> UInt64 {
+        let milliseconds = date.timeIntervalSince1970 * 1_000
+        guard milliseconds.isFinite,
+              let value = UInt64(exactly: floor(max(0, milliseconds))) else {
+            throw NoctwebLabError.canonicalEncoding(
+                "publication time is outside the supported range"
+            )
+        }
+        return value
+    }
+
     static func validateID(_ publicationID: String) throws {
         guard
             let uuid = UUID(uuidString: publicationID),

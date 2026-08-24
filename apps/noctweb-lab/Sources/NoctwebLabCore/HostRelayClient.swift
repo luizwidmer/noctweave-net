@@ -57,37 +57,47 @@ public struct NoctwebHostingReceipt: Codable, Equatable, Hashable, Sendable {
         expectedSigningPublicKey: Data,
         maximumRetentionSeconds: Int
     ) throws {
-        guard objectID == expectedObjectID,
-              byteCount == UInt64(expectedByteCount),
+        let storedAtSeconds = storedAt.timeIntervalSince1970
+        let expiresAtSeconds = expiresAt.timeIntervalSince1970
+        guard let exactExpectedByteCount = UInt64(exactly: expectedByteCount),
+              let exactStoredAt = UInt64(exactly: storedAtSeconds),
+              let exactExpiresAt = UInt64(exactly: expiresAtSeconds),
+              objectID == expectedObjectID,
+              byteCount == exactExpectedByteCount,
               signingPublicKey == expectedSigningPublicKey,
               signatureAlgorithm == "Ed25519",
               signature.count == 64,
               expiresAt > storedAt,
               expiresAt.timeIntervalSince(storedAt)
-                  <= TimeInterval(maximumRetentionSeconds),
-              floor(storedAt.timeIntervalSince1970)
-                  == storedAt.timeIntervalSince1970,
-              floor(expiresAt.timeIntervalSince1970)
-                  == expiresAt.timeIntervalSince1970 else {
+                  <= TimeInterval(maximumRetentionSeconds) else {
             throw NoctwebHostRelayError.invalidReceipt
         }
         let publicKey = try Curve25519.Signing.PublicKey(
             rawRepresentation: signingPublicKey
         )
-        guard publicKey.isValidSignature(signature, for: signingPayload) else {
+        guard publicKey.isValidSignature(
+            signature,
+            for: signingPayload(
+                storedAtSeconds: exactStoredAt,
+                expiresAtSeconds: exactExpiresAt
+            )
+        ) else {
             throw NoctwebHostRelayError.invalidReceipt
         }
     }
 
-    private var signingPayload: Data {
+    private func signingPayload(
+        storedAtSeconds: UInt64,
+        expiresAtSeconds: UInt64
+    ) -> Data {
         var data = Data("org.noctweave.net/hosting-receipt/v1".utf8)
         data.append(0)
         data.append(Data(objectID.utf8))
         var count = byteCount.bigEndian
         withUnsafeBytes(of: &count) { data.append(contentsOf: $0) }
-        var stored = UInt64(storedAt.timeIntervalSince1970).bigEndian
+        var stored = storedAtSeconds.bigEndian
         withUnsafeBytes(of: &stored) { data.append(contentsOf: $0) }
-        var expires = UInt64(expiresAt.timeIntervalSince1970).bigEndian
+        var expires = expiresAtSeconds.bigEndian
         withUnsafeBytes(of: &expires) { data.append(contentsOf: $0) }
         return data
     }

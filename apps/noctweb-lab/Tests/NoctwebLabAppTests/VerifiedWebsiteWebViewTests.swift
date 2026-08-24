@@ -1,3 +1,4 @@
+import Foundation
 import NoctwebLabCore
 import WebKit
 import XCTest
@@ -148,19 +149,25 @@ final class VerifiedWebsiteWebViewTests: XCTestCase {
 
         let webView = WKWebView(frame: .init(x: 0, y: 0, width: 800, height: 600),
                                 configuration: configuration)
+        let navigationObserver = NavigationObserver()
+        webView.navigationDelegate = navigationObserver
+        navigationObserver.prepareForNavigation()
         webView.load(URLRequest(url: snapshot.rootURL))
+        try await navigationObserver.waitForNavigation()
 
         var bodyText = ""
         var backgroundColor = ""
         for _ in 0..<120 {
-            if let value = try? await webView.evaluateJavaScript(
-                "document.body?.innerText ?? ''"
-            ) as? String {
+            if let value = try await boundedJavaScriptString(
+                "document.body?.innerText ?? ''",
+                in: webView
+            ) {
                 bodyText = value
             }
-            if let value = try? await webView.evaluateJavaScript(
-                "getComputedStyle(document.body).backgroundColor"
-            ) as? String {
+            if let value = try await boundedJavaScriptString(
+                "getComputedStyle(document.body).backgroundColor",
+                in: webView
+            ) {
                 backgroundColor = value
             }
             if
@@ -187,7 +194,7 @@ final class VerifiedWebsiteWebViewTests: XCTestCase {
         )
         XCTAssertEqual(backgroundColor, "rgb(18, 35, 29)")
 
-        let rtcResult = try await webView.evaluateJavaScript(
+        let rtcResult = try await boundedJavaScriptString(
             """
             (() => {
               try {
@@ -197,17 +204,22 @@ final class VerifiedWebsiteWebViewTests: XCTestCase {
                 return "blocked";
               }
             })()
-            """
-        ) as? String
+            """,
+            in: webView,
+            ignoresJavaScriptErrors: false
+        )
         XCTAssertEqual(rtcResult, "blocked")
 
         let routeURL = snapshot.rootURL.appendingPathComponent("dashboard")
+        navigationObserver.prepareForNavigation()
         webView.load(URLRequest(url: routeURL))
+        try await navigationObserver.waitForNavigation()
         var routedBodyText = ""
         for _ in 0..<120 {
-            if let value = try? await webView.evaluateJavaScript(
-                "document.body?.innerText ?? ''"
-            ) as? String {
+            if let value = try await boundedJavaScriptString(
+                "document.body?.innerText ?? ''",
+                in: webView
+            ) {
                 routedBodyText = value
             }
             if routedBodyText.contains("dynamic chunk loaded") {
@@ -220,6 +232,131 @@ final class VerifiedWebsiteWebViewTests: XCTestCase {
                 "Module bundle executed · dynamic chunk loaded"
             ),
             routedBodyText
+        )
+    }
+
+    private enum RendererTestError: Error, Sendable {
+        case javaScriptTimedOut
+        case javaScriptFailed(String)
+        case navigationTimedOut
+        case navigationFailed(String)
+    }
+
+    @MainActor
+    private final class CompletionGate<Value: Sendable> {
+        private var continuation: CheckedContinuation<Value, Error>?
+        private var pendingResult: Result<Value, Error>?
+        private var timeoutTask: Task<Void, Never>?
+        private var isComplete = false
+
+        func wait(
+            timeout: Duration,
+            timeoutError: RendererTestError
+        ) async throws -> Value {
+            if let pendingResult {
+                return try pendingResult.get()
+            }
+
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                timeoutTask = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(for: timeout)
+                    } catch {
+                        return
+                    }
+                    self?.resolve(.failure(timeoutError))
+                }
+            }
+        }
+
+        func resolve(_ result: Result<Value, Error>) {
+            guard !isComplete else { return }
+            isComplete = true
+            timeoutTask?.cancel()
+            timeoutTask = nil
+
+            if let continuation {
+                self.continuation = nil
+                continuation.resume(with: result)
+            } else {
+                pendingResult = result
+            }
+        }
+    }
+
+    @MainActor
+    private final class NavigationObserver: NSObject, WKNavigationDelegate {
+        private var gate = CompletionGate<Void>()
+
+        func prepareForNavigation() {
+            gate = CompletionGate<Void>()
+        }
+
+        func waitForNavigation() async throws {
+            try await gate.wait(
+                timeout: .seconds(10),
+                timeoutError: .navigationTimedOut
+            )
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            gate.resolve(.success(()))
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFail navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            gate.resolve(.failure(
+                RendererTestError.navigationFailed(error.localizedDescription)
+            ))
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didFailProvisionalNavigation navigation: WKNavigation!,
+            withError error: Error
+        ) {
+            gate.resolve(.failure(
+                RendererTestError.navigationFailed(error.localizedDescription)
+            ))
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            gate.resolve(.failure(
+                RendererTestError.navigationFailed("Web content process terminated")
+            ))
+        }
+    }
+
+    private func boundedJavaScriptString(
+        _ source: String,
+        in webView: WKWebView,
+        timeout: Duration = .seconds(5),
+        ignoresJavaScriptErrors: Bool = true
+    ) async throws -> String? {
+        let gate = CompletionGate<String?>()
+        let evaluationTask = Task { @MainActor [weak webView, weak gate] in
+            guard let webView, let gate else { return }
+            do {
+                let value = try await webView.evaluateJavaScript(source) as? String
+                gate.resolve(.success(value))
+            } catch {
+                if ignoresJavaScriptErrors {
+                    gate.resolve(.success(nil))
+                } else {
+                    gate.resolve(.failure(
+                        RendererTestError.javaScriptFailed(error.localizedDescription)
+                    ))
+                }
+            }
+        }
+        defer { evaluationTask.cancel() }
+        return try await gate.wait(
+            timeout: timeout,
+            timeoutError: .javaScriptTimedOut
         )
     }
 }

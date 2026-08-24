@@ -1374,7 +1374,7 @@ final class AppModel: ObservableObject {
                 return
             }
             workspaces[workspaceIndex].sites[siteIndex].revision =
-                Int(verified.object.revision)
+                verified.object.revision
             workspaces[workspaceIndex].sites[siteIndex].lastPublishedAt =
                 put.receipt.storedAt
             workspaces[workspaceIndex].sites[siteIndex].objectID =
@@ -1520,7 +1520,7 @@ final class AppModel: ObservableObject {
 
             let envelope = try CanonicalJSON.encode(publication)
             workspaces[workspaceIndex].sites[siteIndex].revision =
-                Int(publication.object.revision)
+                publication.object.revision
             workspaces[workspaceIndex].sites[siteIndex].lastPublishedAt = Date()
             workspaces[workspaceIndex].sites[siteIndex].objectID =
                 publication.head.claims.objectID
@@ -2582,12 +2582,11 @@ final class AppModel: ObservableObject {
     }
 
     private static func defaultWorkspaceFileURL() -> URL {
-        let support = try! FileManager.default.url(
+        let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )
+            in: .userDomainMask
+        ).first ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
         return support
             .appendingPathComponent(
                 "Noctweave/Noctweb Lab",

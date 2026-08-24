@@ -186,12 +186,11 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     }
 
     private static func defaultLabWorkspaceURL() -> URL {
-        let support = try! FileManager.default.url(
+        let support = FileManager.default.urls(
             for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: false
-        )
+            in: .userDomainMask
+        ).first ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support", isDirectory: true)
         return support
             .appendingPathComponent(
                 "Noctweave/Noctweb Lab",

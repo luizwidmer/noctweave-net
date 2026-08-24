@@ -94,6 +94,125 @@ final class NoctwebLabCoreTests: XCTestCase {
         }
     }
 
+    func testHostingReceiptRejectsDatesOutsideUnsignedTranscriptRange() throws {
+        let publicKey = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let receipt = NoctwebHostingReceipt(
+            objectID: "sha256:" + String(repeating: "a", count: 64),
+            byteCount: 3,
+            storedAt: Date(timeIntervalSince1970: -1),
+            expiresAt: Date(timeIntervalSince1970: 0),
+            signingPublicKey: publicKey,
+            signatureAlgorithm: "Ed25519",
+            signature: Data(repeating: 0, count: 64)
+        )
+
+        XCTAssertThrowsError(
+            try receipt.verify(
+                expectedObjectID: receipt.objectID,
+                expectedByteCount: 3,
+                expectedSigningPublicKey: publicKey,
+                maximumRetentionSeconds: 60
+            )
+        ) { error in
+            guard case NoctwebHostRelayError.invalidReceipt = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testHostingReceiptRejectsNegativeExpectedByteCount() throws {
+        let publicKey = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let receipt = NoctwebHostingReceipt(
+            objectID: "sha256:" + String(repeating: "a", count: 64),
+            byteCount: 0,
+            storedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            expiresAt: Date(timeIntervalSince1970: 1_700_000_060),
+            signingPublicKey: publicKey,
+            signatureAlgorithm: "Ed25519",
+            signature: Data(repeating: 0, count: 64)
+        )
+
+        XCTAssertThrowsError(
+            try receipt.verify(
+                expectedObjectID: receipt.objectID,
+                expectedByteCount: -1,
+                expectedSigningPublicKey: publicKey,
+                maximumRetentionSeconds: 60
+            )
+        ) { error in
+            guard case NoctwebHostRelayError.invalidReceipt = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testPublicationCountersAndTimestampFailClosedAtNumericLimits() throws {
+        XCTAssertEqual(try PublicationValidation.nextRevision(after: nil), 1)
+        XCTAssertThrowsError(
+            try PublicationValidation.nextRevision(after: UInt64.max)
+        )
+        XCTAssertThrowsError(
+            try PublicationValidation.issuedAtMilliseconds(
+                Date(timeIntervalSince1970: .infinity)
+            )
+        )
+    }
+
+    func testInvalidPublicationTimeDoesNotCreatePublisherIdentity() async throws {
+        let store = InMemoryPublicationPrivateKeyStore()
+        let engine = try NoctwebLabEngine(identityStore: store)
+        let candidate = draft(bundle: bundle())
+
+        do {
+            _ = try await engine.publish(
+                draft: candidate,
+                at: Date(timeIntervalSince1970: .infinity)
+            )
+            XCTFail("an unrepresentable publication time must be rejected")
+        } catch let error as NoctwebLabError {
+            guard case .canonicalEncoding = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+        XCTAssertNil(try store.loadPrivateKey(for: candidate.publicationID))
+    }
+
+    func testExhaustedConsensusRoundRejectsBeforeReplacingHostedState() async throws {
+        let store = InMemoryPublicationPrivateKeyStore()
+        let original = try NoctwebLabEngine(identityStore: store)
+        let candidate = draft(bundle: bundle())
+        let published = try await original.publish(draft: candidate)
+        let exhaustedFinality = try MockConsensusFinalizer().finalize(
+            headID: published.headID,
+            confirmations: published.finality.confirmations,
+            round: UInt64.max
+        )
+        let exhausted = PublishedCapsule(
+            object: published.object,
+            encodedObject: published.encodedObject,
+            head: published.head,
+            headID: published.headID,
+            hostRelayIDs: published.hostRelayIDs,
+            finality: exhaustedFinality
+        )
+        let restored = try NoctwebLabEngine(identityStore: store)
+        try await restored.restore(exhausted)
+
+        do {
+            _ = try await restored.publish(draft: candidate)
+            XCTFail("an exhausted consensus round must reject publication")
+        } catch let error as NoctwebLabError {
+            guard case .invalidFinality = error else {
+                return XCTFail("unexpected error: \(error)")
+            }
+        }
+        let resolved = try await restored.resolve(
+            address: candidate.address,
+            preference: .direct
+        )
+        XCTAssertEqual(resolved.headID, published.headID)
+    }
+
     func testPublisherIdentityCanBePreparedBeforeFirstPublication() async throws {
         let engine = try NoctwebLabEngine(
             identityStore: InMemoryPublicationPrivateKeyStore()

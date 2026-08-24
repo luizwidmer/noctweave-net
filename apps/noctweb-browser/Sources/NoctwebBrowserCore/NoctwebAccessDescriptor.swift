@@ -102,8 +102,7 @@ public struct NoctwebAccessDescriptor:
             versionNumber.doubleValue == Double(versionNumber.intValue),
             let urlString = object["url"] as? String,
             let trustDomainID = object["routingTrustDomainID"] as? String,
-            let rawHints = object["bootstrapHints"] as? [Any],
-            rawHints.allSatisfy({ $0 is String })
+            let rawHints = object["bootstrapHints"] as? [String]
         else {
             throw NoctwebBrowserError.invalidAccessDescriptor("field types are invalid")
         }
@@ -119,7 +118,7 @@ public struct NoctwebAccessDescriptor:
             )
         }
         let hints = try rawHints.map { rawHint -> URL in
-            guard let url = URL(string: rawHint as! String) else {
+            guard let url = URL(string: rawHint) else {
                 throw NoctwebBrowserError.invalidAccessDescriptor("invalid bootstrap URL")
             }
             return url

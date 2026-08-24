@@ -6,6 +6,18 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testWorkspaceRevisionRoundTripsAtUnsignedLimit() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        workspace.sites[0].revision = .max
+
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let decoded = try decodeWorkspaces(at: fixture.workspaceURL)
+        XCTAssertEqual(decoded.first?.sites.first?.revision, UInt64.max)
+    }
+
     func testProductionStartupRemovesDevelopmentFixtures() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }

@@ -90,6 +90,12 @@ public extension NoctwebLabEngine {
             }
         }
 
+        let revision = try PublicationValidation.nextRevision(
+            after: previous?.object.revision
+        )
+        let issuedAtMilliseconds = try PublicationValidation
+            .issuedAtMilliseconds(date)
+
         let identity: PublicationSigningIdentity
         if let previous {
             identity = try await identities.loadIdentity(
@@ -107,7 +113,6 @@ public extension NoctwebLabEngine {
             )
         }
 
-        let revision = (previous?.object.revision ?? 0) + 1
         let routeDirective = draft.routeDirective ?? .open
         let object = CapsuleObject(
             publicationID: draft.publicationID,
@@ -134,9 +139,7 @@ public extension NoctwebLabEngine {
             objectID: NoctwebDigest.objectID(for: encodedObject),
             revision: revision,
             previousHeadID: previous?.headID,
-            issuedAtMilliseconds: UInt64(
-                max(0, date.timeIntervalSince1970 * 1_000)
-            )
+            issuedAtMilliseconds: issuedAtMilliseconds
         )
         let head = PublisherHead(
             claims: claims,

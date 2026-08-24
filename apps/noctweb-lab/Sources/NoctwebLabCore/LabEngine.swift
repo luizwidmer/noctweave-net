@@ -132,6 +132,18 @@ public actor NoctwebLabEngine {
             )
         }
 
+        let revision = try PublicationValidation.nextRevision(
+            after: previous?.object.revision
+        )
+        let issuedAtMilliseconds = try PublicationValidation
+            .issuedAtMilliseconds(date)
+        let (nextRound, roundOverflow) = round.addingReportingOverflow(1)
+        guard !roundOverflow else {
+            throw NoctwebLabError.invalidFinality(
+                "consensus round is exhausted"
+            )
+        }
+
         let identity: PublicationSigningIdentity
         if let previous {
             identity = try await identities.loadIdentity(
@@ -149,7 +161,6 @@ public actor NoctwebLabEngine {
             )
         }
 
-        let revision = (previous?.object.revision ?? 0) + 1
         let publisherRouteDirective = draft.routeDirective ?? .open
         let object = CapsuleObject(
             publicationID: draft.publicationID,
@@ -167,7 +178,6 @@ public actor NoctwebLabEngine {
         )
         let encodedObject = try CanonicalJSON.encode(object)
         let objectID = NoctwebDigest.objectID(for: encodedObject)
-        let milliseconds = max(0, date.timeIntervalSince1970 * 1_000)
         let claims = PublisherHeadClaims(
             publicationID: draft.publicationID,
             address: draft.address,
@@ -178,7 +188,7 @@ public actor NoctwebLabEngine {
             objectID: objectID,
             revision: revision,
             previousHeadID: previous?.headID,
-            issuedAtMilliseconds: UInt64(milliseconds)
+            issuedAtMilliseconds: issuedAtMilliseconds
         )
         let head = PublisherHead(
             claims: claims,
@@ -204,7 +214,7 @@ public actor NoctwebLabEngine {
             throw NoctwebLabError.noHostReplica(draft.address)
         }
 
-        round += 1
+        round = nextRound
         let finality = try finalizer.finalize(
             headID: headID,
             confirmations: [
