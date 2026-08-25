@@ -36,13 +36,13 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
             )
         } catch NoctwebBrowserError.unresolvedName {
             do {
-                return try await federationResolver.resolve(
+                return try await resolveHostedLabPublication(
                     navigationURL,
                     profile: profile,
                     visitorDirective: visitorDirective
                 )
             } catch NoctwebBrowserError.unresolvedName {
-                return try await resolveHostedLabPublication(
+                return try await federationResolver.resolve(
                     navigationURL,
                     profile: profile,
                     visitorDirective: visitorDirective
