@@ -6,13 +6,16 @@ struct BrowserWindowView: View {
     @EnvironmentObject private var model: BrowserAppModel
     @FocusState private var addressFieldIsFocused: Bool
     @State private var showsRelayPanel = false
+    @State private var showsVerificationStatus = false
 
     var body: some View {
         VStack(spacing: 0) {
             browserToolbar
             horizontalDivider
-            tabStrip
-            horizontalDivider
+            if model.session.tabs.count > 1 {
+                tabStrip
+                horizontalDivider
+            }
             HStack(spacing: 0) {
                 if model.showsSidebar {
                     BrowserSidebar()
@@ -50,31 +53,38 @@ struct BrowserWindowView: View {
                 help: model.showsSidebar ? "Hide sidebar" : "Show sidebar"
             ) { model.toggleSidebar() }
 
-            HStack(spacing: 1) {
-                toolbarButton(
-                    systemImage: "chevron.left",
-                    help: "Back",
-                    disabled: !model.canGoBack,
-                    action: model.goBack
-                )
-                toolbarButton(
-                    systemImage: "chevron.right",
-                    help: "Forward",
-                    disabled: !model.canGoForward,
-                    action: model.goForward
-                )
+            if model.selectedSite != nil || model.canGoBack || model.canGoForward {
+                HStack(spacing: 1) {
+                    toolbarButton(
+                        systemImage: "chevron.left",
+                        help: "Back",
+                        disabled: !model.canGoBack,
+                        action: model.goBack
+                    )
+                    toolbarButton(
+                        systemImage: "chevron.right",
+                        help: "Forward",
+                        disabled: !model.canGoForward,
+                        action: model.goForward
+                    )
+                }
             }
 
             HStack(spacing: 8) {
-                Button {
-                    model.toggleTrustInspector()
-                } label: {
-                    Image(systemName: verificationSymbol)
-                        .foregroundStyle(verificationColor)
-                        .frame(width: 17)
+                if model.selectedTab.verificationState != .idle {
+                    Button {
+                        showsVerificationStatus.toggle()
+                    } label: {
+                        Image(systemName: verificationSymbol)
+                            .foregroundStyle(verificationColor)
+                            .frame(width: 17)
+                    }
+                    .buttonStyle(.plain)
+                    .help(verificationLabel)
+                    .popover(isPresented: $showsVerificationStatus, arrowEdge: .top) {
+                        verificationPopover
+                    }
                 }
-                .buttonStyle(.plain)
-                .help(verificationLabel)
 
                 TextField(
                     "site.relay or noct://site.relay/",
@@ -92,12 +102,18 @@ struct BrowserWindowView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Stop")
-                } else {
+                } else if model.selectedSite != nil {
                     Button(action: model.reload) {
                         Image(systemName: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
                     .help("Reload")
+                } else if model.selectedTab.verificationState == .failed || model.selectedTab.verificationState == .blocked {
+                    Button(action: model.reload) {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.plain)
+                    .help("Try again")
                 }
             }
             .padding(.horizontal, 11)
@@ -140,27 +156,18 @@ struct BrowserWindowView: View {
                     .environmentObject(model)
             }
 
-            toolbarButton(
-                systemImage: model.isSelectedSiteBookmarked
-                    ? "bookmark.fill"
-                    : "bookmark",
-                help: model.isSelectedSiteBookmarked
-                    ? "Remove bookmark"
-                    : (
-                        model.canBookmarkSelectedSite
-                            ? "Bookmark this site"
-                            : "Query and fragment addresses stay out of bookmarks"
-                    ),
-                disabled: !model.canBookmarkSelectedSite,
-                action: model.toggleBookmark
-            )
-
-            toolbarButton(
-                systemImage: "checkmark.shield",
-                help: model.showsTrustInspector
-                    ? "Hide verification details"
-                    : "Show verification details"
-            ) { model.toggleTrustInspector() }
+            if model.selectedSite != nil {
+                toolbarButton(
+                    systemImage: model.isSelectedSiteBookmarked
+                        ? "bookmark.fill"
+                        : "bookmark",
+                    help: model.isSelectedSiteBookmarked
+                        ? "Remove bookmark"
+                        : "Bookmark this site",
+                    disabled: !model.canBookmarkSelectedSite,
+                    action: model.toggleBookmark
+                )
+            }
 
             toolbarButton(
                 systemImage: "plus",
@@ -287,27 +294,9 @@ struct BrowserWindowView: View {
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
-                    HStack(spacing: 10) {
-                        Button {
-                            addressFieldIsFocused = true
-                        } label: {
-                            Label("Enter Address", systemImage: "arrow.right.circle.fill")
-                                .frame(minWidth: 124)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .tint(NoctwebTheme.accent)
-
-                        Button {
-                            showsRelayPanel = true
-                        } label: {
-                            Label("Choose Relay", systemImage: "server.rack")
-                                .frame(minWidth: 124)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .tint(NoctwebTheme.accentStrong)
-                    }
+                    Text("Enter an address in the Browse field above.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal, 34)
                 .padding(.vertical, 30)
@@ -332,6 +321,30 @@ struct BrowserWindowView: View {
         Rectangle()
             .fill(.primary.opacity(0.07))
             .frame(height: 1)
+    }
+
+    private var verificationPopover: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(verificationLabel, systemImage: verificationSymbol)
+                .font(.headline)
+                .foregroundStyle(verificationColor)
+            if model.selectedSite != nil {
+                Text("Publisher signature, hosted object, and relay trust evidence are available for this page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Show Verification Details") {
+                    showsVerificationStatus = false
+                    model.toggleTrustInspector()
+                }
+                .buttonStyle(.borderedProminent)
+            } else {
+                Text(model.selectedError ?? "Verification evidence will appear after a page resolves.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(width: 320)
     }
 
     private var verticalDivider: some View {

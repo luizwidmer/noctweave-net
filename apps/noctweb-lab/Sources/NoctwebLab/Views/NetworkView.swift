@@ -28,7 +28,7 @@ struct NetworkView: View {
 
                 connectionCard
                 relayList
-                trustBoundary
+                hostingBoundaryDisclosure
             }
             .padding(24)
             .frame(maxWidth: 1_100, alignment: .leading)
@@ -65,20 +65,6 @@ struct NetworkView: View {
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button {
-                    Task {
-                        await model.refreshHostRelays()
-                    }
-                } label: {
-                    if model.relayRefreshInFlight {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
-                }
-                .buttonStyle(.bordered)
-                .disabled(model.relayRefreshInFlight)
             }
 
             Text(
@@ -143,78 +129,71 @@ struct NetworkView: View {
                 )
             }
 
-            if let namespace = relay.relayNamespaceID,
-               let suffix = relay.namespaceSuffix {
-                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
-                    GridRow {
-                        Text("Address suffix")
-                            .foregroundStyle(.secondary)
-                        Text(".\(suffix)")
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
+            DisclosureGroup("Technical details") {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let namespace = relay.relayNamespaceID,
+                       let suffix = relay.namespaceSuffix {
+                        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
+                            GridRow {
+                                Text("Address suffix").foregroundStyle(.secondary)
+                                Text(".\(suffix)")
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                            GridRow {
+                                Text("Namespace").foregroundStyle(.secondary)
+                                Text(namespace)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .textSelection(.enabled)
+                            }
+                            GridRow {
+                                Text("Last latency").foregroundStyle(.secondary)
+                                Text("\(relay.latencyMilliseconds) ms")
+                                    .font(.system(.caption, design: .monospaced))
+                            }
+                        }
+                        .font(.caption)
                     }
-                    GridRow {
-                        Text("Namespace")
-                            .foregroundStyle(.secondary)
-                        Text(namespace)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .textSelection(.enabled)
-                    }
-                    GridRow {
-                        Text("Last latency")
-                            .foregroundStyle(.secondary)
-                        Text("\(relay.latencyMilliseconds) ms")
-                            .font(.system(.caption, design: .monospaced))
+                    HStack {
+                        Button {
+                            Task {
+                                await model.refreshHostRelay(relay.id)
+                            }
+                        } label: {
+                            Label("Check connection", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+
+                        Button(role: .destructive) {
+                            model.removeRelay(relay.id)
+                        } label: {
+                            Label("Remove", systemImage: "minus")
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
-                .font(.caption)
-            }
-
-            HStack {
-                Button {
-                    Task {
-                        await model.refreshHostRelay(relay.id)
-                    }
-                } label: {
-                    Label("Check connection", systemImage: "arrow.clockwise")
-                }
-                .buttonStyle(.bordered)
-
-                Button(role: .destructive) {
-                    model.removeRelay(relay.id)
-                } label: {
-                    Label("Remove", systemImage: "minus")
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
+                .padding(.top, 8)
             }
         }
         .padding(.vertical, 4)
     }
 
-    private var trustBoundary: some View {
-        SectionCard("What a successful connection proves", systemImage: "checkmark.shield") {
-            Label(
-                "The endpoint advertises a structurally valid nw.net-host@1 configuration.",
-                systemImage: "checkmark.circle"
-            )
-            Label(
-                "Hosted bytes are content-addressed and fetched back before success is shown.",
-                systemImage: "checkmark.circle"
-            )
-            Label(
-                "The relay signs a bounded storage receipt with its advertised host key.",
-                systemImage: "checkmark.circle"
-            )
-            Divider()
-            Text(
-                "A hosting receipt is not consensus finality, global name ownership, permanent availability, or permission for the relay to sign publisher content."
-            )
-            .font(.callout)
-            .foregroundStyle(.secondary)
+    private var hostingBoundaryDisclosure: some View {
+        SectionCard("Hosting verification", systemImage: "checkmark.shield") {
+            DisclosureGroup("What verified hosting means") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("The endpoint advertises a valid hosting configuration.", systemImage: "checkmark.circle")
+                    Label("Content-addressed bytes are fetched back before success is shown.", systemImage: "checkmark.circle")
+                    Label("The relay signs a bounded storage receipt.", systemImage: "checkmark.circle")
+                }
+                .font(.callout)
+                .padding(.top, 8)
+            }
+            Text("A hosting receipt is not global name ownership, consensus finality, or permission for the relay to sign publisher content.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 

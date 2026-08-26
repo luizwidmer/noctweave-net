@@ -122,29 +122,6 @@ struct ContentView: View {
             workspaceMenu
                 .padding(.horizontal, 10)
 
-            Button {
-                model.createSite()
-                model.selection = .sites
-            } label: {
-                Label("New Site", systemImage: "plus")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 9)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
-            .background(
-                LinearGradient(
-                    colors: [NoctwebTheme.accent, NoctwebTheme.accent.opacity(0.78)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-            )
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
-            .disabled(!canCreateSite)
-
             VStack(spacing: 5) {
                 ForEach(primarySections) { destination in
                     LabSidebarButton(
@@ -255,11 +232,7 @@ struct ContentView: View {
     }
 
     private var primarySections: [ProductSection] {
-        [.sites, .runtime, .network]
-    }
-
-    private var canCreateSite: Bool {
-        model.activeWorkspace?.relays.contains { $0.supports(.host) } == true
+        [.sites, .network]
     }
 
     private func relaySummary(_ workspace: Workspace) -> String {

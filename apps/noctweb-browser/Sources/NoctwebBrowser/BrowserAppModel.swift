@@ -74,7 +74,7 @@ final class BrowserPersistenceStore {
 final class BrowserAppModel: ObservableObject {
     @Published private(set) var session: NoctwebBrowserSession
     @Published var addressText: String
-    @Published var showsSidebar = true
+    @Published var showsSidebar = false
     @Published var showsTrustInspector = false
     @Published var sidebarSection: BrowserSidebarSection = .bookmarks
     @Published var relayEndpointText: String
@@ -163,13 +163,14 @@ final class BrowserAppModel: ObservableObject {
         } catch {
             preconditionFailure("The built-in Noctweb browser session is invalid: \(error)")
         }
-        addressText = initialAddress
+        addressText = initialAddress == Self.blankAddress ? "" : initialAddress
         if let persisted {
             session.restorePersistentState(
                 bookmarks: persisted.bookmarks,
                 history: persisted.history
             )
         }
+        showsSidebar = !session.bookmarks.isEmpty || !session.history.isEmpty
         visitorDirectiveByTab[session.selectedTabID] =
             profile.defaultVisitorDirective
     }
@@ -246,7 +247,7 @@ final class BrowserAppModel: ObservableObject {
             guard let self else { return }
             await self.connectRelay(
                 navigateAfterConnection:
-                    self.addressText != Self.blankAddress
+                    !self.addressText.isEmpty
             )
         }
     }
@@ -352,7 +353,8 @@ final class BrowserAppModel: ObservableObject {
             let tabID = try session.addTab(address: address)
             visitorDirectiveByTab[tabID] =
                 selectedProfile.defaultVisitorDirective
-            addressText = address
+            addressText = ""
+            showsTrustInspector = false
             reloadTokensByTab[tabID] = UUID()
             if relayIsConfigured {
                 try? session.updateTab(
@@ -437,7 +439,7 @@ final class BrowserAppModel: ObservableObject {
             persist()
 
             if navigateAfterConnection,
-               addressText != Self.blankAddress {
+               !addressText.isEmpty {
                 navigate(
                     to: addressText,
                     pushCurrentAddress: false
@@ -463,7 +465,8 @@ final class BrowserAppModel: ObservableObject {
         activeRelayEndpoint = nil
         relayEndpointText = ""
         relayConnectionState = .notConfigured
-        addressText = Self.blankAddress
+        addressText = ""
+        showsTrustInspector = false
         sitesByTab[session.selectedTabID] = nil
         errorsByTab[session.selectedTabID] = nil
         blockedNoticesByTab[session.selectedTabID] = nil
@@ -477,9 +480,15 @@ final class BrowserAppModel: ObservableObject {
 
     func selectTab(_ id: UUID) {
         session.selectTab(id: id)
-        addressText = session.selectedTab.address
+        addressText = session.selectedTab.address == Self.blankAddress
+            ? ""
+            : session.selectedTab.address
+        if sitesByTab[id] == nil {
+            showsTrustInspector = false
+        }
         if relayIsConfigured,
            sitesByTab[id] == nil,
+           session.selectedTab.address != Self.blankAddress,
            session.selectedTab.verificationState != .resolving {
             navigate(to: session.selectedTab.address, pushCurrentAddress: false)
         }
@@ -499,7 +508,9 @@ final class BrowserAppModel: ObservableObject {
         forwardStackByTab[id] = nil
         visitorDirectiveByTab[id] = nil
         if wasSelected {
-            addressText = session.selectedTab.address
+            addressText = session.selectedTab.address == Self.blankAddress
+                ? ""
+                : session.selectedTab.address
         }
         persist()
     }
@@ -534,16 +545,19 @@ final class BrowserAppModel: ObservableObject {
 
     func removeBookmark(_ bookmark: NoctwebBookmark) {
         session.removeBookmark(id: bookmark.id)
+        collapseSidebarIfEmpty()
         persist()
     }
 
     func removeHistoryEntry(_ entry: NoctwebHistoryEntry) {
         session.removeHistoryEntry(id: entry.id)
+        collapseSidebarIfEmpty()
         persist()
     }
 
     func clearHistory() {
         session.clearHistory()
+        collapseSidebarIfEmpty()
         persist()
     }
 
@@ -851,6 +865,12 @@ final class BrowserAppModel: ObservableObject {
                     : (relayIsConfigured ? selectedProfile : nil)
             )
         )
+    }
+
+    private func collapseSidebarIfEmpty() {
+        if session.bookmarks.isEmpty && session.history.isEmpty {
+            showsSidebar = false
+        }
     }
 
     static func makeRelayProfile(

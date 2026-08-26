@@ -43,16 +43,6 @@ struct SitesView: View {
                 selectedWorkspace(width: proxy.size.width)
             } else if model.activeWorkspace?.sites.isEmpty != false {
                 selectedWorkspace(width: proxy.size.width)
-            } else if proxy.size.width >= siteLibraryBreakpoint {
-                HStack(spacing: 0) {
-                    siteLibrary
-                        .frame(width: 264)
-                    Divider()
-                    selectedWorkspace(
-                        width: proxy.size.width - 265,
-                        showsSitePicker: false
-                    )
-                }
             } else {
                 selectedWorkspace(
                     width: proxy.size.width,
@@ -202,72 +192,6 @@ struct SitesView: View {
         }
     }
 
-    private var siteLibrary: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sites")
-                        .font(.title2.weight(.semibold))
-                    Text("\(model.activeWorkspace?.sites.count ?? 0) local projects")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    model.createSite()
-                } label: {
-                    Label("New", systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Create a site")
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            List(selection: siteSelection) {
-                ForEach(model.activeWorkspace?.sites ?? []) { site in
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(site.title)
-                                .font(.subheadline.weight(.medium))
-                                .lineLimit(1)
-                            Text(site.address)
-                                .font(.system(.caption2, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            HStack(spacing: 5) {
-                                Circle()
-                                    .fill(site.lastPublishedAt == nil ? .orange : .green)
-                                    .frame(width: 6, height: 6)
-                                Text(
-                                    site.lastPublishedAt == nil
-                                        ? "Draft"
-                                        : "Revision \(site.revision)"
-                                )
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            }
-                        }
-
-                        Spacer(minLength: 2)
-
-                        siteActionMenu(site, iconOnly: true)
-                    }
-                    .padding(.vertical, 5)
-                    .tag(Optional(site.id))
-                    .contextMenu {
-                        siteContextActions(site)
-                    }
-                }
-            }
-            .listStyle(.sidebar)
-        }
-        .background(.ultraThinMaterial)
-    }
-
     private func siteWorkspace(
         _ site: SiteProject,
         width: CGFloat,
@@ -298,8 +222,7 @@ struct SitesView: View {
                 .buttonStyle(.bordered)
                 .help("Create a site")
 
-                publisherIdentityBadge(site)
-                relayAuthorizationButton
+                publicationSecurityButton(site)
 
                 Button {
                     model.publishSelectedSite()
@@ -377,29 +300,6 @@ struct SitesView: View {
         .accessibilityValue(site.title)
     }
 
-    private func publisherIdentityBadge(_ site: SiteProject) -> some View {
-        Image(systemName: site.publicationIdentity.systemImage)
-            .foregroundStyle(
-                site.publicationIdentity == .ready ? Color.green : Color.orange
-            )
-            .frame(width: 32, height: 32)
-            .background(
-                (site.publicationIdentity == .ready ? Color.green : Color.orange)
-                    .opacity(0.12),
-                in: Circle()
-            )
-            .help(
-                site.publicationIdentity == .ready
-                    ? "Publisher secured"
-                    : site.publicationIdentity.title
-            )
-            .accessibilityLabel(
-                site.publicationIdentity == .ready
-                    ? "Publisher secured"
-                    : site.publicationIdentity.title
-            )
-    }
-
     private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 18) {
@@ -431,20 +331,13 @@ struct SitesView: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                StatusPill(
-                    title: site.publicationIdentity == .ready
-                        ? "Publisher secured"
-                        : site.publicationIdentity.title,
-                    systemImage: site.publicationIdentity.systemImage,
-                    color: site.publicationIdentity == .ready ? .green : .orange
-                )
             }
         }
     }
 
     private func publicationActions(_ site: SiteProject) -> some View {
         HStack(spacing: 8) {
-            relayAuthorizationButton
+            publicationSecurityButton(site)
 
             if model.publicationInFlight {
                 ProgressView()
@@ -468,23 +361,31 @@ struct SitesView: View {
         }
     }
 
-    private var relayAuthorizationButton: some View {
+    private func publicationSecurityButton(_ site: SiteProject) -> some View {
         Button {
             showsRelayAuthorization.toggle()
         } label: {
-            Image(
-                systemName: model.relayPublisherAuthorization.isEmpty
-                    ? "key.horizontal"
-                    : "key.horizontal.fill"
+            Label(
+                site.publicationIdentity == .ready ? "Publisher ready" : "Publisher setup",
+                systemImage: site.publicationIdentity.systemImage
             )
         }
         .buttonStyle(.bordered)
-        .help("Relay publishing access")
-        .accessibilityLabel("Relay publishing access")
+        .foregroundStyle(site.publicationIdentity == .ready ? Color.green : Color.orange)
+        .help("Publication status and relay access")
         .popover(isPresented: $showsRelayAuthorization, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Relay access", systemImage: "key.horizontal")
+                Label(
+                    site.publicationIdentity == .ready
+                        ? "Publisher signing authority is ready"
+                        : site.publicationIdentity.title,
+                    systemImage: site.publicationIdentity.systemImage
+                )
                     .font(.headline)
+                    .foregroundStyle(site.publicationIdentity == .ready ? Color.green : Color.orange)
+                Text("Each site uses a publisher-scoped signing authority. Relay hosting does not transfer ownership or finality.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text(
                     "Only needed when this host relay requires a publisher password. It stays in memory for this app session."
                 )
@@ -596,13 +497,6 @@ struct SitesView: View {
         )
     }
 
-    private var siteSelection: Binding<UUID?> {
-        Binding(
-            get: { model.selectedSiteID },
-            set: { selectSiteAfterInteraction($0) }
-        )
-    }
-
     private func selectSiteAfterInteraction(_ siteID: UUID?) {
         // Let AppKit finish dismissing a menu or settling a list selection
         // before replacing the complete editor hierarchy.
@@ -637,6 +531,5 @@ struct SitesView: View {
         }
     }
 
-    private let siteLibraryBreakpoint: CGFloat = 1_220
     private let headerBreakpoint: CGFloat = 760
 }

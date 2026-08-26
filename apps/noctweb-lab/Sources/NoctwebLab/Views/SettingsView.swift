@@ -6,10 +6,6 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var appearance: NoctwebAppearanceStore
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 340), spacing: 18, alignment: .top)
-    ]
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -34,49 +30,29 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
-                    SectionCard("Workspace storage", systemImage: "externaldrive") {
-                        settingsRows([
-                            ("Mode", "Local persistent workspace"),
-                            ("Saved workspaces", "\(model.workspaces.count)")
-                        ])
-                        boundaryText(
-                            "Site drafts and relay endpoints stay on this Mac. Publisher authorization is never saved, and protocol identity is not derived from an application account."
-                        )
-                    }
-
-                    SectionCard("Publication security", systemImage: "signature") {
-                        settingsRows([
-                            ("Identity scope", "Per publication"),
-                            ("Name scope", "Relay namespace"),
-                            ("Renderer", "Isolated WebKit"),
-                            ("Website scripts", "Same-publication only")
-                        ])
-                        boundaryText(
-                            "Every site has a publisher-scoped Keychain identity. Only verified bundle bytes run; the website receives no native bridge or unrestricted external network access."
-                        )
-                    }
-
-                    SectionCard("Routing policy", systemImage: "point.3.connected.trianglepath.dotted") {
-                        settingsRows([
-                            ("Authority order", "Federation → Relay → Publisher → Visitor"),
-                            ("Open fallback", "Direct host retrieval")
-                        ])
-                        boundaryText(
-                            "The first non-open directive governs retrieval. Solo mode leaves federation authority open; passthrough is required only when effective policy selects one hop."
-                        )
-                    }
-
-                    SectionCard("Hosted profile", systemImage: "shippingbox.and.arrow.backward") {
-                        settingsRows([
-                            ("Capsule", HostedCapsuleEnvelope.profile),
-                            ("Bundle limit", "1 MiB per hosted object"),
-                            ("Relay module", "nw.net-host@1"),
-                            ("Consensus", "Not claimed")
-                        ])
-                        boundaryText(
-                            "The Lab verifies publisher signatures, content hashes, and relay hosting receipts. A successful host operation does not establish global naming or finality."
-                        )
+                SectionCard("Technical details", systemImage: "info.circle") {
+                    DisclosureGroup("Storage, security, and routing boundaries") {
+                        VStack(alignment: .leading, spacing: 18) {
+                            detailSection("Workspace storage", rows: [
+                                ("Mode", "Local persistent workspace"),
+                                ("Saved workspaces", "\(model.workspaces.count)")
+                            ], boundary: "Site drafts and relay endpoints stay on this Mac. Publisher authorization is never saved, and protocol identity is not derived from an application account.")
+                            Divider()
+                            detailSection("Publication security", rows: [
+                                ("Identity scope", "Per publication"),
+                                ("Name scope", "Relay namespace"),
+                                ("Renderer", "Isolated WebKit"),
+                                ("Website scripts", "Same-publication only")
+                            ], boundary: "Every site has a publisher-scoped Keychain identity. Only verified bundle bytes run; the website receives no native bridge or unrestricted external network access.")
+                            Divider()
+                            detailSection("Routing and hosting", rows: [
+                                ("Authority order", "Federation → Relay → Publisher → Visitor"),
+                                ("Hosted profile", HostedCapsuleEnvelope.profile),
+                                ("Bundle limit", "1 MiB"),
+                                ("Consensus", "Not claimed")
+                            ], boundary: "The Lab verifies publisher signatures, content hashes, and relay hosting receipts. Hosting does not establish global naming or finality.")
+                        }
+                        .padding(.top, 10)
                     }
                 }
             }
@@ -113,5 +89,17 @@ struct SettingsView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func detailSection(
+        _ title: String,
+        rows: [(String, String)],
+        boundary: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline)
+            settingsRows(rows)
+            boundaryText(boundary)
+        }
     }
 }

@@ -17,7 +17,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
 
         XCTAssertFalse(model.relayIsConfigured)
         XCTAssertEqual(model.activeRelayEndpoint, nil)
-        XCTAssertEqual(model.addressText, "noct://start.unconfigured/")
+        XCTAssertEqual(model.addressText, "")
         XCTAssertEqual(
             model.selectedProfile.routingTrustDomainID,
             "sha256:" + String(repeating: "0", count: 64)
@@ -326,7 +326,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
             useDevelopmentFixtures: true
         )
 
-        XCTAssertTrue(model.showsSidebar)
+        XCTAssertFalse(model.showsSidebar)
         XCTAssertFalse(model.showsTrustInspector)
 
         model.toggleTrustInspector()
