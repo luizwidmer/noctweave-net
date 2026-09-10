@@ -100,6 +100,14 @@ public actor NoctwebLabEngine {
         try await identities.deleteIdentity(for: publicationID)
     }
 
+    /// The caller first drains app operations so no publication can recreate a key.
+    public func purgeLocalState() async throws {
+        try await identities.purgeAll()
+        publicationsByAddress.removeAll()
+        round = 0
+        await network.purgeLocalState()
+    }
+
     public func preparePublisherIdentity(
         for publicationID: String
     ) async throws -> String {

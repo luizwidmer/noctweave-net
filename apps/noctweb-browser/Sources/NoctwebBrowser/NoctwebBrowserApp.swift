@@ -4,13 +4,31 @@ import SwiftUI
 
 @main
 struct NoctwebBrowserApp: App {
+    @StateObject private var support = AppSupportStore.shared
+
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var model = BrowserAppModel()
+    @StateObject private var model: BrowserAppModel
     @StateObject private var appearance = NoctwebAppearanceStore()
+
+    init() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "NOCTWEB_BROWSER_UI_TEST_SUITE"),
+           arguments.indices.contains(index + 1),
+           let defaults = UserDefaults(suiteName: arguments[index + 1]) {
+            _model = StateObject(wrappedValue: BrowserAppModel(
+                persistenceStore: BrowserPersistenceStore(defaults: defaults)
+            ))
+            return
+        }
+        #endif
+        _model = StateObject(wrappedValue: BrowserAppModel())
+    }
 
     var body: some Scene {
         WindowGroup {
             BrowserWindowView()
+                .disabled(model.isResetting)
                 .environmentObject(model)
                 .environmentObject(appearance)
                 .noctwebAppearance(appearance.selection)
@@ -88,6 +106,9 @@ struct NoctwebBrowserApp: App {
 private struct BrowserSettingsView: View {
     @EnvironmentObject private var model: BrowserAppModel
     @EnvironmentObject private var appearance: NoctwebAppearanceStore
+    @State private var showsResetConfirmation = false
+    @State private var resetConfirmation = ""
+    @State private var resetError: String?
 
     private let columns = [
         GridItem(.adaptive(minimum: 300), spacing: 18, alignment: .top)
@@ -119,6 +140,21 @@ private struct BrowserSettingsView: View {
                     Text("System follows macOS. Light and Dark remain explicit choices and are remembered by Noctweb Browser.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                AppSupportCard()
+
+                BrowserSettingsCard("Reset app", systemImage: "trash") {
+                    Text("Delete bookmarks, history, open tabs, saved relays, website data, and app settings. Files you downloaded or exported remain unchanged.")
+                        .foregroundStyle(.secondary)
+                    Button("Purge and Reset App…", role: .destructive) {
+                        resetConfirmation = ""
+                        showsResetConfirmation = true
+                    }
+                    .disabled(model.isResetting)
+                    .accessibilityIdentifier("app.purgeAndReset")
+                    if model.isResetting { ProgressView("Resetting…") }
+                    if let resetError { Text(resetError).foregroundStyle(.red) }
                 }
 
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
@@ -156,6 +192,22 @@ private struct BrowserSettingsView: View {
         }
         .background(NoctwebTheme.canvas)
         .frame(minWidth: 700, minHeight: 520)
+        .alert("Purge and reset Noctweb Browser?", isPresented: $showsResetConfirmation) {
+            TextField("Type RESET to confirm", text: $resetConfirmation)
+            Button("Cancel", role: .cancel) {}
+            Button("Purge and Reset", role: .destructive) {
+                Task {
+                    do {
+                        try await model.purgeAndReset()
+                        appearance.reset()
+                        resetError = nil
+                    } catch { resetError = "Reset could not finish: \(error.localizedDescription)" }
+                }
+            }
+            .disabled(resetConfirmation != "RESET")
+        } message: {
+            Text("All local browsing data and settings will be deleted. This cannot be undone.")
+        }
     }
 
     private func settingsRows(_ rows: [(String, String)]) -> some View {

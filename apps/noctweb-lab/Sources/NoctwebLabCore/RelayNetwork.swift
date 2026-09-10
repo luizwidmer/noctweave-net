@@ -17,6 +17,10 @@ public actor InMemoryRelayNetwork {
     private var publicationsByHost: [String: [String: HostedPublication]]
     private var federationPolicy: FederationRoutingPolicy
 
+    func purgeLocalState() {
+        publicationsByHost.removeAll()
+    }
+
     public init(topology: RelayTopology) {
         self.nodesByID = Dictionary(
             uniqueKeysWithValues: topology.nodes.map { ($0.id, $0) }

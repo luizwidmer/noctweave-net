@@ -1,0 +1,461 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		00C7FBC4E95DA239E099A007 /* WebsiteProjectEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33AED461C08C883EB5CBD52C /* WebsiteProjectEditorView.swift */; };
+		08815D3522F3695F10399C90 /* NoctwebLab.icns in Resources */ = {isa = PBXBuildFile; fileRef = 7D7E3E0BF34B577AB602914D /* NoctwebLab.icns */; };
+		08E980EB2B03E2A79775A1AB /* InspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3387C5079F06723F1FAC8E /* InspectorView.swift */; };
+		0BB96210FD255EB3046E2030 /* TestRunsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8F592D7835BDA39A3D85C5D /* TestRunsView.swift */; };
+		11E0952A8F15120AD2F803A9 /* ProductModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDF6F61F32ACC26A078F3A43 /* ProductModels.swift */; };
+		40C428B05E5682FB4DA9711E /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 32944A811116935BAF3BCDFA /* OverviewView.swift */; };
+		42590258BB701090977D74E7 /* WebsiteProjectBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6BD245EF6498A9542EB5AE /* WebsiteProjectBuilder.swift */; };
+		4654E913C270C267093D69BA /* NetworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D16140B2D79DD728EEF30B74 /* NetworkView.swift */; };
+		689A1640E5787D8A353432D2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = C31DCA36745EC275BB2D6B15 /* PrivacyInfo.xcprivacy */; };
+		78963567A21DEB9056ABA943 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F42C641BB9109A06215AED /* Components.swift */; };
+		79C23DD6BFD8E29812294ACC /* NoctwebUI in Frameworks */ = {isa = PBXBuildFile; productRef = A4BED6928B57EE6FA52A551D /* NoctwebUI */; };
+		AE604A80CC99968BECAECFE8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFF1A147E402EF3C58FB6B48 /* SettingsView.swift */; };
+		B9CC1AF448046660C695EFB5 /* SitesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69E84E18FEBE27295C9C2103 /* SitesView.swift */; };
+		C183D00D747B0871CFCAB0A2 /* RuntimeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 369716F38E5B0FD2B1905A32 /* RuntimeView.swift */; };
+		C2B8E364662A01661B812BB9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A0171806E45E324F62D815 /* ContentView.swift */; };
+		D959FFA2D55D4A0C81CDFD3A /* NoctwebLabApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 945D75FA2961F7F8792ABE80 /* NoctwebLabApp.swift */; };
+		DED852E285725DD94BE124B0 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 722B7842671716033BDD5BE4 /* AppModel.swift */; };
+		F1BE5389870762E9C70EF832 /* VerifiedWebsiteWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D57215DA736221216DC5CB /* VerifiedWebsiteWebView.swift */; };
+		FFBE1902D3E4D289867D0767 /* NoctwebLabCore in Frameworks */ = {isa = PBXBuildFile; productRef = 7A71494A22FC747F01AD8C6C /* NoctwebLabCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		09CD2E0339653AC674089C83 /* NoctwebLabApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NoctwebLabApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		32944A811116935BAF3BCDFA /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		33AED461C08C883EB5CBD52C /* WebsiteProjectEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebsiteProjectEditorView.swift; sourceTree = "<group>"; };
+		369716F38E5B0FD2B1905A32 /* RuntimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeView.swift; sourceTree = "<group>"; };
+		38AB9AA76CEACBFE7B8FC3DC /* noctweb-ui */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "noctweb-ui"; path = "../noctweb-ui"; sourceTree = SOURCE_ROOT; };
+		67F42C641BB9109A06215AED /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		69E84E18FEBE27295C9C2103 /* SitesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SitesView.swift; sourceTree = "<group>"; };
+		722B7842671716033BDD5BE4 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		7D7E3E0BF34B577AB602914D /* NoctwebLab.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = NoctwebLab.icns; sourceTree = "<group>"; };
+		8E6BD245EF6498A9542EB5AE /* WebsiteProjectBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebsiteProjectBuilder.swift; sourceTree = "<group>"; };
+		945D75FA2961F7F8792ABE80 /* NoctwebLabApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoctwebLabApp.swift; sourceTree = "<group>"; };
+		AE3387C5079F06723F1FAC8E /* InspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorView.swift; sourceTree = "<group>"; };
+		C237D89B890600085E16A671 /* noctweb-lab */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "noctweb-lab"; path = .; sourceTree = SOURCE_ROOT; };
+		C31DCA36745EC275BB2D6B15 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		CFF1A147E402EF3C58FB6B48 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D16140B2D79DD728EEF30B74 /* NetworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkView.swift; sourceTree = "<group>"; };
+		D4A0171806E45E324F62D815 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		D8F592D7835BDA39A3D85C5D /* TestRunsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestRunsView.swift; sourceTree = "<group>"; };
+		F0D57215DA736221216DC5CB /* VerifiedWebsiteWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerifiedWebsiteWebView.swift; sourceTree = "<group>"; };
+		FDF6F61F32ACC26A078F3A43 /* ProductModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductModels.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		10E371F6243FAA384496DAEB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FFBE1902D3E4D289867D0767 /* NoctwebLabCore in Frameworks */,
+				79C23DD6BFD8E29812294ACC /* NoctwebUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		07C6A80D13C58B6391229FEA /* Packaging */ = {
+			isa = PBXGroup;
+			children = (
+				7D7E3E0BF34B577AB602914D /* NoctwebLab.icns */,
+				C31DCA36745EC275BB2D6B15 /* PrivacyInfo.xcprivacy */,
+			);
+			path = Packaging;
+			sourceTree = "<group>";
+		};
+		0F07A14BA5BB6962F0B661E9 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				C237D89B890600085E16A671 /* noctweb-lab */,
+				38AB9AA76CEACBFE7B8FC3DC /* noctweb-ui */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		33890AC24D56F4E13542B633 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				67F42C641BB9109A06215AED /* Components.swift */,
+				D4A0171806E45E324F62D815 /* ContentView.swift */,
+				AE3387C5079F06723F1FAC8E /* InspectorView.swift */,
+				D16140B2D79DD728EEF30B74 /* NetworkView.swift */,
+				32944A811116935BAF3BCDFA /* OverviewView.swift */,
+				369716F38E5B0FD2B1905A32 /* RuntimeView.swift */,
+				CFF1A147E402EF3C58FB6B48 /* SettingsView.swift */,
+				69E84E18FEBE27295C9C2103 /* SitesView.swift */,
+				D8F592D7835BDA39A3D85C5D /* TestRunsView.swift */,
+				F0D57215DA736221216DC5CB /* VerifiedWebsiteWebView.swift */,
+				33AED461C08C883EB5CBD52C /* WebsiteProjectEditorView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		3848122718C59B261AA16AD9 = {
+			isa = PBXGroup;
+			children = (
+				86B863794A8147C65042825D /* NoctwebLab */,
+				0F07A14BA5BB6962F0B661E9 /* Packages */,
+				07C6A80D13C58B6391229FEA /* Packaging */,
+				5FB1D0CDC0C361E119D927DC /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		5FB1D0CDC0C361E119D927DC /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				09CD2E0339653AC674089C83 /* NoctwebLabApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		86B863794A8147C65042825D /* NoctwebLab */ = {
+			isa = PBXGroup;
+			children = (
+				945D75FA2961F7F8792ABE80 /* NoctwebLabApp.swift */,
+				955967354DB4DE2C37A63D4F /* Models */,
+				33890AC24D56F4E13542B633 /* Views */,
+			);
+			name = NoctwebLab;
+			path = Sources/NoctwebLab;
+			sourceTree = "<group>";
+		};
+		955967354DB4DE2C37A63D4F /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				722B7842671716033BDD5BE4 /* AppModel.swift */,
+				FDF6F61F32ACC26A078F3A43 /* ProductModels.swift */,
+				8E6BD245EF6498A9542EB5AE /* WebsiteProjectBuilder.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E40292CE859BACEC4C46F12 /* NoctwebLabApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 29374CA68D27D60246356ABD /* Build configuration list for PBXNativeTarget "NoctwebLabApp" */;
+			buildPhases = (
+				A418D9573A59ACAABF333076 /* Sources */,
+				A1E1E40052FEE0B2BC5DAD90 /* Resources */,
+				10E371F6243FAA384496DAEB /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NoctwebLabApp;
+			packageProductDependencies = (
+				7A71494A22FC747F01AD8C6C /* NoctwebLabCore */,
+				A4BED6928B57EE6FA52A551D /* NoctwebUI */,
+			);
+			productName = NoctwebLabApp;
+			productReference = 09CD2E0339653AC674089C83 /* NoctwebLabApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D43586912CA633364A90E650 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					0E40292CE859BACEC4C46F12 = {
+						DevelopmentTeam = 9MY7SXN56X;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 904BD70BD305BE8889957C92 /* Build configuration list for PBXProject "NoctwebLab" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 3848122718C59B261AA16AD9;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8695346AADC3E1EB1732DA69 /* XCLocalSwiftPackageReference "." */,
+				FAB9BD5E9E314729EE03BE7E /* XCLocalSwiftPackageReference "../noctweb-ui" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5FB1D0CDC0C361E119D927DC /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E40292CE859BACEC4C46F12 /* NoctwebLabApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1E1E40052FEE0B2BC5DAD90 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08815D3522F3695F10399C90 /* NoctwebLab.icns in Resources */,
+				689A1640E5787D8A353432D2 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A418D9573A59ACAABF333076 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DED852E285725DD94BE124B0 /* AppModel.swift in Sources */,
+				78963567A21DEB9056ABA943 /* Components.swift in Sources */,
+				C2B8E364662A01661B812BB9 /* ContentView.swift in Sources */,
+				08E980EB2B03E2A79775A1AB /* InspectorView.swift in Sources */,
+				4654E913C270C267093D69BA /* NetworkView.swift in Sources */,
+				D959FFA2D55D4A0C81CDFD3A /* NoctwebLabApp.swift in Sources */,
+				40C428B05E5682FB4DA9711E /* OverviewView.swift in Sources */,
+				11E0952A8F15120AD2F803A9 /* ProductModels.swift in Sources */,
+				C183D00D747B0871CFCAB0A2 /* RuntimeView.swift in Sources */,
+				AE604A80CC99968BECAECFE8 /* SettingsView.swift in Sources */,
+				B9CC1AF448046660C695EFB5 /* SitesView.swift in Sources */,
+				0BB96210FD255EB3046E2030 /* TestRunsView.swift in Sources */,
+				F1BE5389870762E9C70EF832 /* VerifiedWebsiteWebView.swift in Sources */,
+				42590258BB701090977D74E7 /* WebsiteProjectBuilder.swift in Sources */,
+				00C7FBC4E95DA239E099A007 /* WebsiteProjectEditorView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2816D8B3F211945961AB91BE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 7;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 9MY7SXN56X;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		7D1122F7843E08CE12995991 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Packaging/NoctwebLab.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				EXECUTABLE_NAME = NoctwebLab;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "net.noctweave.noctweb-lab";
+				PRODUCT_NAME = "Noctweb Lab";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		D6FA9F469AEDABAFCF1EB71E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Packaging/NoctwebLab.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				EXECUTABLE_NAME = NoctwebLab;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Packaging/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "net.noctweave.noctweb-lab";
+				PRODUCT_NAME = "Noctweb Lab";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		FD5A09BDDCB2792FA831FF7D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = arm64;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 7;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 9MY7SXN56X;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		29374CA68D27D60246356ABD /* Build configuration list for PBXNativeTarget "NoctwebLabApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D6FA9F469AEDABAFCF1EB71E /* Debug */,
+				7D1122F7843E08CE12995991 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		904BD70BD305BE8889957C92 /* Build configuration list for PBXProject "NoctwebLab" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FD5A09BDDCB2792FA831FF7D /* Debug */,
+				2816D8B3F211945961AB91BE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		8695346AADC3E1EB1732DA69 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+		FAB9BD5E9E314729EE03BE7E /* XCLocalSwiftPackageReference "../noctweb-ui" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../noctweb-ui";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7A71494A22FC747F01AD8C6C /* NoctwebLabCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoctwebLabCore;
+		};
+		A4BED6928B57EE6FA52A551D /* NoctwebUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoctwebUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = D43586912CA633364A90E650 /* Project object */;
+}

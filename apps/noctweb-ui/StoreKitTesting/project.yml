@@ -1,0 +1,93 @@
+{
+  "name": "StoreKitTesting",
+  "options": {
+    "deploymentTarget": {
+      "macOS": "14.0"
+    }
+  },
+  "settings": {
+    "base": {
+      "SWIFT_VERSION": "6.0",
+      "DEVELOPMENT_TEAM": "9MY7SXN56X",
+      "CODE_SIGN_STYLE": "Automatic"
+    }
+  },
+  "packages": {
+    "UI": {
+      "path": ".."
+    }
+  },
+  "targets": {
+    "StoreKitHost": {
+      "type": "application",
+      "platform": "macOS",
+      "sources": [
+        "Host/StoreKitHost.swift"
+      ],
+      "settings": {
+        "base": {
+          "PRODUCT_BUNDLE_IDENTIFIER": "org.noctweave.support-test-host",
+          "INFOPLIST_FILE": "Host/Info.plist",
+          "GENERATE_INFOPLIST_FILE": "NO"
+        }
+      },
+      "dependencies": [
+        {
+          "package": "UI",
+          "product": "NoctwebUI"
+        }
+      ]
+    },
+    "StoreKitIntegrationTests": {
+      "type": "bundle.unit-test",
+      "platform": "macOS",
+      "sources": [
+        "Tests",
+        {
+          "path": "SupportTips.storekit",
+          "buildPhase": "resources"
+        }
+      ],
+      "settings": {
+        "base": {
+          "PRODUCT_BUNDLE_IDENTIFIER": "org.noctweave.support-test-host.tests",
+          "GENERATE_INFOPLIST_FILE": "YES",
+          "TEST_HOST": "$(BUILT_PRODUCTS_DIR)/StoreKitHost.app/Contents/MacOS/StoreKitHost",
+          "BUNDLE_LOADER": "$(TEST_HOST)"
+        }
+      },
+      "dependencies": [
+        {
+          "target": "StoreKitHost"
+        },
+        {
+          "package": "UI",
+          "product": "NoctwebUI"
+        }
+      ]
+    }
+  },
+  "schemes": {
+    "StoreKitTesting": {
+      "build": {
+        "targets": {
+          "StoreKitHost": "all",
+          "StoreKitIntegrationTests": [
+            "test"
+          ]
+        }
+      },
+      "run": {
+        "config": "Debug",
+        "storeKitConfiguration": "SupportTips.storekit"
+      },
+      "test": {
+        "config": "Debug",
+        "targets": [
+          "StoreKitIntegrationTests"
+        ],
+        "storeKitConfiguration": "SupportTips.storekit"
+      }
+    }
+  }
+}

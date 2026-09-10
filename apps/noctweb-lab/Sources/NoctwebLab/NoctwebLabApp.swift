@@ -4,6 +4,8 @@ import SwiftUI
 
 @main
 struct NoctwebLabApp: App {
+    @StateObject private var support = AppSupportStore.shared
+
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model: AppModel
     @StateObject private var appearance = NoctwebAppearanceStore()
@@ -31,7 +33,25 @@ struct NoctwebLabApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            Group {
+                if model.resetIsPending {
+                    VStack(spacing: 18) {
+                        Image(systemName: "arrow.counterclockwise").font(.largeTitle)
+                        Text("Finish resetting Noctweb Lab").font(.title2)
+                        if model.isResetting {
+                            ProgressView("Removing local data…")
+                        } else {
+                            Text(model.operationError ?? "Reset needs to finish before you can continue.")
+                                .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                            Button("Retry Reset", role: .destructive) {
+                                Task { await model.purgeAndReset() }
+                            }
+                        }
+                    }.padding(40).frame(maxWidth: 600)
+                } else {
+                    ContentView()
+                }
+            }
                 .environmentObject(model)
                 .environmentObject(appearance)
                 .noctwebAppearance(appearance.selection)
@@ -50,7 +70,7 @@ struct NoctwebLabApp: App {
                     model.selection = .sites
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(model.activeWorkspace == nil)
+                .disabled(model.activeWorkspace == nil || model.resetIsPending)
             }
         }
 

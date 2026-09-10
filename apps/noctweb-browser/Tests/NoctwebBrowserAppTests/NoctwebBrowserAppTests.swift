@@ -6,6 +6,48 @@ import XCTest
 
 final class NoctwebBrowserAppTests: XCTestCase {
     @MainActor
+    func testPurgeClearsBrowsingStateAndStaleResolutions() async throws {
+        let suite = "NoctwebBrowserResetTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let persistence = BrowserPersistenceStore(defaults: defaults)
+        let model = BrowserAppModel(persistenceStore: persistence, useDevelopmentFixtures: true)
+        model.startIfNeeded()
+        for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(model.selectedSite)
+        model.toggleBookmark()
+        XCTAssertFalse(model.session.bookmarks.isEmpty)
+        model.reload()
+        var clearedWebsiteData = false
+        try await model.purgeAndReset {
+            clearedWebsiteData = true
+            XCTAssertNil(defaults.data(forKey: "net.noctweave.noctweb-browser.state.v1"))
+            let resetTabID = model.selectedTab.id
+            model.addTab()
+            model.toggleSidebar()
+            model.toggleTrustInspector()
+            model.reload()
+            XCTAssertEqual(model.selectedTab.id, resetTabID)
+            XCTAssertFalse(model.showsSidebar)
+            XCTAssertFalse(model.showsTrustInspector)
+            await Task.yield()
+        }
+        await Task.yield()
+        XCTAssertTrue(clearedWebsiteData)
+        XCTAssertTrue(model.session.bookmarks.isEmpty)
+        XCTAssertTrue(model.session.history.isEmpty)
+        XCTAssertTrue(model.sitesByTab.isEmpty)
+        XCTAssertEqual(model.addressText, "")
+        XCTAssertNil(defaults.data(forKey: "net.noctweave.noctweb-browser.state.v1"))
+        let reopened = BrowserAppModel(persistenceStore: persistence)
+        XCTAssertFalse(reopened.relayIsConfigured)
+        XCTAssertTrue(reopened.session.bookmarks.isEmpty)
+        XCTAssertTrue(reopened.session.history.isEmpty)
+    }
+
+    @MainActor
     func testProductionAppStartsUnconfiguredWithoutCrashing() throws {
         let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

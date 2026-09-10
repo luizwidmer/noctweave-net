@@ -112,6 +112,7 @@ struct WebsiteProjectEditorView: View {
     @State private var previewRefreshTask: Task<Void, Never>?
     @State private var sourceSaveTask: Task<Void, Never>?
     @State private var sourceDraft = ""
+    @State private var sourceDraftBaseText = ""
     @State private var sourceDraftFileID: UUID?
     @State private var sourceSaveStatus = "Saved locally"
     @State private var showsDesignInspector = false
@@ -149,7 +150,14 @@ struct WebsiteProjectEditorView: View {
             repairFileSelection()
         }
         .onChange(of: selectedFileID) {
+            flushSourceDraft()
             loadSelectedSourceDraft()
+        }
+        .onChange(of: selectedFile?.text) {
+            // Visual edits regenerate files while their IDs stay the same.
+            // Refresh an untouched editor without replacing pending code edits.
+            guard sourceDraft == sourceDraftBaseText else { return }
+            loadSelectedSourceDraft(force: true)
         }
         .onChange(of: focusedSourceFileID) {
             if focusedSourceFileID == nil {
@@ -1169,22 +1177,24 @@ struct WebsiteProjectEditorView: View {
         loadSelectedSourceDraft()
     }
 
-    private func loadSelectedSourceDraft() {
+    private func loadSelectedSourceDraft(force: Bool = false) {
         guard let selectedFile else {
             sourceSaveTask?.cancel()
             sourceDraftFileID = nil
             sourceDraft = ""
+            sourceDraftBaseText = ""
             sourceSaveStatus = "Saved locally"
             return
         }
-        loadSourceDraft(selectedFile)
+        loadSourceDraft(selectedFile, force: force)
     }
 
-    private func loadSourceDraft(_ file: SiteSourceFile) {
-        guard sourceDraftFileID != file.id else { return }
+    private func loadSourceDraft(_ file: SiteSourceFile, force: Bool = false) {
+        guard force || sourceDraftFileID != file.id else { return }
         sourceSaveTask?.cancel()
         sourceDraftFileID = file.id
         sourceDraft = file.text ?? ""
+        sourceDraftBaseText = sourceDraft
         sourceSaveStatus = "Saved locally"
     }
 
@@ -1194,6 +1204,7 @@ struct WebsiteProjectEditorView: View {
             where: { $0.id == fileID }
         )?.text
         guard currentText != sourceDraft else {
+            sourceDraftBaseText = sourceDraft
             sourceSaveStatus = "Saved locally"
             return
         }
@@ -1208,6 +1219,7 @@ struct WebsiteProjectEditorView: View {
             }
             guard sourceDraftFileID == fileID else { return }
             model.updateSourceFile(fileID, text: value)
+            sourceDraftBaseText = value
             sourceSaveStatus = "Saved locally"
             refreshPreview()
         }
@@ -1215,15 +1227,18 @@ struct WebsiteProjectEditorView: View {
 
     private func flushSourceDraft() {
         sourceSaveTask?.cancel()
-        guard let fileID = sourceDraftFileID else { return }
+        guard let fileID = sourceDraftFileID,
+              sourceDraft != sourceDraftBaseText else { return }
         let currentText = model.selectedSite?.resolvedFiles.first(
             where: { $0.id == fileID }
         )?.text
         guard currentText != sourceDraft else {
+            sourceDraftBaseText = sourceDraft
             sourceSaveStatus = "Saved locally"
             return
         }
         model.updateSourceFile(fileID, text: sourceDraft)
+        sourceDraftBaseText = sourceDraft
         sourceSaveStatus = "Saved locally"
         refreshPreview()
     }

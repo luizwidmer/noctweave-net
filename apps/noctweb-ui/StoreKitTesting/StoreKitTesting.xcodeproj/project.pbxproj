@@ -1,0 +1,464 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5F353188DAC2E365565B26A7 /* NoctwebUI in Frameworks */ = {isa = PBXBuildFile; productRef = 57D236EE9F2EA07231AAFF68 /* NoctwebUI */; };
+		6DC85C83AAADEF1C5075A0DF /* SupportTips.storekit in Resources */ = {isa = PBXBuildFile; fileRef = F3977D8DF785C0C57D003325 /* SupportTips.storekit */; };
+		AE07BA7B3DAE9993357AC541 /* StoreKitHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77C61E19068CBCF74D32C16D /* StoreKitHost.swift */; };
+		DC84E309790234901B4EB957 /* AppSupportStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E1B2E700FE995A668F04A38 /* AppSupportStoreTests.swift */; };
+		DCE07EB1B904545EAEB28E45 /* NoctwebUI in Frameworks */ = {isa = PBXBuildFile; productRef = 0A393640408935113BF58592 /* NoctwebUI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		F099FFFFEF3F80378E38718E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EC4E949FEC1E3932C9882392 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5BF2056D661DFF930DD17422;
+			remoteInfo = StoreKitHost;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0B4816B538054D5C986408A1 /* noctweb-ui */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "noctweb-ui"; path = ..; sourceTree = SOURCE_ROOT; };
+		0E1B2E700FE995A668F04A38 /* AppSupportStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSupportStoreTests.swift; sourceTree = "<group>"; };
+		32859F958DC49D7863B0986E /* StoreKitIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = StoreKitIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		77C61E19068CBCF74D32C16D /* StoreKitHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreKitHost.swift; sourceTree = "<group>"; };
+		F3977D8DF785C0C57D003325 /* SupportTips.storekit */ = {isa = PBXFileReference; path = SupportTips.storekit; sourceTree = "<group>"; };
+		F9B2E3203457C4404290DE03 /* StoreKitHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StoreKitHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		15EDDE9101BEB729BAD1548E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5F353188DAC2E365565B26A7 /* NoctwebUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		24F2E5B0E7C1B7CC1DBEDD03 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DCE07EB1B904545EAEB28E45 /* NoctwebUI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0AA0AE7BEDBC1E33442E6E18 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F9B2E3203457C4404290DE03 /* StoreKitHost.app */,
+				32859F958DC49D7863B0986E /* StoreKitIntegrationTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		1E92782F30288E4D5DAB26C8 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				0B4816B538054D5C986408A1 /* noctweb-ui */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		3352C859EBED91413DBF2D27 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				0E1B2E700FE995A668F04A38 /* AppSupportStoreTests.swift */,
+			);
+			path = Tests;
+			sourceTree = "<group>";
+		};
+		4D10A687E6DEBBD09B57171B = {
+			isa = PBXGroup;
+			children = (
+				F3977D8DF785C0C57D003325 /* SupportTips.storekit */,
+				668A20F0DC6EA11775559ED3 /* Host */,
+				1E92782F30288E4D5DAB26C8 /* Packages */,
+				3352C859EBED91413DBF2D27 /* Tests */,
+				0AA0AE7BEDBC1E33442E6E18 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		668A20F0DC6EA11775559ED3 /* Host */ = {
+			isa = PBXGroup;
+			children = (
+				77C61E19068CBCF74D32C16D /* StoreKitHost.swift */,
+			);
+			path = Host;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2144B0FF76206624519D7A23 /* StoreKitIntegrationTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D86B49D934363F6E5BAE4915 /* Build configuration list for PBXNativeTarget "StoreKitIntegrationTests" */;
+			buildPhases = (
+				8FF018A653BC2CA145C3EE57 /* Sources */,
+				B3DF5CE6B3CCF70287713EA8 /* Resources */,
+				15EDDE9101BEB729BAD1548E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				430EA2A77990BDB3048BBB5F /* PBXTargetDependency */,
+			);
+			name = StoreKitIntegrationTests;
+			packageProductDependencies = (
+				57D236EE9F2EA07231AAFF68 /* NoctwebUI */,
+			);
+			productName = StoreKitIntegrationTests;
+			productReference = 32859F958DC49D7863B0986E /* StoreKitIntegrationTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		5BF2056D661DFF930DD17422 /* StoreKitHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 70172983922CCFFAE8F5B5DD /* Build configuration list for PBXNativeTarget "StoreKitHost" */;
+			buildPhases = (
+				96F012B5307A0E0C92E9C253 /* Sources */,
+				24F2E5B0E7C1B7CC1DBEDD03 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StoreKitHost;
+			packageProductDependencies = (
+				0A393640408935113BF58592 /* NoctwebUI */,
+			);
+			productName = StoreKitHost;
+			productReference = F9B2E3203457C4404290DE03 /* StoreKitHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		EC4E949FEC1E3932C9882392 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2144B0FF76206624519D7A23 = {
+						DevelopmentTeam = 9MY7SXN56X;
+						ProvisioningStyle = Automatic;
+					};
+					5BF2056D661DFF930DD17422 = {
+						DevelopmentTeam = 9MY7SXN56X;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 07FF685D1DFB56D41EC2A90F /* Build configuration list for PBXProject "StoreKitTesting" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 4D10A687E6DEBBD09B57171B;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				768B9C742BD11EA1D276CE01 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0AA0AE7BEDBC1E33442E6E18 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				5BF2056D661DFF930DD17422 /* StoreKitHost */,
+				2144B0FF76206624519D7A23 /* StoreKitIntegrationTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B3DF5CE6B3CCF70287713EA8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6DC85C83AAADEF1C5075A0DF /* SupportTips.storekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8FF018A653BC2CA145C3EE57 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DC84E309790234901B4EB957 /* AppSupportStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		96F012B5307A0E0C92E9C253 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AE07BA7B3DAE9993357AC541 /* StoreKitHost.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		430EA2A77990BDB3048BBB5F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5BF2056D661DFF930DD17422 /* StoreKitHost */;
+			targetProxy = F099FFFFEF3F80378E38718E /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		01CA8C71AE78D79148F0ABD8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 9MY7SXN56X;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		2985C5514A16A23F2865E138 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "org.noctweave.support-test-host";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		2D8198141228E7FF509A2478 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "org.noctweave.support-test-host.tests";
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StoreKitHost.app/Contents/MacOS/StoreKitHost";
+			};
+			name = Debug;
+		};
+		31AA21CC3494928F54F3ED53 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "org.noctweave.support-test-host";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		A2FDA7F114C10E870C6B914E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "org.noctweave.support-test-host.tests";
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/StoreKitHost.app/Contents/MacOS/StoreKitHost";
+			};
+			name = Release;
+		};
+		D1C28BF3EA99AFA40D055F39 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 9MY7SXN56X;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		07FF685D1DFB56D41EC2A90F /* Build configuration list for PBXProject "StoreKitTesting" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01CA8C71AE78D79148F0ABD8 /* Debug */,
+				D1C28BF3EA99AFA40D055F39 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		70172983922CCFFAE8F5B5DD /* Build configuration list for PBXNativeTarget "StoreKitHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2985C5514A16A23F2865E138 /* Debug */,
+				31AA21CC3494928F54F3ED53 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D86B49D934363F6E5BAE4915 /* Build configuration list for PBXNativeTarget "StoreKitIntegrationTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2D8198141228E7FF509A2478 /* Debug */,
+				A2FDA7F114C10E870C6B914E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		768B9C742BD11EA1D276CE01 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0A393640408935113BF58592 /* NoctwebUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoctwebUI;
+		};
+		57D236EE9F2EA07231AAFF68 /* NoctwebUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NoctwebUI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = EC4E949FEC1E3932C9882392 /* Project object */;
+}

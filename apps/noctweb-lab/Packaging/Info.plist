@@ -21,7 +21,9 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>7</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
@@ -34,5 +36,15 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>AppSupportTipProductIDs</key>
+	<array>
+		<string>net.noctweave.noctweblab.tip.small</string>
+		<string>net.noctweave.noctweblab.tip.medium</string>
+		<string>net.noctweave.noctweblab.tip.large</string>
+	</array>
+	<key>AppSupportURL</key>
+	<string>https://luizwidmer.com/</string>
+	<key>AppSupportPrivacyPolicyURL</key>
+	<string>https://luizwidmer.com/noctweb-lab-privacy-policy/</string>
 </dict>
 </plist>

@@ -1,0 +1,87 @@
+{
+  "name": "NoctwebLab",
+  "options": {
+    "minimumXcodeGenVersion": "2.46.0",
+    "deploymentTarget": {
+      "macOS": "14.0"
+    }
+  },
+  "settings": {
+    "base": {
+      "DEVELOPMENT_TEAM": "9MY7SXN56X",
+      "CODE_SIGN_STYLE": "Automatic",
+      "SWIFT_VERSION": "6.0",
+      "MACOSX_DEPLOYMENT_TARGET": "14.0",
+      "CURRENT_PROJECT_VERSION": "7",
+      "MARKETING_VERSION": "0.1.0",
+      "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
+      "ENABLE_HARDENED_RUNTIME": "YES",
+      "ENABLE_APP_SANDBOX": "YES",
+      "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
+      "ARCHS": "arm64"
+    }
+  },
+  "packages": {
+    "LabLocal": {
+      "path": "."
+    },
+    "UILocal": {
+      "path": "../noctweb-ui"
+    }
+  },
+  "targets": {
+    "NoctwebLabApp": {
+      "type": "application",
+      "platform": "macOS",
+      "sources": [
+        {
+          "path": "Sources/NoctwebLab"
+        },
+        {
+          "path": "Packaging/NoctwebLab.icns",
+          "buildPhase": "resources"
+        },
+        {
+          "path": "Packaging/PrivacyInfo.xcprivacy",
+          "buildPhase": "resources"
+        }
+      ],
+      "settings": {
+        "base": {
+          "PRODUCT_NAME": "Noctweb Lab",
+          "EXECUTABLE_NAME": "NoctwebLab",
+          "PRODUCT_BUNDLE_IDENTIFIER": "net.noctweave.noctweb-lab",
+          "INFOPLIST_FILE": "Packaging/Info.plist",
+          "GENERATE_INFOPLIST_FILE": "NO",
+          "CODE_SIGN_ENTITLEMENTS": "Packaging/NoctwebLab.entitlements"
+        }
+      },
+      "dependencies": [
+        {
+          "package": "LabLocal",
+          "product": "NoctwebLabCore"
+        },
+        {
+          "package": "UILocal",
+          "product": "NoctwebUI"
+        }
+      ]
+    }
+  },
+  "schemes": {
+    "NoctwebLab": {
+      "build": {
+        "targets": {
+          "NoctwebLabApp": "all"
+        }
+      },
+      "run": {
+        "config": "Debug",
+        "storeKitConfiguration": "SupportTips.storekit"
+      },
+      "archive": {
+        "config": "Release"
+      }
+    }
+  }
+}

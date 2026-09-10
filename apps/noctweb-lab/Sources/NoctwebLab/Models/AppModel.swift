@@ -2,6 +2,7 @@ import Dispatch
 import Foundation
 import NoctwebLabCore
 import SwiftUI
+import WebKit
 
 private let maximumPersistedWorkspaceBytes = 32 * 1_024 * 1_024
 private let maximumPersistedWorkspaceCount = 32
@@ -73,6 +74,13 @@ final class AppModel: ObservableObject {
         label: "org.noctweave.noctweb-lab.workspace-persistence",
         qos: .utility
     )
+    @Published private(set) var isResetting = false
+    @Published private(set) var resetIsPending = false
+    private var backgroundOperations: [UUID: Task<Void, Never>] = [:]
+    private var directOperationCount = 0
+    private var directOperationWaiters: [CheckedContinuation<Void, Never>] = []
+    private let usesDefaultStorage: Bool
+    private var resetMarkerURL: URL { workspaceFileURL.appendingPathExtension("purge-pending-v1") }
     private var scheduledPersistence: Task<Void, Never>?
     private var draftChangedDuringPublication = false
     private var pendingPublisherIdentityDeletions:
@@ -83,6 +91,7 @@ final class AppModel: ObservableObject {
         workspaceFileURL: URL? = nil,
         useLiveRelay: Bool? = nil
     ) {
+        usesDefaultStorage = workspaceFileURL == nil
         self.usesLiveRelay =
             useLiveRelay ?? (engine == nil && workspaceFileURL == nil)
         self.engine = engine ?? (try! NoctwebLabEngine(
@@ -114,8 +123,13 @@ final class AppModel: ObservableObject {
             }
         }
 
+        let pendingReset = FileManager.default.fileExists(atPath:
+            resolvedWorkspaceFileURL.appendingPathExtension("purge-pending-v1").path)
+        resetIsPending = pendingReset
         let initialWorkspaces: [Workspace]
-        if
+        if pendingReset {
+            initialWorkspaces = []
+        } else if
             let data = try? NoctwebSecureFileIO.read(
                 from: self.workspaceFileURL,
                 maximumBytes: maximumPersistedWorkspaceBytes,
@@ -154,11 +168,15 @@ final class AppModel: ObservableObject {
             includeConsensus: !self.usesLiveRelay
         )
         inspectorEvidenceID = trustEvidence.first?.id
+        if pendingReset {
+            Task { [weak self] in await self?.purgeAndReset() }
+            return
+        }
         if self.usesLiveRelay {
             persist()
         }
 
-        Task { [weak self] in
+        trackOperation { [weak self] in
             if self?.usesLiveRelay == true {
                 await self?.refreshHostRelays()
             } else {
@@ -166,6 +184,86 @@ final class AppModel: ObservableObject {
             }
             await self?.reconcilePendingPublisherIdentityDeletions()
             await self?.prepareMissingPublisherIdentities()
+        }
+    }
+
+    private func trackOperation(_ operation: @escaping @MainActor () async -> Void) {
+        guard !resetIsPending else { return }
+        let id = UUID()
+        backgroundOperations[id] = Task { [weak self] in
+            defer { self?.backgroundOperations[id] = nil }
+            guard !Task.isCancelled, self?.resetIsPending == false else { return }
+            await operation()
+        }
+    }
+
+    private func endDirectOperation() {
+        directOperationCount -= 1
+        if directOperationCount == 0 {
+            let waiters = directOperationWaiters
+            directOperationWaiters = []
+            waiters.forEach { $0.resume() }
+        }
+    }
+
+    func purgeAndReset(clearWebData: @MainActor () async -> Void = {
+        await WKWebsiteDataStore.default().removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        URLCache.shared.removeAllCachedResponses()
+    }) async {
+        guard !isResetting else { return }
+        isResetting = true
+        defer { isResetting = false }
+        do {
+            // Keep the intent until keys, files, and preferences are all removed.
+            // Startup repeats it before loading any old workspace.
+            try NoctwebSecureFileIO.writePrivate(Data("purge-v1".utf8), to: resetMarkerURL, maximumBytes: 64)
+            resetIsPending = true
+            let operations = Array(backgroundOperations.values)
+            operations.forEach { $0.cancel() }
+            scheduledPersistence?.cancel()
+            for operation in operations { await operation.value }
+            if directOperationCount > 0 {
+                await withCheckedContinuation { directOperationWaiters.append($0) }
+            }
+            if let scheduledPersistence { await scheduledPersistence.value }
+            self.scheduledPersistence = nil
+            persistenceQueue.sync {}
+            try await engine.purgeLocalState()
+            workspaces = []
+            activeWorkspaceID = nil; selectedSiteID = nil
+            runtimeResult = .idle; runtimeHistory = []; runtimeHistoryIndex = -1
+            runtimeAddress = ""; relayPublisherAuthorization = ""
+            pendingPublisherIdentityDeletions = []
+            identityPreparationSiteIDs = []; identityOperationSiteID = nil
+            publicationInFlight = false; relayRefreshInFlight = false
+            await clearWebData()
+            let files: [URL]
+            if usesDefaultStorage {
+                files = try FileManager.default.contentsOfDirectory(
+                    at: workspaceFileURL.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+                    .filter { $0.standardizedFileURL != resetMarkerURL.standardizedFileURL }
+            } else {
+                files = [workspaceFileURL, identityDeletionJournalFileURL]
+            }
+            for file in files where FileManager.default.fileExists(atPath: file.path) {
+                try FileManager.default.removeItem(at: file)
+            }
+            if usesDefaultStorage, let domain = Bundle.main.bundleIdentifier {
+                UserDefaults.standard.removePersistentDomain(forName: domain)
+            }
+            try FileManager.default.removeItem(at: resetMarkerURL)
+            resetIsPending = false
+            workspaces = [usesLiveRelay ? .liveStarter() : .starter()]
+            activeWorkspaceID = workspaces.first?.id
+            selectedSiteID = workspaces.first?.sites.first?.id
+            selection = .sites
+            preserveRunHistory = true
+            routeMode = .direct
+            resetPublication()
+            operationError = nil
+        } catch {
+            operationError = "Reset could not finish. Retry to complete removal: \(error.localizedDescription)"
         }
     }
 
@@ -237,6 +335,7 @@ final class AppModel: ObservableObject {
     }
 
     func createWorkspace() {
+        guard !resetIsPending else { return }
         var workspace = usesLiveRelay
             ? Workspace.liveStarter()
             : Workspace.starter()
@@ -250,6 +349,7 @@ final class AppModel: ObservableObject {
     }
 
     func createSite() {
+        guard !resetIsPending else { return }
         guard let workspaceIndex = activeWorkspaceIndex else {
             operationError = "Create or select a workspace before adding a site."
             return
@@ -295,7 +395,7 @@ final class AppModel: ObservableObject {
         selectedSiteID = site.id
         resetPublication()
         persist()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.preparePublisherIdentity(for: site.id)
         }
     }
@@ -306,7 +406,7 @@ final class AppModel: ObservableObject {
         selectedSiteID = activeWorkspace?.sites.first?.id
         runtimeAddress = selectedSite?.address ?? ""
         resetPublication()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.applyActiveRelayState()
         }
     }
@@ -318,6 +418,7 @@ final class AppModel: ObservableObject {
     }
 
     func updateSelectedSite(_ update: (inout SiteProject) -> Void) {
+        guard !resetIsPending else { return }
         guard
             let workspaceIndex = activeWorkspaceIndex,
             let selectedSiteID,
@@ -374,7 +475,7 @@ final class AppModel: ObservableObject {
             workspaces[workspaceIndex].federationRouteDirective = .open
         }
         persist()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.applyActiveRelayState()
         }
     }
@@ -386,7 +487,7 @@ final class AppModel: ObservableObject {
         else { return }
         workspaces[workspaceIndex].federationRouteDirective = directive
         persist()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.applyActiveRelayState()
         }
     }
@@ -404,7 +505,7 @@ final class AppModel: ObservableObject {
         workspaces[workspaceIndex].relays[relayIndex]
             .operatorRouteDirective = directive
         persist()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.applyActiveRelayState()
         }
     }
@@ -566,6 +667,7 @@ final class AppModel: ObservableObject {
     }
 
     func flushPersistence() {
+        guard !resetIsPending else { return }
         do {
             try saveWorkspaces()
         } catch {
@@ -575,6 +677,7 @@ final class AppModel: ObservableObject {
     }
 
     private func markDraftChanged() {
+        guard !resetIsPending else { return }
         if publicationInFlight {
             draftChangedDuringPublication = true
             publicationMessage =
@@ -602,7 +705,7 @@ final class AppModel: ObservableObject {
         publicationInFlight = true
         draftChangedDuringPublication = false
         publicationOutcome = .running
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.executePublication(site, workspaceID: workspaceID)
         }
     }
@@ -684,7 +787,7 @@ final class AppModel: ObservableObject {
 
     func setRelayOnline(_ relayID: String, isOnline: Bool) {
         guard !usesLiveRelay else {
-            Task { [weak self] in
+            trackOperation { [weak self] in
                 await self?.refreshHostRelay(relayID, reportError: true)
             }
             return
@@ -699,7 +802,7 @@ final class AppModel: ObservableObject {
         workspaces[workspaceIndex].relays[relayIndex].isOnline = isOnline
         persist()
 
-        Task { [weak self] in
+        trackOperation { [weak self] in
             guard let self else { return }
             do {
                 try await engine.setRelayOnline(
@@ -738,7 +841,7 @@ final class AppModel: ObservableObject {
             )
         )
         persist()
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.refreshHostRelay(id, reportError: true)
         }
     }
@@ -752,6 +855,9 @@ final class AppModel: ObservableObject {
     }
 
     func refreshHostRelays() async {
+        guard !resetIsPending else { return }
+        directOperationCount += 1
+        defer { endDirectOperation() }
         guard usesLiveRelay, let workspace = activeWorkspace else { return }
         relayRefreshInFlight = true
         defer { relayRefreshInFlight = false }
@@ -761,6 +867,9 @@ final class AppModel: ObservableObject {
     }
 
     func refreshHostRelay(_ relayID: String) async {
+        guard !resetIsPending else { return }
+        directOperationCount += 1
+        defer { endDirectOperation() }
         relayRefreshInFlight = true
         defer { relayRefreshInFlight = false }
         await refreshHostRelay(relayID, reportError: true)
@@ -830,7 +939,7 @@ final class AppModel: ObservableObject {
 
     func runSelectedScenario() {
         guard let scenario = selectedScenario else { return }
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.executeScenario(scenario)
         }
     }
@@ -987,7 +1096,7 @@ final class AppModel: ObservableObject {
         do {
             try saveWorkspaces()
             resetPublication()
-            Task { [weak self] in
+            trackOperation { [weak self] in
                 await self?.applyActiveRelayState()
             }
             return true
@@ -1005,6 +1114,9 @@ final class AppModel: ObservableObject {
     }
 
     func destroyPublisherIdentity(for siteID: UUID) async -> Bool {
+        guard !resetIsPending else { return false }
+        directOperationCount += 1
+        defer { endDirectOperation() }
         operationError = nil
         guard !publicationInFlight else {
             operationError = "Wait for publishing to finish before destroying a publisher identity."
@@ -1579,7 +1691,7 @@ final class AppModel: ObservableObject {
     }
 
     private func resolveRuntime(_ address: String) {
-        Task { [weak self] in
+        trackOperation { [weak self] in
             await self?.performResolution(address)
         }
     }
@@ -2425,6 +2537,7 @@ final class AppModel: ObservableObject {
     }
 
     private func saveWorkspaces() throws {
+        guard !resetIsPending else { throw CancellationError() }
         scheduledPersistence?.cancel()
         scheduledPersistence = nil
         let snapshot = workspaces
@@ -2466,6 +2579,7 @@ final class AppModel: ObservableObject {
     }
 
     private func savePublisherIdentityDeletionJournal() throws {
+        guard !resetIsPending else { throw CancellationError() }
         let snapshot = PublisherIdentityDeletionJournal(
             pending: pendingPublisherIdentityDeletions.sorted {
                 $0.siteID.uuidString < $1.siteID.uuidString
@@ -2481,6 +2595,7 @@ final class AppModel: ObservableObject {
     }
 
     private func scheduleWorkspaceSave() {
+        guard !resetIsPending else { return }
         scheduledPersistence?.cancel()
 
         let encoded: Data
@@ -2513,6 +2628,7 @@ final class AppModel: ObservableObject {
     }
 
     private func persist() {
+        guard !resetIsPending else { return }
         do {
             try saveWorkspaces()
         } catch {

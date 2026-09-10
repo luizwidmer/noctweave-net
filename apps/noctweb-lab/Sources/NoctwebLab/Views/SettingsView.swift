@@ -6,6 +6,9 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var appearance: NoctwebAppearanceStore
 
+    @State private var showResetConfirmation = false
+    @State private var resetConfirmation = ""
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -28,6 +31,23 @@ struct SettingsView: View {
                     Text("System follows macOS. Light and Dark are remembered independently by Noctweb Lab.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                AppSupportCard()
+
+                SectionCard("Reset app", systemImage: "trash") {
+                    Text("Remove all local workspaces, site drafts, publisher signing keys, history, and settings. Published copies on relays and exported files remain. Losing a publisher key prevents further updates signed with that key.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Purge and Reset App…", role: .destructive) {
+                        resetConfirmation = ""
+                        showResetConfirmation = true
+                    }
+                    .accessibilityIdentifier("app.purgeAndReset")
+                    .disabled(model.isResetting)
+                    if model.isResetting { ProgressView("Resetting…") }
+                    if model.resetIsPending, let error = model.operationError {
+                        Text(error).font(.callout).foregroundStyle(.red)
+                    }
                 }
 
                 SectionCard("Technical details", systemImage: "info.circle") {
@@ -61,6 +81,18 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(NoctwebTheme.canvas)
+        .alert("Purge and reset Noctweb Lab?", isPresented: $showResetConfirmation) {
+            TextField("Type RESET to confirm", text: $resetConfirmation)
+            Button("Cancel", role: .cancel) {}
+            Button("Purge and Reset", role: .destructive) {
+                Task {
+                    await model.purgeAndReset()
+                    if !model.resetIsPending { appearance.reset() }
+                }
+            }.disabled(resetConfirmation != "RESET")
+        } message: {
+            Text("This permanently removes this app’s local data and publisher keys. It cannot be undone. Type RESET to continue.")
+        }
     }
 
     private func settingsRows(_ rows: [(String, String)]) -> some View {

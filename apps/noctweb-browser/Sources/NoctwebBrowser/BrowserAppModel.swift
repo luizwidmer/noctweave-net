@@ -4,6 +4,7 @@ import Foundation
 import NoctwebBrowserCore
 import enum NoctwebLabCore.NoctwebSecureFileIO
 import SwiftUI
+import WebKit
 
 enum BrowserSidebarSection: String, CaseIterable, Identifiable {
     case bookmarks
@@ -68,6 +69,14 @@ final class BrowserPersistenceStore {
         guard let data = try? JSONEncoder().encode(state) else { return }
         defaults.set(data, forKey: key)
     }
+
+    func purge() {
+        if defaults === UserDefaults.standard, let domain = Bundle.main.bundleIdentifier {
+            defaults.removePersistentDomain(forName: domain)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
 }
 
 @MainActor
@@ -96,6 +105,8 @@ final class BrowserAppModel: ObservableObject {
     private var backStackByTab: [UUID: [String]] = [:]
     private var forwardStackByTab: [UUID: [String]] = [:]
     private var hasStarted = false
+    private var sessionGeneration = UUID()
+    @Published private(set) var isResetting = false
 
     init(
         persistenceStore: BrowserPersistenceStore = .standard,
@@ -265,6 +276,7 @@ final class BrowserAppModel: ObservableObject {
         pushCurrentAddress: Bool = true,
         normalizeUserInput: Bool = false
     ) {
+        guard !isResetting else { return }
         guard relayIsConfigured else {
             failSelectedTab(
                 NoctwebBrowserError.blocked(
@@ -308,11 +320,13 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func reload() {
+        guard !isResetting else { return }
         guard selectedTab.verificationState != .resolving else { return }
         navigate(to: selectedTab.address, pushCurrentAddress: false)
     }
 
     func stop() {
+        guard !isResetting else { return }
         let tabID = session.selectedTabID
         guard session.selectedTab.verificationState == .resolving else { return }
         resolutionTasksByTab[tabID]?.cancel()
@@ -328,6 +342,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func goBack() {
+        guard !isResetting else { return }
         let tabID = session.selectedTabID
         guard var stack = backStackByTab[tabID], let target = stack.popLast() else {
             return
@@ -338,6 +353,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func goForward() {
+        guard !isResetting else { return }
         let tabID = session.selectedTabID
         guard var stack = forwardStackByTab[tabID], let target = stack.popLast() else {
             return
@@ -348,6 +364,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func addTab() {
+        guard !isResetting else { return }
         do {
             let address = Self.blankAddress
             let tabID = try session.addTab(address: address)
@@ -372,7 +389,8 @@ final class BrowserAppModel: ObservableObject {
     func connectRelay(
         navigateAfterConnection: Bool = false
     ) async {
-        guard !usesDevelopmentFixtures else { return }
+        guard !usesDevelopmentFixtures, !isResetting else { return }
+        let generation = sessionGeneration
         let requested = relayEndpointText
             .trimmingCharacters(in: .whitespacesAndNewlines)
         relayConnectionState = .checking
@@ -381,6 +399,7 @@ final class BrowserAppModel: ObservableObject {
             let canonicalEndpoint = try Self.canonicalEndpointString(endpoint)
             let response = try await RelayClient(endpoint: endpoint)
                 .send(.info(), timeout: 8)
+            guard generation == sessionGeneration, !isResetting else { return }
             guard response.status == .success,
                   case .relayInfo(let info)? = response.successBody,
                   try info.isStructurallyValidThrowing,
@@ -446,6 +465,7 @@ final class BrowserAppModel: ObservableObject {
                 )
             }
         } catch {
+            guard generation == sessionGeneration, !isResetting else { return }
             let message = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
             relayConnectionState = .failed(message)
@@ -479,6 +499,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func selectTab(_ id: UUID) {
+        guard !isResetting else { return }
         session.selectTab(id: id)
         addressText = session.selectedTab.address == Self.blankAddress
             ? ""
@@ -495,6 +516,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func closeTab(_ id: UUID) {
+        guard !isResetting else { return }
         let wasSelected = session.selectedTabID == id
         session.closeTab(id: id)
         sitesByTab[id] = nil
@@ -516,6 +538,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func selectProfile(_ id: String) {
+        guard !isResetting else { return }
         do {
             try session.selectProfile(id: id)
             visitorDirectiveByTab[session.selectedTabID] =
@@ -561,7 +584,35 @@ final class BrowserAppModel: ObservableObject {
         persist()
     }
 
+    func purgeAndReset(clearWebData: @MainActor () async -> Void = {
+        await WKWebsiteDataStore.default().removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast)
+        URLCache.shared.removeAllCachedResponses()
+    }) async throws {
+        guard !isResetting else { return }
+        isResetting = true
+        defer { isResetting = false }
+        sessionGeneration = UUID()
+        resolutionTasksByTab.values.forEach { $0.cancel() }
+        resolutionTasksByTab.removeAll()
+        resolutionGenerationByTab.removeAll()
+        let profile = Self.unconfiguredProfile()
+        session = try NoctwebBrowserSession(profiles: [profile], selectedProfileID: profile.id,
+                                           initialAddress: Self.blankAddress)
+        sitesByTab = [:]; errorsByTab = [:]; blockedNoticesByTab = [:]
+        reloadTokensByTab = [:]; visitorDirectiveByTab = [:]
+        backStackByTab = [:]; forwardStackByTab = [:]
+        activeRelayEndpoint = nil; relayEndpointText = ""; addressText = ""
+        relayConnectionState = .notConfigured
+        showsSidebar = false; showsTrustInspector = false
+        sidebarSection = .bookmarks
+        hasStarted = true
+        persistenceStore.purge()
+        await clearWebData()
+    }
+
     func setVisitorDirective(_ directive: RouteDirective) {
+        guard !isResetting else { return }
         visitorDirectiveByTab[session.selectedTabID] = directive
         if relayIsConfigured {
             reload()
@@ -569,6 +620,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func toggleSidebar() {
+        guard !isResetting else { return }
         showsSidebar.toggle()
         if showsSidebar {
             showsTrustInspector = false
@@ -576,6 +628,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func toggleTrustInspector() {
+        guard !isResetting else { return }
         showsTrustInspector.toggle()
         if showsTrustInspector {
             showsSidebar = false
@@ -583,6 +636,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func handleOpenURL(_ url: URL) {
+        guard !isResetting else { return }
         hasStarted = true
         if url.scheme?.lowercased() == "noct" {
             navigate(to: url.absoluteString)
@@ -853,6 +907,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     private func persist() {
+        guard !isResetting else { return }
         persistenceStore.save(
             BrowserPersistentState(
                 bookmarks: session.bookmarks,

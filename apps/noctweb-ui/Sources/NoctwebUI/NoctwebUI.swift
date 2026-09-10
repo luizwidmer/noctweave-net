@@ -45,6 +45,11 @@ public final class NoctwebAppearanceStore: ObservableObject {
     private let defaults: UserDefaults
     private let key: String
 
+    public func reset() {
+        selection = .system
+        defaults.removeObject(forKey: key)
+    }
+
     public init(
         defaults: UserDefaults = .standard,
         key: String = "net.noctweave.noctweb.appearance"

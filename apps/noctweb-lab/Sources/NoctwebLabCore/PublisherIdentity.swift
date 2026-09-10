@@ -9,6 +9,10 @@ public protocol PublicationPrivateKeyStore: Sendable {
     func deletePrivateKey(for publicationID: String) throws
 }
 
+public protocol PurgeablePublicationPrivateKeyStore: PublicationPrivateKeyStore {
+    func deleteAllPrivateKeys() throws
+}
+
 public struct PublicationSigningIdentity: Sendable {
     public let publicationID: String
     private let privateKey: Curve25519.Signing.PrivateKey
@@ -138,10 +142,17 @@ public actor PublicationIdentityManager {
         try PublicationValidation.validateID(publicationID)
         try store.deletePrivateKey(for: publicationID)
     }
+
+    public func purgeAll() throws {
+        guard let purgeable = store as? any PurgeablePublicationPrivateKeyStore else {
+            throw NoctwebLabError.workspaceIO("This identity store does not support a full reset.")
+        }
+        try purgeable.deleteAllPrivateKeys()
+    }
 }
 
 public final class InMemoryPublicationPrivateKeyStore:
-    PublicationPrivateKeyStore,
+    PurgeablePublicationPrivateKeyStore,
     @unchecked Sendable
 {
     private var keys: [String: Data]
@@ -174,9 +185,15 @@ public final class InMemoryPublicationPrivateKeyStore:
         defer { lock.unlock() }
         keys.removeValue(forKey: publicationID)
     }
+
+    public func deleteAllPrivateKeys() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        keys.removeAll()
+    }
 }
 
-public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
+public struct KeychainPublicationIdentityStore: PurgeablePublicationPrivateKeyStore {
     public static let defaultService =
         "org.noctweave.noctweb.publisher-key.v1"
 
@@ -184,6 +201,24 @@ public struct KeychainPublicationIdentityStore: PublicationPrivateKeyStore {
 
     public init(service: String = KeychainPublicationIdentityStore.defaultService) {
         self.service = service
+    }
+
+    public func deleteAllPrivateKeys() throws {
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        // Exact service and key format: never issue an unscoped Keychain delete.
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrGeneric as String: Data("ed25519-v1".utf8),
+            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
+            kSecUseAuthenticationContext as String: context,
+            kSecUseAuthenticationUI as String: kSecUseAuthenticationUISkip,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw NoctwebLabError.keychainFailure(status)
+        }
     }
 
     public func loadPrivateKey(for publicationID: String) throws -> Data? {

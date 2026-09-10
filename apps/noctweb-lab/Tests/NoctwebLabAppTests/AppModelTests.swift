@@ -6,6 +6,22 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testPurgeRemovesWorkspaceAndOrphanPublisherKeys() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL, useLiveRelay: true)
+        let oldKey = try await fixture.engine.preparePublisherIdentity(for: "56950b27-cdbb-4a68-87df-4c805f01c7be")
+        model.createSite()
+        await model.purgeAndReset(clearWebData: {})
+        XCTAssertFalse(model.resetIsPending)
+        XCTAssertNil(model.operationError)
+        XCTAssertTrue(model.activeWorkspace?.sites.isEmpty == true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.workspaceURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.workspaceURL.appendingPathExtension("purge-pending-v1").path))
+        let newKey = try await fixture.engine.preparePublisherIdentity(for: "56950b27-cdbb-4a68-87df-4c805f01c7be")
+        XCTAssertNotEqual(oldKey, newKey)
+    }
+
     func testWorkspaceRevisionRoundTripsAtUnsignedLimit() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
