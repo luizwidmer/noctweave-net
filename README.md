@@ -1,28 +1,58 @@
 <p align="center">
-  <img src="apps/noctweb-browser/Packaging/NoctwebBrowserIcon.svg" width="112" alt="Noctweb Browser icon">
+  <img src="apps/noctweb-browser/Packaging/NoctwebBrowserIcon.svg" alt="Noctweb Browser icon" width="112">
   &nbsp;&nbsp;&nbsp;
-  <img src="apps/noctweb-lab/Packaging/NoctwebLabIcon.svg" width="112" alt="Noctweb Lab icon">
+  <img src="apps/noctweb-lab/Packaging/NoctwebLabIcon.svg" alt="Noctweb Lab icon" width="112">
 </p>
 
 <h1 align="center">Noctweave Net</h1>
 
-<p align="center"><strong>A cryptographically addressed web behind Noctweave.</strong></p>
+<p align="center"><strong>Publish signed websites. Verify them locally before they render.</strong></p>
 
 <p align="center">
-  Publish signed websites with native tools. Resolve them through independent
-  relays. Verify identity, content, and routing locally before anything renders.
+  <a href="#overview">Overview</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#security-and-privacy">Security</a> ·
+  <a href="#documentation">Documentation</a>
 </p>
 
-Noctweave Net treats network infrastructure as replaceable delivery and
-storage. Publishers retain authority over identity and revisions; visitors
-retain authority over verification, permissions, decryption, and rendering.
+## Overview
 
-This repository is a pre-1.0 implementation, not a production-compatible
-protocol release. The native Browser and Lab now exercise authenticated
-Noctweave federation, while publication-wide consensus and production auditing
-remain explicit release gates.
+Noctweave Net pairs native publishing and browsing tools with replaceable
+relay infrastructure. Publishers control identity and revisions; visitors
+verify content, routing, and permissions locally.
 
-## Native tools
+| Detail | At a glance |
+| --- | --- |
+| Platform | macOS 14+ native tools |
+| Built with | Swift 6 · SwiftUI · WebKit · Noctweave |
+| License | [AGPL-3.0-or-later](LICENSE) |
+
+> **Status:** Pre-1.0. Authenticated federation is implemented; stable publication consensus, interoperability, and independent production auditing remain release gates.
+
+<a id="run-from-source"></a>
+
+## Quick start
+
+Clone the repository, then run either native app with Swift 6 on macOS 14
+or later. Commands start from the repository root.
+
+```sh
+git clone https://github.com/luizwidmer/noctweave-net.git
+cd noctweave-net
+```
+
+```sh
+swift run --package-path apps/noctweb-lab NoctwebLab
+swift run --package-path apps/noctweb-browser NoctwebBrowser
+```
+
+The packages use the public Noctweave repository by default. During protocol
+development, set `NOCTWEAVE_PACKAGE_PATH` to a local `NoctweaveCore` checkout.
+
+<a id="native-tools"></a>
+
+## Features
 
 ### Noctweb Browser
 
@@ -42,16 +72,6 @@ publication locally; publish through a host-capable Noctweave relay.
 
 Both apps are native macOS executables. They do not embed Electron, Chromium,
 or a remote application shell.
-
-### Run from source
-
-```sh
-swift run --package-path apps/noctweb-lab NoctwebLab
-swift run --package-path apps/noctweb-browser NoctwebBrowser
-```
-
-The packages use the public Noctweave repository by default. During protocol
-development, set `NOCTWEAVE_PACKAGE_PATH` to a local `NoctweaveCore` checkout.
 
 ## Core model
 
@@ -246,7 +266,47 @@ The initial codebase will depend on a narrow `ConsensusAdapter` interface so a
 consensus profile can be selected independently. See
 [consensus boundary](docs/consensus-boundary.md).
 
-## Repository map
+<a id="non-goals-for-the-first-implementation"></a>
+
+## Security and privacy
+
+Publisher signatures establish publication authority. Relay discovery,
+hosting receipts, and TLS cannot replace them. Hosted previews and fixtures
+must stay visibly distinct from finalized production content.
+
+- a blockchain or consensus algorithm;
+- global search;
+- traffic-analysis resistance or guaranteed anonymity;
+- arbitrary server-side capsule execution;
+- browser compatibility without a Noctweave Net runtime;
+- automatic migration compatibility with arbitrary pre-release object formats;
+- a global account, device, or recovery system.
+
+Read [SECURITY.md](SECURITY.md) for the threat model and private reporting policy.
+
+## Development
+
+```sh
+swift test --package-path apps/noctweb-browser
+swift test --package-path apps/noctweb-lab
+swift test --package-path apps/noctweb-ui
+```
+
+Live-host tests require an explicitly configured relay. Packaging and signing
+instructions live in each app's README.
+
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [Noctweb Browser](apps/noctweb-browser/README.md) | Visitor runtime, verification, and packaging |
+| [Noctweb Lab](apps/noctweb-lab/README.md) | Authoring, signing, and hosted publication |
+| [Architecture](docs/architecture.md) | Publication and resolution flows |
+| [Relay integration](docs/noctweave-integration.md) | Supported public Noctweave surfaces |
+| [Protocol workbench](spec/README.md) | Candidate profiles and compatibility gates |
+| [Roadmap](ROADMAP.md) | Implementation sequence and release gates |
+
+### Repository map
 
 ```text
 docs/
@@ -264,7 +324,9 @@ ROADMAP.md                 Implementation sequence and acceptance gates
 SECURITY.md                Threat model summary and reporting policy
 ```
 
-## Current decisions
+<a id="current-decisions"></a>
+
+## Design decisions
 
 1. Noctweave Net is a separate protocol repository, not a Noctweave fork.
 2. Noctweave supplies encrypted transport primitives, not Noctweave Net identity
@@ -298,17 +360,9 @@ SECURITY.md                Threat model summary and reporting policy
 
 The ADRs under [`docs/adr`](docs/adr/) record the rationale.
 
-## Non-goals for the first implementation
+<a id="status"></a>
 
-- a blockchain or consensus algorithm;
-- global search;
-- traffic-analysis resistance or guaranteed anonymity;
-- arbitrary server-side capsule execution;
-- browser compatibility without a Noctweave Net runtime;
-- automatic migration compatibility with arbitrary pre-release object formats;
-- a global account, device, or recovery system.
-
-## Status
+## Implementation status
 
 The host and passthrough relay modules are implemented in Noctweave. Noctweb
 Publisher is the initial implemented public surface: a basic
@@ -360,8 +414,7 @@ sites run in a publication-scoped, network-isolated WebKit canvas
 inside the App Sandbox. Project, workspace, source-file, visual-block, and
 publisher-key deletion all require explicit destructive confirmation.
 The stable object graph, consensus profile, production runtime, and
-cross-language conformance suite remain pre-protocol. No security audit or
-production readiness is claimed.
+cross-language conformance suite remain pre-protocol. No independent security audit or production readiness is claimed.
 
 ## License
 

@@ -1,10 +1,36 @@
-# Protocol Workbench
+<a id="protocol-workbench"></a>
 
-Noctweave Net has no stable object format yet. This directory will hold normative
-schemas, canonical encodings, and interoperability vectors once the following
-surfaces are agreed.
+<h1 align="center">Noctweave Net protocol workbench</h1>
 
-## Candidate surfaces
+<p align="center"><strong>Candidate profiles and the gates for claiming compatibility.</strong></p>
+
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#reference">Reference</a> ·
+  <a href="#related-documentation">Related docs</a>
+</p>
+
+## Overview
+
+This directory is the workbench for Noctweave Net's future normative
+schemas, canonical encodings, and interoperability vectors. A stable public
+object format has not been established; implemented experimental profiles
+must retain their explicit version and assurance boundaries.
+
+## Getting started
+
+Start with the [architecture](../docs/architecture.md) and
+[Noctweave integration contract](../docs/noctweave-integration.md), then use
+the profiles below to locate a proposal's trust and transport boundaries.
+Record intentional architecture changes in [an ADR](../docs/adr/).
+
+The [compatibility checklist](#compatibility-rule) applies before any
+interoperability claim.
+
+<a id="candidate-surfaces"></a>
+
+## Reference
 
 ### Capsule object profile
 
@@ -139,3 +165,12 @@ No document may claim Noctweave Net interoperability until:
    forged operator/federation policy, unavailable passthrough, and truthful
    route evidence; and
 7. the security status names all unaudited components.
+
+## Related documentation
+
+| Read | For |
+| --- | --- |
+| [Project overview](../README.md) | Implemented tools and current status |
+| [Consensus boundary](../docs/consensus-boundary.md) | What public coordination may authorize |
+| [Relay topology](../docs/relay-topology.md) | Standard, passthrough, and host roles |
+| [Roadmap](../ROADMAP.md) | Implementation and acceptance gates |

@@ -1,20 +1,62 @@
-# Noctweb Lab for macOS
+<p align="center">
+  <img src="Packaging/NoctwebLabIcon.svg" alt="Noctweb Lab icon" width="112">
+</p>
 
-Noctweb Lab is the native macOS development environment for building, signing,
-publishing, resolving, and testing Noctweb sites. The product shell, project
-management, publisher authority, relay controls, and verification surfaces are
-native SwiftUI. The Lab is not a hosted website, progressive web app, browser
-extension, Electron bundle, or remote-origin WebView shell.
+<a id="noctweb-lab-for-macos"></a>
 
-The Lab currently implements the explicitly incompatible `noctweb-lab-v3`
-website-bundle, signed publisher-routing, and relay-scoped namespace profile.
-It is a local protocol simulator and product-development surface; it does not
-claim production publication consensus, wire-format compatibility, or a
-security audit. Its publisher connects to live Noctweave host endpoints,
-verifies the relay's ML-DSA identity and suffix, stores the immutable object,
-then creates a strict relay-signed site binding.
+<h1 align="center">Noctweb Lab</h1>
 
-## Website workflow
+<p align="center"><strong>Build, sign, publish, and inspect a Noctweb site from your Mac.</strong></p>
+
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#security-and-privacy">Security</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
+
+## Overview
+
+Noctweb Lab is a native SwiftUI workspace for ordinary HTML, CSS, JavaScript,
+and compiled web assets. Design or edit locally, preview the verified bundle,
+and publish through an authenticated Noctweave host relay.
+
+| Detail | At a glance |
+| --- | --- |
+| Platform | macOS 14+ |
+| Built with | Swift 6 · SwiftUI · WebKit · Keychain |
+| License | [AGPL-3.0-or-later](../../LICENSE) |
+
+> **Status:** The experimental noctweb-lab-v3 profile supports live hosting. Local simulation and hosted verification do not establish production publication consensus or independent audit assurance.
+
+<a id="run-from-source"></a>
+
+## Quick start
+
+Run commands from the **noctweave-net repository root** with Swift 6.
+Use the pinned public dependency, or set `NOCTWEAVE_PACKAGE_PATH` to a local
+`NoctweaveCore` checkout.
+
+```sh
+swift run --package-path apps/noctweb-lab NoctwebLab
+```
+
+### Package the application
+
+```sh
+apps/noctweb-lab/scripts/package-app.sh
+open "apps/noctweb-lab/dist/Noctweb Lab.app"
+```
+
+The packaging script creates and verifies an ad-hoc signed application bundle
+with the Lab's App Sandbox entitlements.
+Set `NOCTWEB_CODESIGN_IDENTITY` to a Developer ID certificate name when a
+distribution-signed build is required.
+
+<a id="website-workflow"></a>
+
+## Features
 
 The site editor treats a Noctweb site as an ordinary website project:
 
@@ -144,7 +186,11 @@ publication-scoped publisher identity, head, revision, and object. The relay
 does not gain the publisher key; readers still verify the publisher signature
 and exact bundle bytes.
 
-## Verified website runtime
+<a id="verified-website-runtime"></a>
+
+<a id="security-boundary"></a>
+
+## Security and privacy
 
 After resolution, the Lab authenticates the publisher head and exact bundle
 bytes before passing them to WebKit. Every publication receives its own custom
@@ -164,33 +210,6 @@ a test platform, not a claim that arbitrary untrusted scripts are harmless.
 
 There is no OpenAI hosting configuration or hosted Lab endpoint in this
 package.
-
-## Run from source
-
-```sh
-swift run --package-path apps/noctweb-lab NoctwebLab
-```
-
-## Build and test
-
-```sh
-swift build --package-path apps/noctweb-lab
-swift test --package-path apps/noctweb-lab
-```
-
-## Package the application
-
-```sh
-apps/noctweb-lab/scripts/package-app.sh
-open "apps/noctweb-lab/dist/Noctweb Lab.app"
-```
-
-The packaging script creates and verifies an ad-hoc signed application bundle
-with the Lab's App Sandbox entitlements.
-Set `NOCTWEB_CODESIGN_IDENTITY` to a Developer ID certificate name when a
-distribution-signed build is required.
-
-## Security boundary
 
 A publisher identity belongs to one publication, never to an application
 account or person. If the recorded private key for an existing publication is
@@ -212,3 +231,28 @@ Publisher Identity** is a separate irreversible operation: it deletes the
 local private key and permanently removes this installation's ability to sign
 another update under that publisher identity. Destroying the key still does
 not erase revisions already held by hosts or other caches.
+
+<a id="build-and-test"></a>
+
+## Development
+
+From the repository root:
+
+```sh
+swift build --package-path apps/noctweb-lab
+swift test --package-path apps/noctweb-lab
+```
+
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [Project overview](../../README.md) | Network architecture and implementation status |
+| [Relay integration](../../docs/noctweave-integration.md) | Host capabilities and authentication |
+| [Host connection design](../../docs/adr/0010-connect-noctweb-lab-to-host-relays.md) | Live publishing and receipt verification |
+| [Protocol workbench](../../spec/README.md) | Unfinished protocol and conformance work |
+| [Release guide](APP_STORE_RELEASE.md) | Signing and distribution requirements |
+
+## License
+
+Part of Noctweave Net, licensed under [AGPL-3.0-or-later](../../LICENSE).

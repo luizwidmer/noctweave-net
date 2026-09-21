@@ -1,45 +1,43 @@
-# Noctweb Browser for macOS
+<p align="center">
+  <img src="Packaging/NoctwebBrowserIcon.svg" alt="Noctweb Browser icon" width="112">
+</p>
 
-Noctweb Browser is the authoritative native browsing runtime for Noctweave
-Net. It opens `noct://` links, binds each resolution to an explicit local
-network profile, verifies publisher and object evidence, applies the routing
-authority hierarchy, and renders verified website files inside an isolated
-WebKit runtime.
+<a id="noctweb-browser-for-macos"></a>
 
-It is a native SwiftUI application. It does not bundle Chromium, embed a hosted
-application shell, depend on a browser extension, or grant rendered websites a
-native message bridge.
+<h1 align="center">Noctweb Browser</h1>
 
-## Current MVP
+<p align="center"><strong>A native browser that verifies a publication before opening it.</strong></p>
 
-The first implementation provides:
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#security-and-privacy">Security</a> ·
+  <a href="#documentation">Documentation</a>
+</p>
 
-- operating-system registration for `noct://` and `.noctlink`;
-- strict Noctweb navigation URL and access-descriptor parsing;
-- local network profiles and visible trust-domain selection;
-- a per-tab visitor route preference evaluated after federation, host, and
-  publisher policy;
-- threshold verification of byte-identical ML-DSA-signed federation namespace
-  snapshots;
-- authenticated suffix-to-relay resolution and home-relay forwarding of signed
-  name and immutable object reads;
-- deterministic signed fixture resolution for isolated development;
-- tabs, address navigation, bookmarks, history, and verification states;
-- forgiving address-bar entry: `site.relay` and `noct://site.relay` are
-  normalized to the canonical `noct://site.relay/` form;
-- a trust panel exposing publisher, trust domain, route, and verification
-  evidence; and
-- a publication-scoped, non-persistent WebKit renderer with external network,
-  navigation, service worker, native bridge, and WebRTC access denied.
+## Overview
 
-The fixture resolver is a test profile, not consensus finality. Federation
-profiles pin bootstrap endpoints, relay IDs, ML-DSA public keys, a federation
-name, and a namespace threshold. Manual profiles default to unanimity.
-DHT/PEX-discovered relays are candidates only and never become namespace
-authorities implicitly. Broader publisher-head and locator consensus remains
-behind the same `NoctwebResolving` boundary.
+Noctweb Browser opens `noct://` addresses inside an explicit network
+profile, verifies the publisher and signed namespace, and renders verified
+website bytes in an isolated WebKit runtime. The SwiftUI app exposes trust and
+routing evidence alongside tabs, bookmarks, and history.
 
-## Build and test
+| Detail | At a glance |
+| --- | --- |
+| Platform | macOS 14+ |
+| Built with | Swift 6 · SwiftUI · WebKit |
+| License | [AGPL-3.0-or-later](../../LICENSE) |
+
+> **Status:** MVP. The fixture resolver is for development; broader publication finality remains a separate protocol boundary.
+
+<a id="build-and-test"></a>
+
+## Quick start
+
+Run commands from the **noctweave-net repository root**. Swift 6 is required.
+The package resolves its pinned public Noctweave dependency unless
+`NOCTWEAVE_PACKAGE_PATH` selects a local `NoctweaveCore` checkout.
 
 ```sh
 swift build --package-path apps/noctweb-browser
@@ -71,7 +69,40 @@ The result is:
 apps/noctweb-browser/dist/Noctweb Browser.app
 ```
 
-## Security boundary
+<a id="current-mvp"></a>
+
+## Features
+
+The first implementation provides:
+
+- operating-system registration for `noct://` and `.noctlink`;
+- strict Noctweb navigation URL and access-descriptor parsing;
+- local network profiles and visible trust-domain selection;
+- a per-tab visitor route preference evaluated after federation, host, and
+  publisher policy;
+- threshold verification of byte-identical ML-DSA-signed federation namespace
+  snapshots;
+- authenticated suffix-to-relay resolution and home-relay forwarding of signed
+  name and immutable object reads;
+- deterministic signed fixture resolution for isolated development;
+- tabs, address navigation, bookmarks, history, and verification states;
+- forgiving address-bar entry: `site.relay` and `noct://site.relay` are
+  normalized to the canonical `noct://site.relay/` form;
+- a trust panel exposing publisher, trust domain, route, and verification
+  evidence; and
+- a publication-scoped, non-persistent WebKit renderer with external network,
+  navigation, service worker, native bridge, and WebRTC access denied.
+
+The fixture resolver is a test profile, not consensus finality. Federation
+profiles pin bootstrap endpoints, relay IDs, ML-DSA public keys, a federation
+name, and a namespace threshold. Manual profiles default to unanimity.
+DHT/PEX-discovered relays are candidates only and never become namespace
+authorities implicitly. Broader publisher-head and locator consensus remains
+behind the same `NoctwebResolving` boundary.
+
+<a id="security-boundary"></a>
+
+## Security and privacy
 
 The browser resolves and verifies before rendering. A host, TLS certificate,
 relay suffix, `.noctlink` bootstrap hint, or hosting receipt cannot substitute
@@ -90,3 +121,16 @@ schemes are rejected rather than rewritten.
 
 Until the capability URL grammar is frozen, the MVP conservatively excludes
 every address containing a query or fragment from bookmarks and history.
+
+## Documentation
+
+| Read | For |
+| --- | --- |
+| [Project overview](../../README.md) | Network architecture and status |
+| [Access profile](../../docs/noctweb-access.md) | Addresses, profiles, and runtime expectations |
+| [Native runtime decision](../../docs/adr/0009-native-noctweb-browser-access.md) | Verification and permission boundaries |
+| [Release guide](APP_STORE_RELEASE.md) | Distribution requirements |
+
+## License
+
+Part of Noctweave Net, licensed under [AGPL-3.0-or-later](../../LICENSE).
