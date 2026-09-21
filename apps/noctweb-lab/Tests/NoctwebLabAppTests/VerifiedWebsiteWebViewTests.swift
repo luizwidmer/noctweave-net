@@ -210,6 +210,27 @@ final class VerifiedWebsiteWebViewTests: XCTestCase {
         )
         XCTAssertEqual(rtcResult, "blocked")
 
+        let childRTCResult = try await boundedJavaScriptString(
+            """
+            (() => {
+              const frame = document.createElement('iframe');
+              document.body.appendChild(frame);
+              try {
+                const connection = new frame.contentWindow.RTCPeerConnection();
+                connection.close();
+                return 'unexpected';
+              } catch (_) {
+                return 'blocked';
+              } finally {
+                frame.remove();
+              }
+            })()
+            """,
+            in: webView,
+            ignoresJavaScriptErrors: false
+        )
+        XCTAssertEqual(childRTCResult, "blocked", "New frame must not expose an unguarded WebRTC constructor")
+
         let routeURL = snapshot.rootURL.appendingPathComponent("dashboard")
         navigationObserver.prepareForNavigation()
         webView.load(URLRequest(url: routeURL))
