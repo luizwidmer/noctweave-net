@@ -7,11 +7,27 @@ import NoctwebLabCore
 /// namespace, then asks the selected home relay to retrieve the signed name
 /// mapping and immutable hosted object from the destination relay.
 actor FederatedNoctwebResolver: NoctwebResolving {
+    typealias RequestSender = @Sendable (
+        RelayEndpoint, RelayRequest
+    ) async throws -> RelayResponse
+
+    private let sendRequest: RequestSender
+
+    init(sendRequest: @escaping RequestSender = { endpoint, request in
+        try await RelayClient(endpoint: endpoint).send(request)
+    }) {
+        self.sendRequest = sendRequest
+    }
+
     func resolve(
         _ navigationURL: NoctwebNavigationURL,
         profile: NoctwebNetworkProfile,
         visitorDirective: NoctwebBrowserCore.RouteDirective
     ) async throws -> VerifiedNoctwebSite {
+        try Self.requireSupportedRetrieval(
+            profile: profile,
+            visitorDirective: visitorDirective
+        )
         guard let suffix = NoctwebRelaySuffixV1(
             rawValue: ".\(navigationURL.relaySuffix)"
         ) else {
@@ -99,9 +115,9 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             navigationURL: navigationURL,
             title: publication.object.title,
             bundle: bundle,
-            state: namespace.isConsensusVerified
-                ? .finalized
-                : .hostedPreview,
+            // Namespace consensus authenticates suffix ownership only. This
+            // envelope contains no consensus certificate for the content head.
+            state: .hostedPreview,
             evidence: NoctwebVerificationEvidence(
                 publisherID: publication.object.publisherID,
                 routingTrustDomainID: profile.routingTrustDomainID,
@@ -113,6 +129,27 @@ actor FederatedNoctwebResolver: NoctwebResolving {
                 verifiedAt: Date()
             )
         )
+    }
+
+    /// Reject unsupported transport requirements before any network request.
+    /// Publisher policy is not known yet, so an unresolved visitor requirement
+    /// must fail closed rather than retrieve content to discover an override.
+    nonisolated static func requireSupportedRetrieval(
+        profile: NoctwebNetworkProfile,
+        visitorDirective: NoctwebBrowserCore.RouteDirective
+    ) throws {
+        let route = NoctwebBrowserCore.RoutingPolicyResolver.resolve(
+            federationMode: profile.federationMode,
+            federation: profile.federationDirective,
+            hostOperator: .open,
+            publisher: .open,
+            visitor: visitorDirective
+        )
+        guard route.directive == .direct else {
+            throw NoctwebBrowserError.blocked(
+                "the selected routing policy requires a passthrough adapter that is not configured"
+            )
+        }
     }
 
     private func resolveNamespace(
@@ -142,8 +179,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             )
         }
         for endpoint in bootstrapEndpoints {
-            let response = try await RelayClient(endpoint: endpoint)
-                .send(.info())
+            let response = try await sendRequest(endpoint, .info())
             guard case .relayInfo(let info)? = response.successBody,
                   let identity = info.relayIdentity,
                   try identity.verifyThrowing(at: info.advertisedAt),
@@ -157,8 +193,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             return ResolvedNamespace(
                 identity: identity,
                 endpoint: endpoint,
-                epoch: 0,
-                isConsensusVerified: false
+                epoch: 0
             )
         }
         throw NoctwebBrowserError.unresolvedName(
@@ -181,8 +216,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
         }
         for endpoint in bootstrapEndpoints {
             do {
-                let response = try await RelayClient(endpoint: endpoint)
-                    .send(.info())
+                let response = try await sendRequest(endpoint, .info())
                 guard case .relayInfo(let info)? = response.successBody,
                       let identity = info.relayIdentity,
                       try identity.verifyThrowing(at: info.advertisedAt),
@@ -201,8 +235,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
                     endpoint: preferredHostEndpoint(
                         from: identity.claim.advertisedEndpoints
                     ) ?? endpoint,
-                    epoch: UInt64(max(1, identity.claim.sequence)),
-                    isConsensusVerified: false
+                    epoch: UInt64(max(1, identity.claim.sequence))
                 )
             } catch {
                 continue
@@ -260,8 +293,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
         var candidates: [NoctwebNamespaceSnapshotV1] = []
         for endpoint in bootstrapEndpoints {
             do {
-                let response = try await RelayClient(endpoint: endpoint)
-                    .send(request)
+                let response = try await sendRequest(endpoint, request)
                 if case .noctwebNamespaceSnapshot(let snapshot)? =
                     response.successBody {
                     candidates.append(snapshot)
@@ -294,8 +326,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
         return ResolvedNamespace(
             identity: identity,
             endpoint: endpoint,
-            epoch: UInt64(snapshot.payload.epoch),
-            isConsensusVerified: true
+            epoch: UInt64(snapshot.payload.epoch)
         )
     }
 
@@ -307,7 +338,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
     ) async throws -> NoctweaveNetHostNameResolutionV1 {
         let response: RelayResponse
         if sameEndpoint(home, destination) {
-            response = try await RelayClient(endpoint: destination).send(
+            response = try await sendRequest(destination,
                 .resolveNetHostName(request)
             )
             guard case .netHostNameResolution(let resolution)? =
@@ -321,7 +352,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             }
             return resolution
         }
-        response = try await RelayClient(endpoint: home).send(
+        response = try await sendRequest(home,
             .resolveFederatedNetHostNameV1(
                 FederatedNetHostNameReadRequestV1(
                     destinationRelayID: identity.claim.relayID,
@@ -356,8 +387,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             objectID: objectID
         )
         if sameEndpoint(home, destination) {
-            let response = try await RelayClient(endpoint: destination)
-                .send(.getNetHostObject(request))
+            let response = try await sendRequest(destination, .getNetHostObject(request))
             guard case .netHostObject(let object)? = response.successBody,
                   object.isStructurallyValid,
                   identity.claim.hostSigningPublicKey
@@ -368,7 +398,7 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             }
             return object
         }
-        let response = try await RelayClient(endpoint: home).send(
+        let response = try await sendRequest(home,
             .getFederatedNetHostObjectV1(
                 FederatedNetHostReadRequestV1(
                     destinationRelayID: identity.claim.relayID,
@@ -486,5 +516,4 @@ private struct ResolvedNamespace {
     let identity: SignedRelayIdentityClaimV1
     let endpoint: RelayEndpoint
     let epoch: UInt64
-    let isConsensusVerified: Bool
 }

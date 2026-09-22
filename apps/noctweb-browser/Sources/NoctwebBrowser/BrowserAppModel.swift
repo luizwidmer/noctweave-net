@@ -31,7 +31,7 @@ private struct BrowserPersistentState: Codable {
     let bookmarks: [NoctwebBookmark]
     let history: [NoctwebHistoryEntry]
     let lastProfileID: String
-    let lastAddress: String
+    var lastAddress: String
     let relayEndpoint: String?
     let relayProfile: NoctwebNetworkProfile?
 }
@@ -62,12 +62,35 @@ final class BrowserPersistenceStore {
         else {
             return nil
         }
-        return try? JSONDecoder().decode(BrowserPersistentState.self, from: data)
+        guard let state = try? JSONDecoder().decode(BrowserPersistentState.self, from: data) else {
+            return nil
+        }
+        let sanitized = sanitizingRestorationAddress(state)
+        if sanitized.lastAddress != state.lastAddress {
+            // Remove capability-like URLs written by earlier versions as soon
+            // as they are read, without restoring or resolving them.
+            save(sanitized)
+        }
+        return sanitized
     }
 
     fileprivate func save(_ state: BrowserPersistentState) {
+        let state = sanitizingRestorationAddress(state)
         guard let data = try? JSONEncoder().encode(state) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    private func sanitizingRestorationAddress(
+        _ state: BrowserPersistentState
+    ) -> BrowserPersistentState {
+        var sanitized = state
+        guard let address = try? NoctwebNavigationURL(parsing: state.lastAddress),
+              address.percentEncodedQuery == nil,
+              address.percentEncodedFragment == nil else {
+            sanitized.lastAddress = BrowserAppModel.blankAddress
+            return sanitized
+        }
+        return sanitized
     }
 
     func purge() {
@@ -110,7 +133,8 @@ final class BrowserAppModel: ObservableObject {
 
     init(
         persistenceStore: BrowserPersistenceStore = .standard,
-        useDevelopmentFixtures: Bool = false
+        useDevelopmentFixtures: Bool = false,
+        resolver: (any NoctwebResolving)? = nil
     ) {
         let environment: (
             profile: NoctwebNetworkProfile,
@@ -130,7 +154,7 @@ final class BrowserAppModel: ObservableObject {
         let profile: NoctwebNetworkProfile
         let initialAddress: String
         if useDevelopmentFixtures {
-            resolver = DevelopmentNoctwebResolver(
+            self.resolver = resolver ?? DevelopmentNoctwebResolver(
                 fixtureResolver: environment.resolver
             )
             profile = environment.profile
@@ -146,7 +170,7 @@ final class BrowserAppModel: ObservableObject {
                 environment.profile.displayName
             )
         } else {
-            resolver = FederatedNoctwebResolver()
+            self.resolver = resolver ?? FederatedNoctwebResolver()
             profile = persisted?.relayProfile
                 ?? Self.unconfiguredProfile()
             let savedEndpoint = persisted?.relayEndpoint
@@ -390,6 +414,7 @@ final class BrowserAppModel: ObservableObject {
         navigateAfterConnection: Bool = false
     ) async {
         guard !usesDevelopmentFixtures, !isResetting else { return }
+        sessionGeneration = UUID()
         let generation = sessionGeneration
         let requested = relayEndpointText
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -445,10 +470,15 @@ final class BrowserAppModel: ObservableObject {
                 endpoint: endpoint,
                 info: info
             )
+            let priorAddress = addressText
+            let profileChanged = profile != selectedProfile
             try session.replaceProfile(
                 profile,
                 replacing: selectedProfile.id
             )
+            if profileChanged {
+                invalidateRelayTabs()
+            }
             activeRelayEndpoint = canonicalEndpoint
             relayEndpointText = canonicalEndpoint
             relayConnectionState = .connected(profile.displayName)
@@ -458,9 +488,9 @@ final class BrowserAppModel: ObservableObject {
             persist()
 
             if navigateAfterConnection,
-               !addressText.isEmpty {
+               !priorAddress.isEmpty {
                 navigate(
-                    to: addressText,
+                    to: priorAddress,
                     pushCurrentAddress: false
                 )
             }
@@ -474,9 +504,7 @@ final class BrowserAppModel: ObservableObject {
 
     func forgetRelay() {
         guard !usesDevelopmentFixtures else { return }
-        resolutionTasksByTab.values.forEach { $0.cancel() }
-        resolutionTasksByTab.removeAll()
-        resolutionGenerationByTab.removeAll()
+        invalidateRelayTabs()
         let profile = Self.unconfiguredProfile()
         try? session.replaceProfile(
             profile,
@@ -487,15 +515,33 @@ final class BrowserAppModel: ObservableObject {
         relayConnectionState = .notConfigured
         addressText = ""
         showsTrustInspector = false
-        sitesByTab[session.selectedTabID] = nil
-        errorsByTab[session.selectedTabID] = nil
-        blockedNoticesByTab[session.selectedTabID] = nil
-        try? session.updateSelectedTab(
-            address: Self.blankAddress,
-            title: "New Tab",
-            state: .idle
-        )
         persist()
+    }
+
+    private func invalidateRelayTabs() {
+        // Every tab uses the selected relay profile. Replacing or revoking
+        // that authority invalidates every rendered page and pending lookup.
+        sessionGeneration = UUID()
+        resolutionTasksByTab.values.forEach { $0.cancel() }
+        resolutionTasksByTab.removeAll()
+        resolutionGenerationByTab.removeAll()
+        sitesByTab.removeAll()
+        errorsByTab.removeAll()
+        blockedNoticesByTab.removeAll()
+        reloadTokensByTab.removeAll()
+        visitorDirectiveByTab.removeAll()
+        backStackByTab.removeAll()
+        forwardStackByTab.removeAll()
+        for tab in session.tabs {
+            try? session.updateTab(
+                id: tab.id,
+                address: Self.blankAddress,
+                title: "New Tab",
+                state: .idle
+            )
+        }
+        addressText = ""
+        showsTrustInspector = false
     }
 
     func selectTab(_ id: UUID) {
@@ -850,7 +896,11 @@ final class BrowserAppModel: ObservableObject {
         profileID: String,
         generation: UUID
     ) {
-        guard resolutionGenerationByTab[tabID] == generation else { return }
+        guard resolutionGenerationByTab[tabID] == generation,
+              let tab = session.tabs.first(where: { $0.id == tabID }),
+              tab.profileID == profileID,
+              let profile = session.profiles.first(where: { $0.id == profileID }),
+              profile.routingTrustDomainID == site.evidence.routingTrustDomainID else { return }
         resolutionTasksByTab[tabID] = nil
         resolutionGenerationByTab[tabID] = nil
         sitesByTab[tabID] = site
@@ -1038,7 +1088,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     private static let relayProfileID = "selected-relay"
-    private static let blankAddress = "noct://start.unconfigured/"
+    fileprivate static let blankAddress = "noct://start.unconfigured/"
 
     private func append(
         _ address: String,

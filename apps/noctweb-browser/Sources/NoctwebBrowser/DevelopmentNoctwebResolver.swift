@@ -61,6 +61,10 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
                 navigationURL.baseAddress
             )
         }
+        try FederatedNoctwebResolver.requireSupportedRetrieval(
+            profile: profile,
+            visitorDirective: visitorDirective
+        )
         let record = try loadSiteRecord(
             address: navigationURL.baseAddress
         )

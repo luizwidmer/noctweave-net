@@ -148,13 +148,25 @@ The minimum browser UI contains:
 
 The suffix operator and content host are displayed as infrastructure, not as
 publisher identity. A hosting receipt may produce **Hosted preview**, never
-**Finalized**.
+**Finalized**. A verified suffix namespace snapshot proves relay ownership;
+it does not finalize the publisher's content head. The native hosted resolver
+therefore labels these publications **Hosted preview** even when the namespace
+has a verified consensus snapshot.
+
+The native hosted resolver currently supports direct retrieval only. It rejects
+an effective federation or visitor passthrough requirement before contacting a
+relay. An unknown publisher policy cannot justify retrieving over an unsupported
+route to discover whether a higher-priority override exists.
 
 History, bookmarks, permissions, and capability secrets stay local. Capability
 URLs are excluded from ordinary history and telemetry by default.
 Until capability syntax is frozen, the native MVP treats every query- or
 fragment-bearing address as potentially capability-bearing and excludes it
-from bookmarks and history.
+from bookmarks, history, and session restoration. Older restoration records
+containing such addresses are sanitized when loaded. Forgetting or replacing
+the selected relay also invalidates all open pages and pending resolutions;
+previously verified content cannot carry its trust badge into a different relay
+profile.
 
 ## Conventional-browser bridge
 

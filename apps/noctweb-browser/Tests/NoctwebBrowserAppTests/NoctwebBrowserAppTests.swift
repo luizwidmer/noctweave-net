@@ -48,6 +48,57 @@ final class NoctwebBrowserAppTests: XCTestCase {
     }
 
     @MainActor
+    func testCapabilityLikeRenderedURLsNeverEnterRestorationState() async throws {
+        for suffix in ["?cap=private-query-token", "#private-fragment-token"] {
+            let suite = "NoctwebBrowserPrivacyTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let model = BrowserAppModel(
+                persistenceStore: BrowserPersistenceStore(defaults: defaults),
+                useDevelopmentFixtures: true
+            )
+            model.startIfNeeded()
+            for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            let site = try XCTUnwrap(model.selectedSite)
+            let snapshot = NoctwebRendererSnapshot(site: site)
+            model.handleRenderedNavigation(
+                try XCTUnwrap(URL(string: snapshot.rootURL.absoluteString + suffix)),
+                publication: site,
+                tabID: model.selectedTab.id
+            )
+            XCTAssertTrue(model.addressText.hasSuffix(suffix))
+            model.flushPersistence()
+            let saved = try XCTUnwrap(defaults.data(
+                forKey: "net.noctweave.noctweb-browser.state.v1"
+            ))
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: saved) as? [String: Any])
+            XCTAssertEqual(object["lastAddress"] as? String, "noct://start.unconfigured/")
+            XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("private-"))
+        }
+    }
+
+    @MainActor
+    func testPreviouslyPersistedCapabilityURLIsRemovedOnLoad() throws {
+        let suite = "NoctwebBrowserPrivacyTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "net.noctweave.noctweb-browser.state.v1"
+        defaults.set(try JSONSerialization.data(withJSONObject: [
+            "bookmarks": [], "history": [], "lastProfileID": "local-development",
+            "lastAddress": "noct://welcome.local-dev/?cap=old-private-token",
+        ]), forKey: key)
+        let model = BrowserAppModel(
+            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            useDevelopmentFixtures: true
+        )
+        XCTAssertFalse(model.addressText.contains("old-private-token"))
+        let saved = try XCTUnwrap(defaults.data(forKey: key))
+        XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("old-private-token"))
+    }
+
+    @MainActor
     func testProductionAppStartsUnconfiguredWithoutCrashing() throws {
         let suiteName = "NoctwebBrowserTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
