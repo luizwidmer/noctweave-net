@@ -8,7 +8,7 @@ struct NoctwebLabApp: App {
 
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model: AppModel
-    @StateObject private var appearance = NoctwebAppearanceStore()
+    @StateObject private var appearance: NoctwebAppearanceStore
 
     init() {
         #if DEBUG
@@ -18,7 +18,9 @@ struct NoctwebLabApp: App {
         if let index = arguments.firstIndex(of: "NOCTWEB_LAB_UI_TEST_WORKSPACE"),
            arguments.indices.contains(index + 1),
            arguments[index + 1].hasPrefix("/"),
+           let defaults = UserDefaults(suiteName: "net.noctweave.noctweb-lab-ui-test.\(UUID().uuidString)"),
            let engine = try? NoctwebLabEngine(identityStore: InMemoryPublicationPrivateKeyStore()) {
+            _appearance = StateObject(wrappedValue: NoctwebAppearanceStore(defaults: defaults))
             _model = StateObject(wrappedValue: AppModel(
                 engine: engine,
                 workspaceFileURL: URL(fileURLWithPath: arguments[index + 1]),
@@ -27,6 +29,7 @@ struct NoctwebLabApp: App {
             return
         }
         #endif
+        _appearance = StateObject(wrappedValue: NoctwebAppearanceStore())
         let model = AppModel()
         _model = StateObject(wrappedValue: model)
     }

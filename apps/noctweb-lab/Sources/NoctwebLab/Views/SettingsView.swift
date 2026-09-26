@@ -28,7 +28,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
-                    Text("System follows macOS. Light and Dark are remembered independently by Noctweb Lab.")
+                    Text("System follows macOS. Light and Dark apply for this session.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

@@ -8,7 +8,7 @@ struct NoctwebBrowserApp: App {
 
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var model: BrowserAppModel
-    @StateObject private var appearance = NoctwebAppearanceStore()
+    @StateObject private var appearance: NoctwebAppearanceStore
 
     init() {
         #if DEBUG
@@ -16,6 +16,7 @@ struct NoctwebBrowserApp: App {
         if let index = arguments.firstIndex(of: "NOCTWEB_BROWSER_UI_TEST_SUITE"),
            arguments.indices.contains(index + 1),
            let defaults = UserDefaults(suiteName: arguments[index + 1]) {
+            _appearance = StateObject(wrappedValue: NoctwebAppearanceStore(defaults: defaults))
             _model = StateObject(wrappedValue: BrowserAppModel(
                 persistenceStore: BrowserPersistenceStore(
                     defaults: defaults,
@@ -25,6 +26,7 @@ struct NoctwebBrowserApp: App {
             return
         }
         #endif
+        _appearance = StateObject(wrappedValue: NoctwebAppearanceStore())
         _model = StateObject(wrappedValue: BrowserAppModel())
     }
 
@@ -157,7 +159,7 @@ private struct BrowserSettingsView: View {
                     }
                     .pickerStyle(.segmented)
 
-                    Text("System follows macOS. Light and Dark remain explicit choices and are remembered by Noctweb Browser.")
+                    Text("System follows macOS. Light and Dark apply for this session.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
