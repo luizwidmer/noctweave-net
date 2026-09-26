@@ -36,18 +36,16 @@ public enum NoctwebAppearance: String, CaseIterable, Identifiable, Sendable {
 public final class NoctwebAppearanceStore: ObservableObject {
     public static let standard = NoctwebAppearanceStore()
 
-    @Published public var selection: NoctwebAppearance {
-        didSet {
-            defaults.set(selection.rawValue, forKey: key)
-        }
-    }
+    @Published public var selection: NoctwebAppearance
 
     private let defaults: UserDefaults
     private let key: String
+    @Published public private(set) var legacyStorageDetected: Bool
 
     public func reset() {
         selection = .system
         defaults.removeObject(forKey: key)
+        legacyStorageDetected = false
     }
 
     public init(
@@ -56,9 +54,10 @@ public final class NoctwebAppearanceStore: ObservableObject {
     ) {
         self.defaults = defaults
         self.key = key
-        selection = NoctwebAppearance(
-            rawValue: defaults.string(forKey: key) ?? ""
-        ) ?? .system
+        // Earlier development builds persisted this metadata in plaintext.
+        // Preserve it for explicit owner cleanup, without loading it.
+        legacyStorageDetected = defaults.object(forKey: key) != nil
+        selection = .system
     }
 }
 

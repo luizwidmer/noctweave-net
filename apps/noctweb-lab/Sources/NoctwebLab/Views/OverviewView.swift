@@ -120,18 +120,18 @@ struct OverviewView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(relays) { relay in
-                HStack {
+                    HStack {
                         Label(
                             relay.name,
                             systemImage: relay.isOnline
                                 ? "externaldrive.connected.to.line.below"
-                                : "externaldrive.badge.xmark"
+                                : "arrow.clockwise.circle"
                         )
-                    Spacer()
-                        Text(relay.isOnline ? "Connected" : "Unavailable")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                        Spacer()
+                        Text(relay.isOnline ? "Connected" : "Check connection")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if relay.id != relays.last?.id {
                         Divider()
                     }

@@ -37,8 +37,10 @@ public struct NoctwebHostRelayConfiguration: Codable, Equatable, Sendable {
             && hostModule == "nw.net-host"
             && hostModuleVersion == 1
             && (1...1_048_576).contains(maximumObjectBytes)
-            && (60...maximumRetentionSeconds).contains(minimumRetentionSeconds)
+            && maximumRetentionSeconds >= 60
             && maximumRetentionSeconds <= 2_592_000
+            && minimumRetentionSeconds >= 60
+            && minimumRetentionSeconds <= maximumRetentionSeconds
     }
 }
 
@@ -175,7 +177,9 @@ public actor NoctwebHostRelayClient {
     private var cachedConfiguration: NoctwebHostRelayConfiguration?
     private var cachedRelayIdentity: SignedRelayIdentityClaimV1?
 
-    public init(endpoint: String) throws {
+    /// Resolve an operator's configured endpoint to the same base URL used
+    /// for requests, so policy lookup cannot disagree with the request target.
+    public static func canonicalBaseURL(for endpoint: String) throws -> URL {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         let candidate = trimmed.contains("://") ? trimmed : "http://\(trimmed)"
         guard var components = URLComponents(string: candidate),
@@ -197,6 +201,11 @@ public actor NoctwebHostRelayClient {
         guard let baseURL = components.url else {
             throw NoctwebHostRelayError.invalidEndpoint
         }
+        return baseURL
+    }
+
+    public init(endpoint: String) throws {
+        let baseURL = try Self.canonicalBaseURL(for: endpoint)
         self.baseURL = baseURL
         self.relayEndpoint = try RelayEndpointParser.parse(
             baseURL.absoluteString

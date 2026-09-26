@@ -17,7 +17,10 @@ struct NoctwebBrowserApp: App {
            arguments.indices.contains(index + 1),
            let defaults = UserDefaults(suiteName: arguments[index + 1]) {
             _model = StateObject(wrappedValue: BrowserAppModel(
-                persistenceStore: BrowserPersistenceStore(defaults: defaults)
+                persistenceStore: BrowserPersistenceStore(
+                    defaults: defaults,
+                    keyService: "net.noctweave.noctweb-browser-ui-test.\(arguments[index + 1])"
+                )
             ))
             return
         }
@@ -27,7 +30,23 @@ struct NoctwebBrowserApp: App {
 
     var body: some Scene {
         WindowGroup {
-            BrowserWindowView()
+            Group {
+                if appearance.legacyStorageDetected {
+                    ContentUnavailableView(
+                        "Legacy plaintext preference found",
+                        systemImage: "lock.doc",
+                        description: Text("This prerelease build left an appearance value in macOS preferences. Remove it before continuing; your data was not changed.")
+                    )
+                } else if let storageError = model.storageError {
+                    ContentUnavailableView(
+                        "Local browser storage unavailable",
+                        systemImage: "lock.doc",
+                        description: Text(storageError)
+                    )
+                } else {
+                    BrowserWindowView()
+                }
+            }
                 .disabled(model.isResetting)
                 .environmentObject(model)
                 .environmentObject(appearance)
@@ -36,6 +55,7 @@ struct NoctwebBrowserApp: App {
                 .onChange(of: scenePhase) {
                     if scenePhase != .active {
                         model.flushPersistence()
+                        model.clearProcessKeyCache()
                     }
                 }
         }

@@ -78,14 +78,25 @@ final class FederatedResolverSecurityTests: XCTestCase {
         let suite = "NoctwebBrowserRelayResetTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        let keyService = "net.noctweave.noctweb-browser-tests.\(suite)"
+        defer { try? NoctwebLocalKeyProvider().destroy(service: keyService) }
         let profileObject = try JSONSerialization.jsonObject(with: JSONEncoder().encode(fixture.profile))
-        defaults.set(try JSONSerialization.data(withJSONObject: [
+        let clear = try JSONSerialization.data(withJSONObject: [
             "bookmarks": [], "history": [], "lastProfileID": fixture.profile.id,
             "lastAddress": fixture.navigationURL.canonicalString,
             "relayEndpoint": "http://127.0.0.1:9340", "relayProfile": profileObject,
-        ]), forKey: "net.noctweave.noctweb-browser.state.v1")
+        ])
+        let sealed = try NoctwebEncryptedLocalData.seal(
+            clear,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService,
+                provider: NoctwebLocalKeyProvider()
+            ),
+            context: "browser-state-v1"
+        )
+        defaults.set(sealed, forKey: "net.noctweave.noctweb-browser.state.v1")
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults), resolver: resolver
+            persistenceStore: BrowserPersistenceStore(defaults: defaults, keyService: keyService), resolver: resolver
         )
         let firstTabID = model.selectedTab.id
         model.navigate(to: fixture.navigationURL.canonicalString)

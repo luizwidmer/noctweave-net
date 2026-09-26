@@ -159,7 +159,8 @@ enum WebsiteProjectBuilder {
                announcedSize > remainingBytes
             {
                 throw WebsiteProjectBuilderError.bundleTooLarge(
-                    totalBytes + announcedSize
+                    announcedSize > Int.max - totalBytes
+                        ? Int.max : totalBytes + announcedSize
                 )
             }
             let bytes = try readBoundedRegularFile(

@@ -1,3 +1,5 @@
+import CryptoKit
+import Darwin
 import Foundation
 import NoctwebLabCore
 import XCTest
@@ -6,6 +8,367 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testHostedPreviewRejectsKnownOrUnknownPassthroughBeforeHostClient() async throws {
+        for (mode, federationMode, federationDirective, draftDirective) in [
+            (RouteMode.passthrough, FederationMode.solo, RouteDirective.open, RouteDirective.open),
+            (.direct, .solo, .open, .open),
+            (.direct, .manual, .passthrough, .open),
+            (.passthrough, .solo, .open, .direct),
+        ] {
+            let fixture = try makeFixture()
+            defer { fixture.remove() }
+            var workspace = Workspace.liveStarter()
+            workspace.federationMode = federationMode
+            workspace.federationRouteDirective = federationDirective
+            let site = SiteProject(
+                id: UUID(),
+                address: "noct://preview.fixture/",
+                publisherRouteDirective: draftDirective,
+                title: "Preview",
+                subtitle: "Fixture",
+                body: "Fixture",
+                accentHex: "#123456",
+                revision: 1,
+                publicationIdentity: .pending,
+                hostRelayEndpoint: "file:///invalid-host-endpoint",
+                hostObjectID: String(repeating: "a", count: 64)
+            )
+            workspace.sites = [site]
+            try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+            let model = AppModel(
+                engine: fixture.engine,
+                workspaceFileURL: fixture.workspaceURL,
+                useLiveRelay: true
+            )
+            model.routeMode = mode
+            model.runtimeAddress = site.address
+            model.navigateRuntime()
+            let message = try await hostedPreviewFailureMessage(from: model)
+            XCTAssertTrue(
+                message.contains("requires a passthrough adapter"),
+                message
+            )
+        }
+    }
+
+    func testKnownFederationDirectOverridePermitsHostedFetch() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.liveStarter()
+        workspace.federationMode = .manual
+        workspace.federationRouteDirective = .direct
+        let site = SiteProject(
+            id: UUID(),
+            address: "noct://preview.fixture/",
+            title: "Preview",
+            subtitle: "Fixture",
+            body: "Fixture",
+            accentHex: "#123456",
+            revision: 1,
+            publicationIdentity: .pending,
+            hostRelayEndpoint: "file:///invalid-host-endpoint",
+            hostObjectID: String(repeating: "a", count: 64)
+        )
+        workspace.sites = [site]
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+        model.routeMode = .passthrough
+        model.runtimeAddress = site.address
+        model.navigateRuntime()
+        let message = try await hostedPreviewFailureMessage(from: model)
+        XCTAssertTrue(message.contains("valid HTTP or HTTPS"), message)
+    }
+
+    func testOnlyMatchingSignedCachedPublisherCanOverrideVisitorRoute() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let endpoint = "http://127.0.0.1:1"
+        let signedSite = try await signedHostedSite(
+            in: fixture,
+            routeDirective: .direct,
+            endpoint: endpoint
+        )
+
+        for (mismatchedObjectID, shouldAllowDirect) in [
+            (false, true),
+            (true, false),
+        ] {
+            var workspace = Workspace.liveStarter()
+            var site = signedSite
+            site.publisherRouteDirective = .passthrough
+            if mismatchedObjectID {
+                site.hostObjectID = String(repeating: "a", count: 64)
+            }
+            workspace.sites = [site]
+            workspace.relays = [testHostRelay(
+                endpoint: endpoint,
+                routeDirective: .open
+            )]
+            try writeWorkspaces([workspace], to: fixture.workspaceURL)
+            let model = AppModel(
+                engine: fixture.engine,
+                workspaceFileURL: fixture.workspaceURL,
+                useLiveRelay: true
+            )
+            model.routeMode = .passthrough
+            model.runtimeAddress = site.address
+            model.navigateRuntime()
+            let message = try await hostedPreviewFailureMessage(from: model)
+            XCTAssertEqual(
+                message.contains("requires a passthrough adapter"),
+                !shouldAllowDirect,
+                message
+            )
+        }
+    }
+
+    func testConfiguredHostOperatorPolicyPrecedesPublisherAndVisitor() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let endpoint = "http://127.0.0.1:1"
+        let cases: [(
+            publisher: RouteDirective,
+            operatorDirective: RouteDirective,
+            allowsDirect: Bool
+        )] = [
+            (.direct, .passthrough, false),
+            (.passthrough, .direct, true),
+            (.direct, .open, true),
+        ]
+        for entry in cases {
+            let site = try await signedHostedSite(
+                in: fixture,
+                routeDirective: entry.publisher,
+                endpoint: endpoint
+            )
+            var workspace = Workspace.liveStarter()
+            workspace.federationMode = .open
+            workspace.sites = [site]
+            workspace.relays = [testHostRelay(
+                endpoint: "http://127.0.0.1:1/",
+                routeDirective: entry.operatorDirective
+            )]
+            try writeWorkspaces([workspace], to: fixture.workspaceURL)
+
+            let model = AppModel(
+                engine: fixture.engine,
+                workspaceFileURL: fixture.workspaceURL,
+                useLiveRelay: true
+            )
+            model.routeMode = .direct
+            model.runtimeAddress = site.address
+            model.navigateRuntime()
+            let message = try await hostedPreviewFailureMessage(from: model)
+            XCTAssertEqual(
+                message.contains("requires a passthrough adapter"),
+                !entry.allowsDirect,
+                message
+            )
+        }
+    }
+
+    func testHostedRoutePreflightMakesNoBlockedLoopbackConnection() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let cases: [(
+            publisher: RouteDirective,
+            operatorDirective: RouteDirective,
+            federationDirective: RouteDirective,
+            visitor: RouteMode,
+            allowsDirect: Bool
+        )] = [
+            (.open, .open, .open, .passthrough, false),
+            (.direct, .direct, .passthrough, .direct, false),
+            (.direct, .passthrough, .open, .direct, false),
+            (.passthrough, .direct, .open, .passthrough, true),
+        ]
+
+        for entry in cases {
+            let recorder = try LoopbackConnectionRecorder()
+            let site = try await signedHostedSite(
+                in: fixture,
+                routeDirective: entry.publisher,
+                endpoint: recorder.endpoint
+            )
+            var workspace = Workspace.liveStarter()
+            workspace.federationMode = .manual
+            workspace.federationRouteDirective = entry.federationDirective
+            workspace.sites = [site]
+            workspace.relays = [testHostRelay(
+                endpoint: recorder.endpoint,
+                routeDirective: entry.operatorDirective
+            )]
+            try writeWorkspaces([workspace], to: fixture.workspaceURL)
+            let startupObservation = Task {
+                await recorder.observeForHalfSecond()
+            }
+            let model = AppModel(
+                engine: fixture.engine,
+                workspaceFileURL: fixture.workspaceURL,
+                useLiveRelay: true
+            )
+            let startupConnections = await startupObservation.value
+            XCTAssertFalse(model.relayRefreshInFlight)
+            XCTAssertEqual(startupConnections, 0, "Startup contacted the host")
+            model.routeMode = entry.visitor
+            model.runtimeAddress = site.address
+            let observation = Task { await recorder.observeForHalfSecond() }
+            model.navigateRuntime()
+            let message = try await hostedPreviewFailureMessage(from: model)
+            let connections = await observation.value
+            XCTAssertEqual(
+                message.contains("requires a passthrough adapter"),
+                !entry.allowsDirect,
+                message
+            )
+            XCTAssertEqual(
+                connections > 0,
+                entry.allowsDirect,
+                "Unexpected loopback connections: \(connections)"
+            )
+        }
+    }
+
+    func testHostedPreviewFailsClosedForMissingOrAmbiguousHostOperator() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let endpoint = "http://127.0.0.1:1"
+        let site = try await signedHostedSite(
+            in: fixture,
+            routeDirective: .direct,
+            endpoint: endpoint
+        )
+        let host = testHostRelay(endpoint: endpoint, routeDirective: .open)
+        let duplicate = LabRelayNode(
+            id: "second-host-fixture",
+            name: "Second host fixture",
+            role: .host,
+            endpoint: endpoint,
+            region: "Local",
+            isOnline: true,
+            latencyMilliseconds: 1,
+            retainedObjects: 0,
+            operatorRouteDirective: .direct
+        )
+        for relays in [[], [host, duplicate]] {
+            var workspace = Workspace.liveStarter()
+            workspace.sites = [site]
+            workspace.relays = relays
+            try writeWorkspaces([workspace], to: fixture.workspaceURL)
+            let model = AppModel(
+                engine: fixture.engine,
+                workspaceFileURL: fixture.workspaceURL,
+                useLiveRelay: true
+            )
+            model.runtimeAddress = site.address
+            model.navigateRuntime()
+            let message = try await hostedPreviewFailureMessage(from: model)
+            XCTAssertTrue(
+                message.contains("requires a passthrough adapter"),
+                message
+            )
+        }
+    }
+
+    func testHostedPreviewUsesActiveSelectedSiteForDuplicateAddress() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let endpoint = "http://127.0.0.1:1"
+        let signedSite = try await signedHostedSite(
+            in: fixture,
+            routeDirective: .direct,
+            endpoint: endpoint
+        )
+        let shadow = shadowHostedSite(address: signedSite.address)
+        var foreignWorkspace = Workspace.liveStarter()
+        foreignWorkspace.sites = [shadow]
+        var active = Workspace.liveStarter()
+        active.sites = [shadow, signedSite]
+        active.relays = [testHostRelay(
+            endpoint: endpoint,
+            routeDirective: .open
+        )]
+        try writeWorkspaces([foreignWorkspace, active], to: fixture.workspaceURL)
+
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+        model.selectWorkspace(active.id)
+        model.selectSite(signedSite.id)
+        model.runtimeAddress = signedSite.address
+        model.navigateRuntime()
+        let message = try await hostedPreviewFailureMessage(from: model)
+        XCTAssertFalse(
+            message.contains("requires a passthrough adapter"),
+            message
+        )
+        XCTAssertFalse(
+            message.contains("No verified relay-hosted revision"),
+            message
+        )
+
+        try writeWorkspaces([foreignWorkspace, active], to: fixture.workspaceURL)
+        let foreignModel = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+        foreignModel.runtimeAddress = signedSite.address
+        foreignModel.navigateRuntime()
+        let foreignMessage = try await hostedPreviewFailureMessage(
+            from: foreignModel
+        )
+        XCTAssertTrue(
+            foreignMessage.contains("requires a passthrough adapter"),
+            foreignMessage
+        )
+    }
+
+    func testHostedPreviewDoesNotReadSiteFromInactiveWorkspace() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let site = try await signedHostedSite(
+            in: fixture,
+            routeDirective: .direct,
+            endpoint: "http://127.0.0.1:1"
+        )
+        let active = Workspace.liveStarter()
+        var foreign = Workspace.liveStarter()
+        foreign.sites = [site]
+        try writeWorkspaces([active, foreign], to: fixture.workspaceURL)
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+        model.runtimeAddress = site.address
+        model.navigateRuntime()
+        let message = try await hostedPreviewFailureMessage(from: model)
+        XCTAssertTrue(
+            message.contains("No verified relay-hosted revision"),
+            message
+        )
+    }
+
+    private func hostedPreviewFailureMessage(from model: AppModel) async throws -> String {
+        for _ in 0..<500 {
+            if case let .unavailable(message) = model.runtimeResult {
+                return message
+            }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        XCTFail("hosted preview did not finish")
+        return ""
+    }
+
     func testPurgeRemovesWorkspaceAndOrphanPublisherKeys() async throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
@@ -32,6 +395,37 @@ final class AppModelTests: XCTestCase {
 
         let decoded = try decodeWorkspaces(at: fixture.workspaceURL)
         XCTAssertEqual(decoded.first?.sites.first?.revision, UInt64.max)
+    }
+
+    func testLegacyPlaintextProductWorkspaceIsBlockedAndPreserved() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let legacy = Data("{\"private-draft\":\"canary\"}".utf8)
+        try NoctwebSecureFileIO.writePrivate(
+            legacy, to: fixture.workspaceURL, maximumBytes: 1_024
+        )
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL,
+            useLiveRelay: true
+        )
+        XCTAssertNotNil(model.storageError)
+        model.flushPersistence()
+        XCTAssertEqual(try Data(contentsOf: fixture.workspaceURL), legacy)
+    }
+
+    func testProductWorkspaceWritesOnlyAuthenticatedCiphertext() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(
+            engine: fixture.engine,
+            workspaceFileURL: fixture.workspaceURL
+        )
+        model.flushPersistence()
+        let stored = try Data(contentsOf: fixture.workspaceURL)
+        XCTAssertTrue(NoctwebEncryptedLocalData.isSealed(stored))
+        XCTAssertNil(stored.range(of: Data("My workspace".utf8)))
+        XCTAssertEqual(try decodeWorkspaces(at: fixture.workspaceURL), model.workspaces)
     }
 
     func testProductionStartupRemovesDevelopmentFixtures() throws {
@@ -752,6 +1146,93 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    private func signedHostedSite(
+        in fixture: Fixture,
+        routeDirective: RouteDirective,
+        endpoint: String
+    ) async throws -> SiteProject {
+        let siteID = UUID()
+        let hostKey = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let namespace = try RelayNamespace(
+            publicKey: hostKey,
+            operatorSuffix: "fixture"
+        )
+        let address = try NoctwebAddress(
+            siteLabel: "preview",
+            relaySuffix: namespace.suffix
+        ).canonicalString
+        let publication = try await fixture.engine.makeHostedPublication(
+            draft: CapsuleSiteDraft(
+                publicationID: siteID.uuidString.lowercased(),
+                address: address,
+                relayNamespaceID: namespace.id,
+                routeDirective: routeDirective,
+                title: "Preview",
+                subtitle: "Fixture",
+                body: "Fixture",
+                accentHex: "#123456",
+                bundle: WebsiteBundle(
+                    entryPath: "index.html",
+                    files: [WebsiteFile(
+                        path: "index.html",
+                        mediaType: "text/html",
+                        bytes: Data("<title>Fixture</title>".utf8)
+                    )]
+                )
+            ),
+            relayNamespace: namespace
+        )
+        let envelope = try CanonicalJSON.encode(publication)
+        return SiteProject(
+            id: siteID,
+            address: address,
+            relayNamespaceID: namespace.id,
+            publisherRouteDirective: .open,
+            title: "Preview",
+            subtitle: "Fixture",
+            body: "Fixture",
+            accentHex: "#123456",
+            revision: publication.object.revision,
+            publisherID: publication.object.publisherID,
+            publishedEnvelope: envelope,
+            publicationIdentity: .ready,
+            hostRelayEndpoint: endpoint,
+            hostObjectID: NoctwebHostRelayClient.objectID(for: envelope)
+        )
+    }
+
+    private func testHostRelay(
+        endpoint: String,
+        routeDirective: RouteDirective
+    ) -> LabRelayNode {
+        LabRelayNode(
+            id: "host-fixture",
+            name: "Host fixture",
+            role: .host,
+            endpoint: endpoint,
+            region: "Local",
+            isOnline: true,
+            latencyMilliseconds: 1,
+            retainedObjects: 0,
+            operatorRouteDirective: routeDirective
+        )
+    }
+
+    private func shadowHostedSite(address: String) -> SiteProject {
+        SiteProject(
+            id: UUID(),
+            address: address,
+            title: "Shadow",
+            subtitle: "Fixture",
+            body: "Fixture",
+            accentHex: "#123456",
+            revision: 1,
+            publicationIdentity: .pending,
+            hostRelayEndpoint: "file:///invalid-host-endpoint",
+            hostObjectID: String(repeating: "a", count: 64)
+        )
+    }
+
     private func makeFixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -857,26 +1338,52 @@ final class AppModelTests: XCTestCase {
         _ workspaces: [Workspace],
         to url: URL
     ) throws {
+        let clear = try JSONEncoder().encode(workspaces)
+        let stored = try NoctwebEncryptedLocalData.seal(
+            clear,
+            using: NoctwebEncryptedLocalData.key(
+                service: AppModel.keyServiceForWorkspace(url),
+                provider: NoctwebLocalKeyProvider()
+            ),
+            context: "lab-workspaces-v1"
+        )
         try NoctwebSecureFileIO.writePrivate(
-            JSONEncoder().encode(workspaces),
+            stored,
             to: url,
-            maximumBytes: 32 * 1_024 * 1_024
+            maximumBytes: 32 * 1_024 * 1_024 + NoctwebEncryptedLocalData.overheadBytes
         )
     }
 
     private func decodeWorkspaces(at url: URL) throws -> [Workspace] {
-        try JSONDecoder().decode(
+        let clear = try NoctwebEncryptedLocalData.open(
+            Data(contentsOf: url),
+            using: NoctwebEncryptedLocalData.key(
+                service: AppModel.keyServiceForWorkspace(url),
+                provider: NoctwebLocalKeyProvider()
+            ),
+            context: "lab-workspaces-v1"
+        )
+        return try JSONDecoder().decode(
             [Workspace].self,
-            from: Data(contentsOf: url)
+            from: clear
         )
     }
 
     private func decodeDeletionJournal(
         at url: URL
     ) throws -> PublisherIdentityDeletionJournal {
-        try JSONDecoder().decode(
+        let workspaceURL = url.deletingPathExtension().deletingPathExtension()
+        let clear = try NoctwebEncryptedLocalData.open(
+            Data(contentsOf: url),
+            using: NoctwebEncryptedLocalData.key(
+                service: AppModel.keyServiceForWorkspace(workspaceURL),
+                provider: NoctwebLocalKeyProvider()
+            ),
+            context: "lab-deletion-journal-v1"
+        )
+        return try JSONDecoder().decode(
             PublisherIdentityDeletionJournal.self,
-            from: Data(contentsOf: url)
+            from: clear
         )
     }
 }
@@ -888,7 +1395,85 @@ private struct Fixture {
     let engine: NoctwebLabEngine
 
     func remove() {
+        try? NoctwebLocalKeyProvider().destroy(service: AppModel.keyServiceForWorkspace(workspaceURL))
         try? FileManager.default.removeItem(at: root)
+    }
+}
+
+private actor LoopbackConnectionRecorder {
+    nonisolated let endpoint: String
+    private let descriptor: Int32
+    private var acceptedCount = 0
+
+    init() throws {
+        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw Self.socketError() }
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+        address.sin_port = 0
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(
+                    descriptor,
+                    $0,
+                    socklen_t(MemoryLayout<sockaddr_in>.size)
+                )
+            }
+        }
+        guard bound == 0 else {
+            let error = Self.socketError()
+            Darwin.close(descriptor)
+            throw error
+        }
+        guard Darwin.listen(descriptor, 8) == 0 else {
+            let error = Self.socketError()
+            Darwin.close(descriptor)
+            throw error
+        }
+        var local = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let named = withUnsafeMutablePointer(to: &local) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.getsockname(descriptor, $0, &length)
+            }
+        }
+        guard named == 0 else {
+            let error = Self.socketError()
+            Darwin.close(descriptor)
+            throw error
+        }
+        let flags = Darwin.fcntl(descriptor, F_GETFL)
+        guard flags >= 0,
+              Darwin.fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            let error = Self.socketError()
+            Darwin.close(descriptor)
+            throw error
+        }
+        self.descriptor = descriptor
+        self.endpoint = "http://127.0.0.1:\(UInt16(bigEndian: local.sin_port))"
+    }
+
+    deinit {
+        Darwin.close(descriptor)
+    }
+
+    func observeForHalfSecond() async -> Int {
+        for _ in 0..<250 {
+            while true {
+                let connection = Darwin.accept(descriptor, nil, nil)
+                guard connection >= 0 else { break }
+                acceptedCount += 1
+                Darwin.close(connection)
+            }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        return acceptedCount
+    }
+
+    private static func socketError() -> NSError {
+        NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 }
 

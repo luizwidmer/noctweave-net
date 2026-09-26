@@ -158,6 +158,27 @@ an effective federation or visitor passthrough requirement before contacting a
 relay. An unknown publisher policy cannot justify retrieving over an unsupported
 route to discover whether a higher-priority override exists.
 
+The Lab's live hosted preview applies the same pre-request rule. It may use
+the signed publisher directive from a locally saved envelope when that
+envelope matches the exact hosted object ID. With no matching signed local
+envelope, an unknown publisher directive fails closed as passthrough unless
+a known higher-priority federation or host-operator directive explicitly
+requires direct routing.
+A changed draft directive does not alter the saved publication's authority,
+and the fetched envelope is verified and checked again before it is displayed.
+The active workspace must identify one configured host relay for that exact
+effective endpoint; its operator route takes precedence over the publisher
+and visitor. Missing or ambiguous host mappings fail closed unless federation
+explicitly requires direct. Hosted previews
+use only active-workspace sites, so switching workspaces may require connecting
+the same host there before the preview is available.
+Opening a saved live workspace does not contact its host or auto-preview a
+publication. Host connection checks are explicit direct requests and are
+blocked before I/O when the current federation, host-operator, or visitor
+route requires passthrough. Saved connection status is rechecked only when
+the user chooses Connect & Verify or Check directly. Publishing explicitly
+submits to the selected host over a direct connection.
+
 History, bookmarks, permissions, and capability secrets stay local. Capability
 URLs are excluded from ordinary history and telemetry by default.
 Until capability syntax is frozen, the native MVP treats every query- or

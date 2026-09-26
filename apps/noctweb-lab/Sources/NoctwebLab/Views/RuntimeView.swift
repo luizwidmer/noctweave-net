@@ -32,7 +32,8 @@ struct RuntimeView: View {
             }
         }
         .task {
-            if case .idle = model.runtimeResult {
+            if !model.isLiveHostedMode,
+               case .idle = model.runtimeResult {
                 model.navigateRuntime()
             }
         }

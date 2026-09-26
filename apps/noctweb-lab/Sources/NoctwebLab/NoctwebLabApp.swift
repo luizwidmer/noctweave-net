@@ -34,7 +34,19 @@ struct NoctwebLabApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if model.resetIsPending {
+                if appearance.legacyStorageDetected {
+                    ContentUnavailableView(
+                        "Legacy plaintext preference found",
+                        systemImage: "lock.doc",
+                        description: Text("This prerelease build left an appearance value in macOS preferences. Remove it before continuing; your data was not changed.")
+                    )
+                } else if let storageError = model.storageError {
+                    ContentUnavailableView(
+                        "Local Lab storage unavailable",
+                        systemImage: "lock.doc",
+                        description: Text(storageError)
+                    )
+                } else if model.resetIsPending {
                     VStack(spacing: 18) {
                         Image(systemName: "arrow.counterclockwise").font(.largeTitle)
                         Text("Finish resetting Noctweb Lab").font(.title2)
@@ -59,6 +71,7 @@ struct NoctwebLabApp: App {
                 .onChange(of: scenePhase) {
                     if scenePhase != .active {
                         model.flushPersistence()
+                        model.clearProcessKeyCache()
                     }
                 }
         }

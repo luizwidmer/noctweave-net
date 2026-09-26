@@ -3,23 +3,26 @@ import XCTest
 
 @MainActor
 final class NoctwebUITests: XCTestCase {
-    func testAppearancePersistsAndDefaultsToSystem() {
+    func testAppearanceIsSessionOnlyAndDetectsLegacyPlaintext() {
         let suite = "NoctwebUITests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("dark", forKey: "net.noctweave.noctweb.appearance")
 
         let store = NoctwebAppearanceStore(defaults: defaults)
         XCTAssertEqual(store.selection, .system)
+        XCTAssertTrue(store.legacyStorageDetected)
+        XCTAssertEqual(defaults.string(forKey: "net.noctweave.noctweb.appearance"), "dark")
 
         store.selection = .dark
-        XCTAssertEqual(
-            defaults.string(forKey: "net.noctweave.noctweb.appearance"),
-            "dark"
-        )
+        XCTAssertEqual(defaults.string(forKey: "net.noctweave.noctweb.appearance"), "dark")
         XCTAssertEqual(
             NoctwebAppearanceStore(defaults: defaults).selection,
-            .dark
+            .system
         )
+        store.reset()
+        XCTAssertFalse(store.legacyStorageDetected)
+        XCTAssertNil(defaults.object(forKey: "net.noctweave.noctweb.appearance"))
     }
 
     func testThemeDefinesCanonicalOffsetVeilPalette() {

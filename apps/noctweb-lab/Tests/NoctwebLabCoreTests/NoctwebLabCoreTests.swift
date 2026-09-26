@@ -5,6 +5,62 @@ import XCTest
 @testable import NoctwebLabCore
 
 final class NoctwebLabCoreTests: XCTestCase {
+    func testEncryptedLocalDataHidesMetadataAndRejectsWrongKey() throws {
+        let key = SymmetricKey(size: .bits256)
+        let otherKey = SymmetricKey(size: .bits256)
+        let plaintext = Data("canary:private-relay.example:secret-draft".utf8)
+        let stored = try NoctwebEncryptedLocalData.seal(
+            plaintext, using: key, context: "lab-workspaces-v1"
+        )
+        XCTAssertTrue(NoctwebEncryptedLocalData.isSealed(stored))
+        XCTAssertNil(stored.range(of: plaintext))
+        XCTAssertEqual(try NoctwebEncryptedLocalData.open(
+            stored, using: key, context: "lab-workspaces-v1"), plaintext)
+        XCTAssertThrowsError(try NoctwebEncryptedLocalData.open(
+            stored, using: otherKey, context: "lab-workspaces-v1"))
+        XCTAssertThrowsError(try NoctwebEncryptedLocalData.open(
+            stored, using: key, context: "lab-deletion-journal-v1"))
+        XCTAssertThrowsError(try NoctwebEncryptedLocalData.open(plaintext, using: key))
+    }
+
+    func testHostConfigurationRejectsMalformedRetentionBoundsWithoutTrapping() throws {
+        let key = Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+        let namespace = try RelayNamespace(publicKey: key)
+        let cases: [(minimum: Int, maximum: Int, valid: Bool)] = [
+            (60, 0, false),
+            (60, 59, false),
+            (60, 60, true),
+            (61, 60, false),
+            (60, 2_592_000, true),
+            (60, 2_592_001, false),
+            (60, Int.max, false),
+        ]
+
+        for entry in cases {
+            let wireConfiguration = NoctwebHostRelayConfiguration(
+                version: 1,
+                relayNamespaceID: namespace.id,
+                relaySuffix: namespace.suffix,
+                usesCustomSuffix: namespace.usesCustomSuffix,
+                hostSigningPublicKey: key.base64EncodedString(),
+                hostModule: "nw.net-host",
+                hostModuleVersion: 1,
+                maximumObjectBytes: 1_048_576,
+                minimumRetentionSeconds: entry.minimum,
+                maximumRetentionSeconds: entry.maximum
+            )
+            let decoded = try JSONDecoder().decode(
+                NoctwebHostRelayConfiguration.self,
+                from: JSONEncoder().encode(wireConfiguration)
+            )
+            XCTAssertEqual(
+                decoded.isValid,
+                entry.valid,
+                "minimum=\(entry.minimum), maximum=\(entry.maximum)"
+            )
+        }
+    }
+
     func testSignedRelayInfoDerivesHostConfigurationWithoutPublisherUI() throws {
         let hostSigningPublicKey = Data(repeating: 0x42, count: 32)
         let suffix = try XCTUnwrap(
@@ -505,19 +561,35 @@ final class NoctwebLabCoreTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: root) }
         let fileURL = root.appendingPathComponent("workspace.json")
+        defer {
+            try? NoctwebLocalKeyProvider().destroy(
+                service: JSONWorkspaceRepository.keyServiceForFileURL(fileURL)
+            )
+        }
         let legacy = WorkspaceSnapshot(
             schemaVersion: 2,
             selectedPublicationID: nil,
             publications: [],
             relays: RelayTopology.labDefault.nodes
         )
-        try NoctwebSecureFileIO.writePrivate(
+        let encrypted = try NoctwebEncryptedLocalData.seal(
             CanonicalJSON.encode(legacy),
+            using: NoctwebEncryptedLocalData.key(
+                service: JSONWorkspaceRepository.keyServiceForFileURL(fileURL),
+                provider: NoctwebLocalKeyProvider()
+            ),
+            context: "lab-core-workspace-v1"
+        )
+        try NoctwebSecureFileIO.writePrivate(
+            encrypted,
             to: fileURL,
-            maximumBytes: 32 * 1_024 * 1_024
+            maximumBytes: 32 * 1_024 * 1_024 + NoctwebEncryptedLocalData.overheadBytes
         )
 
-        let loaded = try JSONWorkspaceRepository(fileURL: fileURL).load()
+        let loaded = try JSONWorkspaceRepository(
+            fileURL: fileURL,
+            keyService: JSONWorkspaceRepository.keyServiceForFileURL(fileURL)
+        ).load()
 
         XCTAssertEqual(
             loaded.schemaVersion,
@@ -951,7 +1023,10 @@ final class NoctwebLabCoreTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let repository = JSONWorkspaceRepository(
-            fileURL: root.appendingPathComponent("workspace.json")
+            fileURL: root.appendingPathComponent("workspace.json"),
+            keyService: JSONWorkspaceRepository.keyServiceForFileURL(
+                root.appendingPathComponent("workspace.json")
+            )
         )
         XCTAssertThrowsError(try repository.save(snapshot))
     }
@@ -1456,8 +1531,16 @@ final class NoctwebLabCoreTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let repository = JSONWorkspaceRepository(
-            fileURL: directory.appendingPathComponent("workspace.json")
+            fileURL: directory.appendingPathComponent("workspace.json"),
+            keyService: JSONWorkspaceRepository.keyServiceForFileURL(
+                directory.appendingPathComponent("workspace.json")
+            )
         )
+        defer {
+            try? NoctwebLocalKeyProvider().destroy(
+                service: JSONWorkspaceRepository.keyServiceForFileURL(repository.fileURL)
+            )
+        }
         let snapshot = WorkspaceSnapshot(
             selectedPublicationID: nil,
             publications: [],
@@ -1465,6 +1548,9 @@ final class NoctwebLabCoreTests: XCTestCase {
         )
         try repository.save(snapshot)
         XCTAssertEqual(try repository.load(), snapshot)
+        let onDisk = try Data(contentsOf: repository.fileURL)
+        XCTAssertTrue(NoctwebEncryptedLocalData.isSealed(onDisk))
+        XCTAssertNil(onDisk.range(of: Data("host-salvador".utf8)))
         let attributes = try FileManager.default.attributesOfItem(
             atPath: repository.fileURL.path
         )
@@ -1472,6 +1558,24 @@ final class NoctwebLabCoreTests: XCTestCase {
             (attributes[.posixPermissions] as? NSNumber)?.intValue,
             0o600
         )
+    }
+
+    func testWorkspaceRepositoryRejectsLegacyPlaintextWithoutReplacingIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = JSONWorkspaceRepository(
+            fileURL: directory.appendingPathComponent("workspace.json"),
+            keyService: JSONWorkspaceRepository.keyServiceForFileURL(
+                directory.appendingPathComponent("workspace.json")
+            )
+        )
+        let legacy = Data("{\"legacy\":\"private-canary\"}".utf8)
+        try NoctwebSecureFileIO.writePrivate(
+            legacy, to: repository.fileURL, maximumBytes: 1_024
+        )
+        XCTAssertThrowsError(try repository.load())
+        XCTAssertEqual(try Data(contentsOf: repository.fileURL), legacy)
     }
 
     func testWorkspaceRepositoryDoesNotFollowFinalSymlink() throws {
@@ -1490,7 +1594,15 @@ final class NoctwebLabCoreTests: XCTestCase {
             at: workspaceURL,
             withDestinationURL: victimURL
         )
-        let repository = JSONWorkspaceRepository(fileURL: workspaceURL)
+        let repository = JSONWorkspaceRepository(
+            fileURL: workspaceURL,
+            keyService: JSONWorkspaceRepository.keyServiceForFileURL(workspaceURL)
+        )
+        defer {
+            try? NoctwebLocalKeyProvider().destroy(
+                service: JSONWorkspaceRepository.keyServiceForFileURL(workspaceURL)
+            )
+        }
         let snapshot = WorkspaceSnapshot(
             selectedPublicationID: nil,
             publications: [],
@@ -1508,7 +1620,10 @@ final class NoctwebLabCoreTests: XCTestCase {
             withDestinationURL: workspaceURL
         )
         XCTAssertThrowsError(
-            try JSONWorkspaceRepository(fileURL: aliasURL).load()
+            try JSONWorkspaceRepository(
+                fileURL: aliasURL,
+                keyService: JSONWorkspaceRepository.keyServiceForFileURL(aliasURL)
+            ).load()
         )
     }
 }

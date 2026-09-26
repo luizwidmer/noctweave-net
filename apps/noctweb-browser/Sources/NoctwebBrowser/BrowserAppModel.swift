@@ -3,6 +3,10 @@ import Foundation
 @preconcurrency import NoctweaveCore
 import NoctwebBrowserCore
 import enum NoctwebLabCore.NoctwebSecureFileIO
+import enum NoctwebLabCore.NoctwebSecureFileIOError
+import enum NoctwebLabCore.NoctwebEncryptedLocalData
+import enum NoctwebLabCore.NoctwebEncryptedLocalDataError
+import class NoctwebLabCore.NoctwebLocalKeyProvider
 import SwiftUI
 import WebKit
 
@@ -50,34 +54,54 @@ final class BrowserPersistenceStore {
 
     private let defaults: UserDefaults
     private let key = "net.noctweave.noctweb-browser.state.v1"
+    private let keyService: String
+    private let keyProvider = NoctwebLocalKeyProvider()
 
-    init(defaults: UserDefaults) {
+    init(
+        defaults: UserDefaults,
+        keyService: String = "net.noctweave.noctweb-browser.local-data.v1"
+    ) {
         self.defaults = defaults
+        self.keyService = keyService
     }
 
-    fileprivate func load() -> BrowserPersistentState? {
-        guard
-            let data = defaults.data(forKey: key),
-            data.count <= 2 * 1_024 * 1_024
-        else {
-            return nil
+    fileprivate func load() throws -> BrowserPersistentState? {
+        guard let stored = defaults.data(forKey: key) else { return nil }
+        guard stored.count <= 2 * 1_024 * 1_024 + NoctwebEncryptedLocalData.overheadBytes,
+              NoctwebEncryptedLocalData.isSealed(stored) else {
+            throw NoctwebEncryptedLocalDataError.malformed
         }
-        guard let state = try? JSONDecoder().decode(BrowserPersistentState.self, from: data) else {
-            return nil
-        }
+        var data = try NoctwebEncryptedLocalData.open(
+            stored,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: keyProvider
+            ),
+            context: "browser-state-v1"
+        )
+        defer { data.resetBytes(in: 0..<data.count) }
+        let state = try JSONDecoder().decode(BrowserPersistentState.self, from: data)
         let sanitized = sanitizingRestorationAddress(state)
         if sanitized.lastAddress != state.lastAddress {
-            // Remove capability-like URLs written by earlier versions as soon
-            // as they are read, without restoring or resolving them.
-            save(sanitized)
+            try save(sanitized)
         }
         return sanitized
     }
 
-    fileprivate func save(_ state: BrowserPersistentState) {
+    fileprivate func save(_ state: BrowserPersistentState) throws {
         let state = sanitizingRestorationAddress(state)
-        guard let data = try? JSONEncoder().encode(state) else { return }
-        defaults.set(data, forKey: key)
+        var data = try JSONEncoder().encode(state)
+        defer { data.resetBytes(in: 0..<data.count) }
+        guard data.count <= 2 * 1_024 * 1_024 else {
+            throw NoctwebSecureFileIOError.tooLarge
+        }
+        let stored = try NoctwebEncryptedLocalData.seal(
+            data,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: keyProvider
+            ),
+            context: "browser-state-v1"
+        )
+        defaults.set(stored, forKey: key)
     }
 
     private func sanitizingRestorationAddress(
@@ -93,12 +117,17 @@ final class BrowserPersistenceStore {
         return sanitized
     }
 
-    func purge() {
+    func purge() throws {
+        try keyProvider.destroy(service: keyService)
         if defaults === UserDefaults.standard, let domain = Bundle.main.bundleIdentifier {
             defaults.removePersistentDomain(forName: domain)
         } else {
             defaults.removeObject(forKey: key)
         }
+    }
+
+    func clearProcessKeyCache() {
+        keyProvider.clearProcessCache()
     }
 }
 
@@ -130,6 +159,7 @@ final class BrowserAppModel: ObservableObject {
     private var hasStarted = false
     private var sessionGeneration = UUID()
     @Published private(set) var isResetting = false
+    @Published private(set) var storageError: String?
 
     init(
         persistenceStore: BrowserPersistenceStore = .standard,
@@ -150,7 +180,13 @@ final class BrowserAppModel: ObservableObject {
         self.persistenceStore = persistenceStore
         usesDevelopmentFixtures = useDevelopmentFixtures
 
-        let persisted = persistenceStore.load()
+        let persisted: BrowserPersistentState?
+        do {
+            persisted = try persistenceStore.load()
+        } catch {
+            persisted = nil
+            storageError = "Saved browser data could not be opened. This prerelease build requires an encrypted state; review or remove the old browser preference in macOS settings before continuing."
+        }
         let profile: NoctwebNetworkProfile
         let initialAddress: String
         if useDevelopmentFixtures {
@@ -271,6 +307,7 @@ final class BrowserAppModel: ObservableObject {
     }
 
     func startIfNeeded() {
+        guard storageError == nil else { return }
         guard !hasStarted else { return }
         hasStarted = true
         if usesDevelopmentFixtures {
@@ -287,6 +324,10 @@ final class BrowserAppModel: ObservableObject {
         }
     }
 
+    func clearProcessKeyCache() {
+        persistenceStore.clearProcessKeyCache()
+    }
+
     func navigateFromAddressBar() {
         navigate(
             to: addressText,
@@ -300,7 +341,7 @@ final class BrowserAppModel: ObservableObject {
         pushCurrentAddress: Bool = true,
         normalizeUserInput: Bool = false
     ) {
-        guard !isResetting else { return }
+        guard !isResetting, storageError == nil else { return }
         guard relayIsConfigured else {
             failSelectedTab(
                 NoctwebBrowserError.blocked(
@@ -413,7 +454,7 @@ final class BrowserAppModel: ObservableObject {
     func connectRelay(
         navigateAfterConnection: Bool = false
     ) async {
-        guard !usesDevelopmentFixtures, !isResetting else { return }
+        guard !usesDevelopmentFixtures, !isResetting, storageError == nil else { return }
         sessionGeneration = UUID()
         let generation = sessionGeneration
         let requested = relayEndpointText
@@ -642,6 +683,7 @@ final class BrowserAppModel: ObservableObject {
         resolutionTasksByTab.values.forEach { $0.cancel() }
         resolutionTasksByTab.removeAll()
         resolutionGenerationByTab.removeAll()
+        try persistenceStore.purge()
         let profile = Self.unconfiguredProfile()
         session = try NoctwebBrowserSession(profiles: [profile], selectedProfileID: profile.id,
                                            initialAddress: Self.blankAddress)
@@ -653,7 +695,7 @@ final class BrowserAppModel: ObservableObject {
         showsSidebar = false; showsTrustInspector = false
         sidebarSection = .bookmarks
         hasStarted = true
-        persistenceStore.purge()
+        storageError = nil
         await clearWebData()
     }
 
@@ -957,8 +999,9 @@ final class BrowserAppModel: ObservableObject {
     }
 
     private func persist() {
-        guard !isResetting else { return }
-        persistenceStore.save(
+        guard !isResetting, storageError == nil else { return }
+        do {
+        try persistenceStore.save(
             BrowserPersistentState(
                 bookmarks: session.bookmarks,
                 history: session.history,
@@ -970,6 +1013,9 @@ final class BrowserAppModel: ObservableObject {
                     : (relayIsConfigured ? selectedProfile : nil)
             )
         )
+        } catch {
+            storageError = "Browser data could not be saved securely. Resolve the local storage error before continuing."
+        }
     }
 
     private func collapseSidebarIfEmpty() {

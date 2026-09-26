@@ -1,4 +1,5 @@
 import Dispatch
+import CryptoKit
 import Foundation
 import NoctwebLabCore
 import SwiftUI
@@ -32,6 +33,7 @@ final class AppModel: ObservableObject {
     @Published var inspectorEvidenceID: UUID?
     @Published var preserveRunHistory = true
     @Published private(set) var operationError: String?
+    @Published private(set) var storageError: String?
     @Published var relayPublisherAuthorization = ""
     @Published private(set) var relayRefreshInFlight = false
 
@@ -70,6 +72,9 @@ final class AppModel: ObservableObject {
     private let usesLiveRelay: Bool
     private let workspaceFileURL: URL
     private let identityDeletionJournalFileURL: URL
+    private let localKeyProvider = NoctwebLocalKeyProvider()
+    private let localDataKeyService: String
+    nonisolated private static let defaultLocalDataKeyService = "net.noctweave.noctweb-lab.local-data.v1"
     private let persistenceQueue = DispatchQueue(
         label: "org.noctweave.noctweb-lab.workspace-persistence",
         qos: .utility
@@ -100,54 +105,92 @@ final class AppModel: ObservableObject {
         let resolvedWorkspaceFileURL =
             workspaceFileURL ?? Self.defaultWorkspaceFileURL()
         self.workspaceFileURL = resolvedWorkspaceFileURL
+        self.localDataKeyService = workspaceFileURL == nil
+            ? Self.defaultLocalDataKeyService
+            : Self.keyServiceForWorkspace(resolvedWorkspaceFileURL)
         self.identityDeletionJournalFileURL =
             Self.publisherIdentityDeletionJournalURL(
                 for: resolvedWorkspaceFileURL
             )
 
-        if
-            let data = try? NoctwebSecureFileIO.read(
-                from: self.identityDeletionJournalFileURL,
-                maximumBytes: maximumIdentityDeletionJournalBytes,
-                requirePrivateOwner: true
-            ),
-            let journal = try? JSONDecoder().decode(
-                PublisherIdentityDeletionJournal.self,
-                from: data
-            ),
-            journal.pending.count <= maximumIdentityDeletionCount
-        {
-            var seenSiteIDs = Set<UUID>()
-            pendingPublisherIdentityDeletions = journal.pending.filter {
-                seenSiteIDs.insert($0.siteID).inserted
-            }
-        }
-
         let pendingReset = FileManager.default.fileExists(atPath:
             resolvedWorkspaceFileURL.appendingPathExtension("purge-pending-v1").path)
         resetIsPending = pendingReset
+        var storageUnreadable = false
+        if !pendingReset {
+            do {
+                var data = try Self.readProtectedData(
+                    from: identityDeletionJournalFileURL,
+                    maximumBytes: maximumIdentityDeletionJournalBytes,
+                    context: "lab-deletion-journal-v1",
+                    keyService: localDataKeyService,
+                    provider: localKeyProvider
+                )
+                defer { data.resetBytes(in: 0..<data.count) }
+                let journal = try JSONDecoder().decode(
+                    PublisherIdentityDeletionJournal.self, from: data
+                )
+                guard journal.pending.count <= maximumIdentityDeletionCount else {
+                    throw NoctwebSecureFileIOError.tooLarge
+                }
+                var seenSiteIDs = Set<UUID>()
+                pendingPublisherIdentityDeletions = journal.pending.filter {
+                    seenSiteIDs.insert($0.siteID).inserted
+                }
+            } catch NoctwebSecureFileIOError.notFound {
+                // New installations do not have a deletion journal.
+            } catch {
+                storageUnreadable = true
+            }
+        }
         let initialWorkspaces: [Workspace]
-        if pendingReset {
+        if pendingReset || storageUnreadable {
             initialWorkspaces = []
-        } else if
-            let data = try? NoctwebSecureFileIO.read(
-                from: self.workspaceFileURL,
-                maximumBytes: maximumPersistedWorkspaceBytes,
-                requirePrivateOwner: true
-            ),
-            let decoded = try? JSONDecoder().decode([Workspace].self, from: data),
-            decoded.count <= maximumPersistedWorkspaceCount,
-            decoded.reduce(0, { $0 + $1.sites.count }) <= maximumPersistedSiteCount
-        {
-            initialWorkspaces = decoded
         } else {
-            initialWorkspaces = [
-                self.usesLiveRelay ? .liveStarter() : .starter()
-            ]
+            do {
+                var data = try Self.readProtectedData(
+                    from: self.workspaceFileURL,
+                    maximumBytes: maximumPersistedWorkspaceBytes,
+                    context: "lab-workspaces-v1",
+                    keyService: localDataKeyService,
+                    provider: localKeyProvider
+                )
+                defer { data.resetBytes(in: 0..<data.count) }
+                let decoded = try JSONDecoder().decode([Workspace].self, from: data)
+                var siteCount = 0
+                guard decoded.count <= maximumPersistedWorkspaceCount else {
+                    throw NoctwebSecureFileIOError.tooLarge
+                }
+                for workspace in decoded {
+                    guard workspace.sites.count <= maximumPersistedSiteCount - siteCount else {
+                        throw NoctwebSecureFileIOError.tooLarge
+                    }
+                    siteCount += workspace.sites.count
+                }
+                initialWorkspaces = decoded
+            } catch NoctwebSecureFileIOError.notFound {
+                initialWorkspaces = [self.usesLiveRelay ? .liveStarter() : .starter()]
+            } catch {
+                storageUnreadable = true
+                initialWorkspaces = []
+            }
+        }
+        if storageUnreadable {
+            storageError = "Saved Lab data could not be opened. A prerelease plaintext or damaged workspace is preserved; review or remove those files before continuing."
         }
         workspaces = initialWorkspaces
         if self.usesLiveRelay {
             Self.removeDevelopmentFixtures(in: &workspaces)
+            // A persisted online flag is not a current connection check.
+            // Restoring a workspace must not contact hosts before the visitor
+            // can choose a route.
+            for workspaceIndex in workspaces.indices {
+                for relayIndex in workspaces[workspaceIndex].relays.indices {
+                    workspaces[workspaceIndex].relays[relayIndex].isOnline = false
+                    workspaces[workspaceIndex].relays[relayIndex]
+                        .latencyMilliseconds = 0
+                }
+            }
         } else {
             Self.migrateRelayNamespaces(in: &workspaces)
         }
@@ -177,9 +220,7 @@ final class AppModel: ObservableObject {
         }
 
         trackOperation { [weak self] in
-            if self?.usesLiveRelay == true {
-                await self?.refreshHostRelays()
-            } else {
+            if self?.usesLiveRelay == false {
                 await self?.restoreEngineState()
             }
             await self?.reconcilePendingPublisherIdentityDeletions()
@@ -188,7 +229,7 @@ final class AppModel: ObservableObject {
     }
 
     private func trackOperation(_ operation: @escaping @MainActor () async -> Void) {
-        guard !resetIsPending else { return }
+        guard !resetIsPending, storageError == nil else { return }
         let id = UUID()
         backgroundOperations[id] = Task { [weak self] in
             defer { self?.backgroundOperations[id] = nil }
@@ -217,7 +258,7 @@ final class AppModel: ObservableObject {
         do {
             // Keep the intent until keys, files, and preferences are all removed.
             // Startup repeats it before loading any old workspace.
-            try NoctwebSecureFileIO.writePrivate(Data("purge-v1".utf8), to: resetMarkerURL, maximumBytes: 64)
+            try NoctwebSecureFileIO.writePrivate(Data(), to: resetMarkerURL, maximumBytes: 0, allowEmpty: true)
             resetIsPending = true
             let operations = Array(backgroundOperations.values)
             operations.forEach { $0.cancel() }
@@ -230,6 +271,7 @@ final class AppModel: ObservableObject {
             self.scheduledPersistence = nil
             persistenceQueue.sync {}
             try await engine.purgeLocalState()
+            try localKeyProvider.destroy(service: localDataKeyService)
             workspaces = []
             activeWorkspaceID = nil; selectedSiteID = nil
             runtimeResult = .idle; runtimeHistory = []; runtimeHistoryIndex = -1
@@ -254,6 +296,7 @@ final class AppModel: ObservableObject {
             }
             try FileManager.default.removeItem(at: resetMarkerURL)
             resetIsPending = false
+            storageError = nil
             workspaces = [usesLiveRelay ? .liveStarter() : .starter()]
             activeWorkspaceID = workspaces.first?.id
             selectedSiteID = workspaces.first?.sites.first?.id
@@ -271,6 +314,8 @@ final class AppModel: ObservableObject {
         guard let activeWorkspaceID else { return nil }
         return workspaces.first(where: { $0.id == activeWorkspaceID })
     }
+
+    var isLiveHostedMode: Bool { usesLiveRelay }
 
     var selectedSite: SiteProject? {
         guard let selectedSiteID else { return nil }
@@ -667,13 +712,17 @@ final class AppModel: ObservableObject {
     }
 
     func flushPersistence() {
-        guard !resetIsPending else { return }
+        guard !resetIsPending, storageError == nil else { return }
         do {
             try saveWorkspaces()
         } catch {
             operationError =
                 "Workspace could not be saved: \(error.localizedDescription)"
         }
+    }
+
+    func clearProcessKeyCache() {
+        localKeyProvider.clearProcessCache()
     }
 
     private func markDraftChanged() {
@@ -885,7 +934,22 @@ final class AppModel: ObservableObject {
                 where: { $0.id == relayID }
             )
         else { return }
-        let endpoint = workspaces[workspaceIndex].relays[relayIndex].endpoint
+        let relay = workspaces[workspaceIndex].relays[relayIndex]
+        // Discovery also contacts the host directly and exposes connection
+        // metadata. It cannot run while a known route requires passthrough.
+        guard hostedRoutingDecision(
+            publisher: .open,
+            operatorDirective: relay.resolvedOperatorRouteDirective
+        ).directive == .direct else {
+            workspaces[workspaceIndex].relays[relayIndex].isOnline = false
+            if reportError {
+                operationError =
+                    "Host discovery requires a passthrough adapter for the current route."
+            }
+            persist()
+            return
+        }
+        let endpoint = relay.endpoint
         let started = Date()
         do {
             let client = try NoctwebHostRelayClient(endpoint: endpoint)
@@ -1523,15 +1587,20 @@ final class AppModel: ObservableObject {
             draftChangedDuringPublication = false
             persist()
 
-            runtimeAddress = verified.object.address
-            applyHostedPublication(
-                verified,
-                sourceSiteID: initialSite.id,
-                relayName: relay.name
-            )
-            if runtimeHistory.last != runtimeAddress {
-                runtimeHistory.append(runtimeAddress)
-                runtimeHistoryIndex = runtimeHistory.count - 1
+            if activeWorkspaceID == workspaceID {
+                runtimeAddress = verified.object.address
+                applyHostedPublication(
+                    verified,
+                    sourceSiteID: initialSite.id,
+                    operatorDirective: configuredHostedOperatorDirective(
+                        for: relay.endpoint
+                    ) ?? .passthrough,
+                    relayName: relay.name
+                )
+                if runtimeHistory.last != runtimeAddress {
+                    runtimeHistory.append(runtimeAddress)
+                    runtimeHistoryIndex = runtimeHistory.count - 1
+                }
             }
         } catch {
             failPublication(error.localizedDescription)
@@ -1737,15 +1806,38 @@ final class AppModel: ObservableObject {
     }
 
     private func performHostedResolution(_ address: String) async {
+        let workspaceID = activeWorkspaceID
         guard
-            let site = workspaces
-                .flatMap(\.sites)
-                .first(where: { $0.address == address }),
+            let site = hostedSite(for: address),
             let endpoint = site.hostRelayEndpoint,
             let hostObjectID = site.hostObjectID
         else {
             runtimeResult = .unavailable(
                 message: "No verified relay-hosted revision was found for this address."
+            )
+            return
+        }
+        // The host client always makes a direct request. Resolve every route
+        // authority already known locally before that request can leave Lab.
+        // A draft publisher choice is not authoritative for a hosted revision.
+        let cachedPublisherDirective = cachedHostedPublisherDirective(
+            site: site,
+            address: address,
+            objectID: hostObjectID
+        )
+        let operatorDirective = configuredHostedOperatorDirective(
+            for: endpoint
+        ) ?? .passthrough
+        // An unknown signed publisher rule could require passthrough. Treat
+        // that uncertainty as passthrough until a matching signed local
+        // envelope establishes otherwise. Federation policy still has its
+        // higher precedence and may explicitly force direct routing.
+        guard hostedRoutingDecision(
+            publisher: cachedPublisherDirective ?? .passthrough,
+            operatorDirective: operatorDirective
+        ).directive == .direct else {
+            runtimeResult = .unavailable(
+                message: "This publication requires a passthrough adapter, which is not configured for the connected host relay."
             )
             return
         }
@@ -1761,6 +1853,19 @@ final class AppModel: ObservableObject {
                     == site.relayNamespaceID else {
                 throw NoctwebHostRelayError.invalidResponse
             }
+            guard activeWorkspaceID == workspaceID,
+                  runtimeAddress == address else { return }
+            guard let currentSite = hostedSite(for: address),
+                  currentSite.id == site.id,
+                  currentSite.hostObjectID == hostObjectID,
+                  currentSite.hostRelayEndpoint == endpoint,
+                  (configuredHostedOperatorDirective(for: endpoint)
+                    ?? .passthrough) == operatorDirective else {
+                runtimeResult = .unavailable(
+                    message: "The hosted revision or route policy changed while loading. Reload it."
+                )
+                return
+            }
             trustEvidence = Self.hostedEvidence(
                 publication: publication,
                 receipt: hosted.receipt,
@@ -1770,9 +1875,12 @@ final class AppModel: ObservableObject {
             applyHostedPublication(
                 publication,
                 sourceSiteID: site.id,
+                operatorDirective: operatorDirective,
                 relayName: URL(string: endpoint)?.host ?? endpoint
             )
         } catch {
+            guard activeWorkspaceID == workspaceID,
+                  runtimeAddress == address else { return }
             trustEvidence = Self.rejectedEvidence(
                 for: error,
                 includeConsensus: false
@@ -1789,20 +1897,13 @@ final class AppModel: ObservableObject {
     private func applyHostedPublication(
         _ publication: HostedCapsuleEnvelope,
         sourceSiteID: UUID,
+        operatorDirective: RouteDirective,
         relayName: String
     ) {
         let object = publication.object
-        let federation = FederationRoutingPolicy(
-            mode: activeWorkspace?.resolvedFederationMode ?? .solo,
-            directive: activeWorkspace?.resolvedFederationMode == .solo
-                ? .open
-                : activeWorkspace?.resolvedFederationRouteDirective ?? .open
-        )
-        let decision = RoutingPolicyResolver.resolve(
-            federation: federation,
-            relayOperator: .open,
+        let decision = hostedRoutingDecision(
             publisher: object.routeDirective ?? .open,
-            visitor: routeMode.directive
+            operatorDirective: operatorDirective
         )
         guard decision.directive == .direct else {
             runtimeResult = .unavailable(
@@ -1828,6 +1929,73 @@ final class AppModel: ObservableObject {
             snapshot: snapshot,
             relayPath: [relayName]
         )
+    }
+
+    private func cachedHostedPublisherDirective(
+        site: SiteProject,
+        address: String,
+        objectID: String
+    ) -> RouteDirective? {
+        guard let envelope = site.publishedEnvelope,
+              NoctwebHostRelayClient.objectID(for: envelope) == objectID,
+              let publication = try? CanonicalJSON.decode(
+                HostedCapsuleEnvelope.self,
+                from: envelope
+              ).verified(),
+              publication.object.address == address,
+              publication.object.relayNamespaceID == site.relayNamespaceID,
+              publication.object.publisherID == site.publisherID else {
+            return nil
+        }
+        return publication.object.routeDirective ?? .open
+    }
+
+    private func hostedSite(for address: String) -> SiteProject? {
+        if let selectedSite, selectedSite.address == address {
+            return selectedSite
+        }
+        let matches = activeWorkspace?.sites.filter {
+            $0.address == address
+        } ?? []
+        // An address may exist in several saved drafts. Without a selected
+        // site, never silently borrow another draft's hosted endpoint.
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private func hostedRoutingDecision(
+        publisher: RouteDirective,
+        operatorDirective: RouteDirective
+    ) -> RoutingDecision {
+        let federation = FederationRoutingPolicy(
+            mode: activeWorkspace?.resolvedFederationMode ?? .solo,
+            directive: activeWorkspace?.resolvedFederationMode == .solo
+                ? .open
+                : activeWorkspace?.resolvedFederationRouteDirective ?? .open
+        )
+        return RoutingPolicyResolver.resolve(
+            federation: federation,
+            relayOperator: operatorDirective,
+            publisher: publisher,
+            visitor: routeMode.directive
+        )
+    }
+
+    private func configuredHostedOperatorDirective(
+        for endpoint: String
+    ) -> RouteDirective? {
+        guard let target = try? NoctwebHostRelayClient.canonicalBaseURL(
+            for: endpoint
+        ) else { return nil }
+        let matchingHosts = activeWorkspace?.relays.filter { relay in
+            relay.supports(.host)
+                && (try? NoctwebHostRelayClient.canonicalBaseURL(
+                    for: relay.endpoint
+                )) == target
+        } ?? []
+        // Missing or duplicate endpoint mappings have no single operator
+        // authority. A higher-priority federation directive may still decide.
+        guard matchingHosts.count == 1 else { return nil }
+        return matchingHosts[0].resolvedOperatorRouteDirective
     }
 
     private func applyResolution(
@@ -2537,13 +2705,15 @@ final class AppModel: ObservableObject {
     }
 
     private func saveWorkspaces() throws {
-        guard !resetIsPending else { throw CancellationError() }
+        guard !resetIsPending, storageError == nil else { throw CancellationError() }
         scheduledPersistence?.cancel()
         scheduledPersistence = nil
         let snapshot = workspaces
         let url = workspaceFileURL
+        let provider = localKeyProvider
+        let keyService = localDataKeyService
         try persistenceQueue.sync {
-            try Self.writeWorkspaces(snapshot, to: url)
+            try Self.writeWorkspaces(snapshot, to: url, keyService: keyService, provider: provider)
         }
     }
 
@@ -2579,28 +2749,36 @@ final class AppModel: ObservableObject {
     }
 
     private func savePublisherIdentityDeletionJournal() throws {
-        guard !resetIsPending else { throw CancellationError() }
+        guard !resetIsPending, storageError == nil else { throw CancellationError() }
         let snapshot = PublisherIdentityDeletionJournal(
             pending: pendingPublisherIdentityDeletions.sorted {
                 $0.siteID.uuidString < $1.siteID.uuidString
             }
         )
         let url = identityDeletionJournalFileURL
+        let provider = localKeyProvider
+        let keyService = localDataKeyService
         try persistenceQueue.sync {
             try Self.writePublisherIdentityDeletionJournal(
                 snapshot,
-                to: url
+                to: url,
+                keyService: keyService,
+                provider: provider
             )
         }
     }
 
     private func scheduleWorkspaceSave() {
-        guard !resetIsPending else { return }
+        guard !resetIsPending, storageError == nil else { return }
         scheduledPersistence?.cancel()
 
-        let encoded: Data
+        let sealed: Data
         do {
-            encoded = try JSONEncoder().encode(workspaces)
+            var encoded = try JSONEncoder().encode(workspaces)
+            defer { encoded.resetBytes(in: 0..<encoded.count) }
+            sealed = try Self.sealWorkspaceData(
+                encoded, keyService: localDataKeyService, provider: localKeyProvider
+            )
         } catch {
             operationError =
                 "Workspace could not be saved: \(error.localizedDescription)"
@@ -2613,8 +2791,8 @@ final class AppModel: ObservableObject {
             do {
                 try await Task.sleep(for: .milliseconds(350))
                 try Task.checkCancellation()
-                try await Self.writeWorkspaceData(
-                    encoded,
+                try await Self.writeSealedWorkspaceData(
+                    sealed,
                     to: url,
                     on: queue
                 )
@@ -2628,7 +2806,7 @@ final class AppModel: ObservableObject {
     }
 
     private func persist() {
-        guard !resetIsPending else { return }
+        guard !resetIsPending, storageError == nil else { return }
         do {
             try saveWorkspaces()
         } catch {
@@ -2640,32 +2818,59 @@ final class AppModel: ObservableObject {
 
     nonisolated private static func writeWorkspaces(
         _ workspaces: [Workspace],
-        to workspaceFileURL: URL
+        to workspaceFileURL: URL,
+        keyService: String,
+        provider: NoctwebLocalKeyProvider
     ) throws {
-        let encoded = try JSONEncoder().encode(workspaces)
-        try writeWorkspaceData(encoded, to: workspaceFileURL)
+        var encoded = try JSONEncoder().encode(workspaces)
+        defer { encoded.resetBytes(in: 0..<encoded.count) }
+        try writeWorkspaceData(encoded, to: workspaceFileURL, keyService: keyService, provider: provider)
     }
 
     nonisolated private static func writeWorkspaceData(
         _ encoded: Data,
-        to workspaceFileURL: URL
+        to workspaceFileURL: URL,
+        keyService: String,
+        provider: NoctwebLocalKeyProvider
     ) throws {
+        let stored = try sealWorkspaceData(encoded, keyService: keyService, provider: provider)
         try NoctwebSecureFileIO.writePrivate(
-            encoded,
+            stored,
             to: workspaceFileURL,
-            maximumBytes: maximumPersistedWorkspaceBytes
+            maximumBytes: maximumPersistedWorkspaceBytes + NoctwebEncryptedLocalData.overheadBytes
         )
     }
 
-    nonisolated private static func writeWorkspaceData(
+    nonisolated private static func sealWorkspaceData(
         _ encoded: Data,
+        keyService: String,
+        provider: NoctwebLocalKeyProvider
+    ) throws -> Data {
+        guard encoded.count <= maximumPersistedWorkspaceBytes else {
+            throw NoctwebSecureFileIOError.tooLarge
+        }
+        return try NoctwebEncryptedLocalData.seal(
+            encoded,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: provider
+            ),
+            context: "lab-workspaces-v1"
+        )
+    }
+
+    nonisolated private static func writeSealedWorkspaceData(
+        _ sealed: Data,
         to workspaceFileURL: URL,
         on queue: DispatchQueue
     ) async throws {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
                 do {
-                    try writeWorkspaceData(encoded, to: workspaceFileURL)
+                    try NoctwebSecureFileIO.writePrivate(
+                        sealed,
+                        to: workspaceFileURL,
+                        maximumBytes: maximumPersistedWorkspaceBytes + NoctwebEncryptedLocalData.overheadBytes
+                    )
                     continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
@@ -2676,16 +2881,58 @@ final class AppModel: ObservableObject {
 
     nonisolated private static func writePublisherIdentityDeletionJournal(
         _ journal: PublisherIdentityDeletionJournal,
-        to journalFileURL: URL
+        to journalFileURL: URL,
+        keyService: String,
+        provider: NoctwebLocalKeyProvider
     ) throws {
         guard journal.pending.count <= maximumIdentityDeletionCount else {
             throw NoctwebSecureFileIOError.tooLarge
         }
-        let encoded = try JSONEncoder().encode(journal)
-        try NoctwebSecureFileIO.writePrivate(
+        var encoded = try JSONEncoder().encode(journal)
+        defer { encoded.resetBytes(in: 0..<encoded.count) }
+        guard encoded.count <= maximumIdentityDeletionJournalBytes else {
+            throw NoctwebSecureFileIOError.tooLarge
+        }
+        let stored = try NoctwebEncryptedLocalData.seal(
             encoded,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: provider
+            ),
+            context: "lab-deletion-journal-v1"
+        )
+        try NoctwebSecureFileIO.writePrivate(
+            stored,
             to: journalFileURL,
-            maximumBytes: maximumIdentityDeletionJournalBytes
+            maximumBytes: maximumIdentityDeletionJournalBytes + NoctwebEncryptedLocalData.overheadBytes
+        )
+    }
+
+    nonisolated private static func readProtectedData(
+        from fileURL: URL,
+        maximumBytes: Int,
+        context: String,
+        keyService: String,
+        provider: NoctwebLocalKeyProvider
+    ) throws -> Data {
+        guard FileManager.default.fileExists(
+            atPath: fileURL.deletingLastPathComponent().path
+        ) else {
+            throw NoctwebSecureFileIOError.notFound
+        }
+        let stored = try NoctwebSecureFileIO.read(
+            from: fileURL,
+            maximumBytes: maximumBytes + NoctwebEncryptedLocalData.overheadBytes,
+            requirePrivateOwner: true
+        )
+        guard NoctwebEncryptedLocalData.isSealed(stored) else {
+            throw NoctwebEncryptedLocalDataError.malformed
+        }
+        return try NoctwebEncryptedLocalData.open(
+            stored,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: provider
+            ),
+            context: context
         )
     }
 
@@ -2695,6 +2942,13 @@ final class AppModel: ObservableObject {
         workspaceFileURL.appendingPathExtension(
             "publisher-key-deletions-v1.json"
         )
+    }
+
+    nonisolated static func keyServiceForWorkspace(_ workspaceFileURL: URL) -> String {
+        let path = workspaceFileURL.standardizedFileURL.path
+        let digest = SHA256.hash(data: Data(path.utf8))
+        let suffix = digest.map { String(format: "%02x", $0) }.joined()
+        return "net.noctweave.noctweb-lab.local-data.path.\(suffix)"
     }
 
     private static func defaultWorkspaceFileURL() -> URL {

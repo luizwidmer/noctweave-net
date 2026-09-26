@@ -13,14 +13,18 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     private let fixtureResolver: DeterministicNoctwebResolver
     private let federationResolver = FederatedNoctwebResolver()
     private let labWorkspaceURL: URL
+    private let labWorkspaceKeyService: String
+    private let localKeyProvider = NoctwebLocalKeyProvider()
 
     init(
         fixtureResolver: DeterministicNoctwebResolver,
-        labWorkspaceURL: URL? = nil
+        labWorkspaceURL: URL? = nil,
+        labWorkspaceKeyService: String = "net.noctweave.noctweb-lab.local-data.v1"
     ) {
         self.fixtureResolver = fixtureResolver
         self.labWorkspaceURL =
             labWorkspaceURL ?? Self.defaultLabWorkspaceURL()
+        self.labWorkspaceKeyService = labWorkspaceKeyService
     }
 
     func resolve(
@@ -158,10 +162,26 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
         } catch {
             throw NoctwebBrowserError.unresolvedName(address)
         }
-        let workspaces = try JSONDecoder().decode(
-            [LabWorkspaceRecord].self,
-            from: data
-        )
+        let workspaces: [LabWorkspaceRecord]
+        do {
+            guard let key = try localKeyProvider.loadExisting(
+                service: labWorkspaceKeyService
+            ) else {
+                throw NoctwebEncryptedLocalDataError.malformed
+            }
+            var plaintext = try NoctwebEncryptedLocalData.open(
+                data, using: key, context: "lab-workspaces-v1"
+            )
+            defer { plaintext.resetBytes(in: 0..<plaintext.count) }
+            workspaces = try JSONDecoder().decode(
+                [LabWorkspaceRecord].self,
+                from: plaintext
+            )
+        } catch {
+            throw NoctwebBrowserError.verificationFailed(
+                "the local Lab workspace could not be decrypted"
+            )
+        }
         guard workspaces.count <= Self.maximumWorkspaceCount else {
             throw NoctwebBrowserError.verificationFailed(
                 "the local Lab workspace exceeds its profile bounds"

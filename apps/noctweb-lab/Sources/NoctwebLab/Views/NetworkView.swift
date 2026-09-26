@@ -39,7 +39,7 @@ struct NetworkView: View {
     private var connectionCard: some View {
         SectionCard("Connect a host relay", systemImage: "link") {
             Text(
-                "Enter the address shown by your relay operator. The Lab checks hosting support and relay identity before saving it."
+                "Enter your relay operator's address. The Lab saves it, then checks hosting support and identity when the route allows direct contact."
             )
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -68,7 +68,7 @@ struct NetworkView: View {
             }
 
             Text(
-                "HTTPS is required for remote relays. Cleartext HTTP is accepted only on loopback for local development."
+                "Connect & Verify contacts the host directly when your route allows it. HTTPS is required for remote relays; HTTP is only for loopback."
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -103,7 +103,7 @@ struct NetworkView: View {
                 Image(
                     systemName: relay.isOnline
                         ? "externaldrive.connected.to.line.below"
-                        : "externaldrive.badge.xmark"
+                        : "arrow.clockwise.circle"
                 )
                 .font(.title3)
                 .foregroundStyle(relay.isOnline ? .green : .orange)
@@ -121,10 +121,10 @@ struct NetworkView: View {
                 Spacer(minLength: 12)
 
                 StatusPill(
-                    title: relay.isOnline ? "Connected" : "Unavailable",
+                    title: relay.isOnline ? "Connected" : "Check connection",
                     systemImage: relay.isOnline
                         ? "checkmark.circle.fill"
-                        : "exclamationmark.triangle.fill",
+                        : "arrow.clockwise.circle",
                     color: relay.isOnline ? .green : .orange
                 )
             }
@@ -148,10 +148,12 @@ struct NetworkView: View {
                                     .truncationMode(.middle)
                                     .textSelection(.enabled)
                             }
-                            GridRow {
-                                Text("Last latency").foregroundStyle(.secondary)
-                                Text("\(relay.latencyMilliseconds) ms")
-                                    .font(.system(.caption, design: .monospaced))
+                            if relay.latencyMilliseconds > 0 {
+                                GridRow {
+                                    Text("Last latency").foregroundStyle(.secondary)
+                                    Text("\(relay.latencyMilliseconds) ms")
+                                        .font(.system(.caption, design: .monospaced))
+                                }
                             }
                         }
                         .font(.caption)
@@ -162,7 +164,7 @@ struct NetworkView: View {
                                 await model.refreshHostRelay(relay.id)
                             }
                         } label: {
-                            Label("Check connection", systemImage: "arrow.clockwise")
+                            Label("Check directly", systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
 

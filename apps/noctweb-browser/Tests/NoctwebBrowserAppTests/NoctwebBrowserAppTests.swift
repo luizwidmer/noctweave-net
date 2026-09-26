@@ -6,11 +6,41 @@ import XCTest
 
 final class NoctwebBrowserAppTests: XCTestCase {
     @MainActor
+    func testBrowserStateIsSealedAndTamperingFailsClosed() async throws {
+        let suite = "NoctwebBrowserEncryptedTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "net.noctweave.noctweb-browser.state.v1"
+        let model = BrowserAppModel(
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suite),
+            useDevelopmentFixtures: true
+        )
+        model.startIfNeeded()
+        for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(model.selectedSite)
+        model.toggleBookmark()
+        let stored = try XCTUnwrap(defaults.data(forKey: key))
+        XCTAssertTrue(NoctwebEncryptedLocalData.isSealed(stored))
+        XCTAssertNil(stored.range(of: Data("welcome.local-dev".utf8)))
+        var tampered = stored
+        tampered[tampered.index(before: tampered.endIndex)] ^= 1
+        defaults.set(tampered, forKey: key)
+        let reopened = BrowserAppModel(
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suite),
+            useDevelopmentFixtures: true
+        )
+        XCTAssertNotNil(reopened.storageError)
+        XCTAssertEqual(defaults.data(forKey: key), tampered)
+    }
+
+    @MainActor
     func testPurgeClearsBrowsingStateAndStaleResolutions() async throws {
         let suite = "NoctwebBrowserResetTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let persistence = BrowserPersistenceStore(defaults: defaults)
+        let persistence = isolatedPersistenceStore(defaults: defaults, suite: suite)
         let model = BrowserAppModel(persistenceStore: persistence, useDevelopmentFixtures: true)
         model.startIfNeeded()
         for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
@@ -54,7 +84,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
             let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
             defer { defaults.removePersistentDomain(forName: suite) }
             let model = BrowserAppModel(
-                persistenceStore: BrowserPersistenceStore(defaults: defaults),
+                persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suite),
                 useDevelopmentFixtures: true
             )
             model.startIfNeeded()
@@ -73,14 +103,22 @@ final class NoctwebBrowserAppTests: XCTestCase {
             let saved = try XCTUnwrap(defaults.data(
                 forKey: "net.noctweave.noctweb-browser.state.v1"
             ))
-            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: saved) as? [String: Any])
+            let clear = try NoctwebEncryptedLocalData.open(
+                saved,
+                using: NoctwebEncryptedLocalData.key(
+                    service: "net.noctweave.noctweb-browser-tests.\(suite)",
+                    provider: NoctwebLocalKeyProvider()
+                ),
+                context: "browser-state-v1"
+            )
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: clear) as? [String: Any])
             XCTAssertEqual(object["lastAddress"] as? String, "noct://start.unconfigured/")
             XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("private-"))
         }
     }
 
     @MainActor
-    func testPreviouslyPersistedCapabilityURLIsRemovedOnLoad() throws {
+    func testLegacyPlaintextStateIsBlockedAndPreserved() throws {
         let suite = "NoctwebBrowserPrivacyTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -90,12 +128,14 @@ final class NoctwebBrowserAppTests: XCTestCase {
             "lastAddress": "noct://welcome.local-dev/?cap=old-private-token",
         ]), forKey: key)
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suite),
             useDevelopmentFixtures: true
         )
+        XCTAssertNotNil(model.storageError)
         XCTAssertFalse(model.addressText.contains("old-private-token"))
         let saved = try XCTUnwrap(defaults.data(forKey: key))
-        XCTAssertFalse(String(decoding: saved, as: UTF8.self).contains("old-private-token"))
+        XCTAssertTrue(String(decoding: saved, as: UTF8.self).contains("old-private-token"),
+            "Prerelease developer data must not be silently destroyed")
     }
 
     @MainActor
@@ -105,7 +145,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults)
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suiteName)
         )
 
         XCTAssertFalse(model.relayIsConfigured)
@@ -132,7 +172,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suiteName),
             useDevelopmentFixtures: true
         )
 
@@ -174,7 +214,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suiteName),
             useDevelopmentFixtures: true
         )
 
@@ -205,6 +245,37 @@ final class NoctwebBrowserAppTests: XCTestCase {
         XCTAssertEqual(snapshot.rootURL.scheme, "noctweb-site")
         XCTAssertEqual(snapshot.rootURL.host, snapshot.host)
         XCTAssertEqual(snapshot.files.count, site.bundle.files.count)
+    }
+
+    func testDevelopmentResolverPreservesAndRejectsPlaintextLabWorkspace() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(
+            path: "NoctwebBrowserLegacyLabTests-\(UUID().uuidString)",
+            directoryHint: .isDirectory
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspaceURL = root.appending(path: "workspaces.json")
+        let plaintext = Data("PRIVATE_LAB_WORKSPACE_CANARY".utf8)
+        try NoctwebSecureFileIO.writePrivate(
+            plaintext, to: workspaceURL, maximumBytes: 32 * 1_024 * 1_024
+        )
+        let environment = try DeterministicNoctwebResolver.developmentEnvironment()
+        let resolver = DevelopmentNoctwebResolver(
+            fixtureResolver: environment.resolver,
+            labWorkspaceURL: workspaceURL,
+            labWorkspaceKeyService: "net.noctweave.noctweb-browser-tests.missing.\(UUID().uuidString)"
+        )
+        do {
+            _ = try await resolver.resolve(
+                NoctwebNavigationURL(parsing: "noct://unlisted.local-dev/"),
+                profile: environment.profile,
+                visitorDirective: .open
+            )
+            XCTFail("Plaintext Lab workspace must not load")
+        } catch NoctwebBrowserError.verificationFailed(let reason) {
+            XCTAssertTrue(reason.contains("could not be decrypted"))
+        }
+        XCTAssertEqual(try Data(contentsOf: workspaceURL), plaintext)
     }
 
     func testDevelopmentResolverReverifiesNativeLabPublication() async throws {
@@ -292,8 +363,15 @@ final class NoctwebBrowserAppTests: XCTestCase {
         )
         defer { try? FileManager.default.removeItem(at: root) }
         let workspaceURL = root.appending(path: "workspaces.json")
+        let labKeyService = "net.noctweave.noctweb-browser-tests.\(UUID().uuidString)"
+        let keyProvider = NoctwebLocalKeyProvider()
+        let key = try keyProvider.loadOrCreate(service: labKeyService)
+        defer { try? keyProvider.destroy(service: labKeyService) }
+        let protectedData = try NoctwebEncryptedLocalData.seal(
+            workspaceData, using: key, context: "lab-workspaces-v1"
+        )
         try NoctwebSecureFileIO.writePrivate(
-            workspaceData,
+            protectedData,
             to: workspaceURL,
             maximumBytes: 32 * 1_024 * 1_024
         )
@@ -302,7 +380,8 @@ final class NoctwebBrowserAppTests: XCTestCase {
             .developmentEnvironment()
         let resolver = DevelopmentNoctwebResolver(
             fixtureResolver: environment.resolver,
-            labWorkspaceURL: workspaceURL
+            labWorkspaceURL: workspaceURL,
+            labWorkspaceKeyService: labKeyService
         )
         let site = try await resolver.resolve(
             NoctwebNavigationURL(parsing: address),
@@ -415,7 +494,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suiteName),
             useDevelopmentFixtures: true
         )
 
@@ -457,7 +536,7 @@ final class NoctwebBrowserAppTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let model = BrowserAppModel(
-            persistenceStore: BrowserPersistenceStore(defaults: defaults),
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suiteName),
             useDevelopmentFixtures: true
         )
         model.startIfNeeded()
@@ -488,5 +567,17 @@ final class NoctwebBrowserAppTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    @MainActor
+    private func isolatedPersistenceStore(
+        defaults: UserDefaults,
+        suite: String
+    ) -> BrowserPersistenceStore {
+        let service = "net.noctweave.noctweb-browser-tests.\(suite)"
+        addTeardownBlock {
+            try? NoctwebLocalKeyProvider().destroy(service: service)
+        }
+        return BrowserPersistenceStore(defaults: defaults, keyService: service)
     }
 }
