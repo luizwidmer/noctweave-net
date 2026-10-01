@@ -12,6 +12,12 @@ SWIFT_BUILD_OPTIONS=(
   --package-path "$PACKAGE_ROOT"
   --configuration release
 )
+if [[ "$(swift build --help)" == *swiftbuild* ]]; then
+  SWIFT_BUILD_OPTIONS+=(--build-system swiftbuild)
+fi
+if [[ "${NOCTWEAVE_OFFLINE:-0}" == "1" ]]; then
+  SWIFT_BUILD_OPTIONS+=(--disable-automatic-resolution)
+fi
 if [[ -n "${NOCTWEB_BUILD_SCRATCH_PATH:-}" ]]; then
   SWIFT_BUILD_OPTIONS+=(
     --scratch-path "$NOCTWEB_BUILD_SCRATCH_PATH"
@@ -25,6 +31,7 @@ swift build \
 BIN_PATH="$(swift build \
   "${SWIFT_BUILD_OPTIONS[@]}" \
   --show-bin-path)"
+test -x "$BIN_PATH/NoctwebLab"
 
 rm -rf "$APP_ROOT"
 mkdir -p "$MACOS_ROOT" "$RESOURCES_ROOT"
