@@ -111,8 +111,21 @@ enum WebsiteProjectBuilder {
 
     static func importDirectory(
         at rootURL: URL,
-        entryPath: String = WebsiteProjectBuilder.entryPath
+        entryPath: String = WebsiteProjectBuilder.entryPath,
+        beforeRead: (URL) throws -> Void = { _ in }
     ) throws -> [SiteSourceFile] {
+        // Keep a descriptor for the selected directory for the full import.
+        // Enumerator URLs are only names; their ancestors may change before
+        // individual files are opened.
+        let rootDirectory = rootURL.withUnsafeFileSystemRepresentation {
+            path -> Int32 in
+            guard let path else { return -1 }
+            return Darwin.open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        }
+        guard rootDirectory >= 0 else {
+            throw WebsiteProjectBuilderError.unreadableFile(rootURL.lastPathComponent)
+        }
+        defer { Darwin.close(rootDirectory) }
         let resourceKeys: Set<URLResourceKey> = [
             .isRegularFileKey,
             .isDirectoryKey,
@@ -163,8 +176,9 @@ enum WebsiteProjectBuilder {
                         ? Int.max : totalBytes + announcedSize
                 )
             }
+            try beforeRead(fileURL)
             let bytes = try readBoundedRegularFile(
-                at: fileURL,
+                under: rootDirectory,
                 relativePath: relativePath,
                 maximumBytes: remainingBytes,
                 existingBytes: totalBytes
@@ -237,17 +251,41 @@ enum WebsiteProjectBuilder {
     }
 
     private static func readBoundedRegularFile(
-        at fileURL: URL,
+        under rootDirectory: Int32,
         relativePath: String,
         maximumBytes: Int,
         existingBytes: Int
     ) throws -> Data {
-        let descriptor = fileURL.withUnsafeFileSystemRepresentation {
-            path -> Int32 in
-            guard let path else { return -1 }
-            return Darwin.open(
-                path,
-                O_RDONLY | O_CLOEXEC | O_NOFOLLOW
+        let components = relativePath.split(
+            separator: "/", omittingEmptySubsequences: false
+        )
+        guard !components.isEmpty, components.allSatisfy({
+            !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\\")
+        }) else {
+            throw WebsiteProjectBuilderError.unreadableFile(relativePath)
+        }
+
+        var directory = rootDirectory
+        var ownsDirectory = false
+        defer { if ownsDirectory { Darwin.close(directory) } }
+        for component in components.dropLast() {
+            let next = component.withCString { name in
+                Darwin.openat(
+                    directory, name,
+                    O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW
+                )
+            }
+            guard next >= 0 else {
+                throw WebsiteProjectBuilderError.unreadableFile(relativePath)
+            }
+            if ownsDirectory { Darwin.close(directory) }
+            directory = next
+            ownsDirectory = true
+        }
+        let descriptor = components[components.count - 1].withCString { name in
+            Darwin.openat(
+                directory, name,
+                O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
             )
         }
         let openError = errno

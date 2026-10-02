@@ -1109,6 +1109,29 @@ final class AppModelTests: XCTestCase {
         }
     }
 
+    func testImportRejectsSwappedAncestorBeforeReadingOutsideBytes() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+
+        let buildURL = fixture.root.appendingPathComponent("dist", isDirectory: true)
+        let assetsURL = buildURL.appendingPathComponent("assets", isDirectory: true)
+        let heldAssetsURL = buildURL.appendingPathComponent("assets-held", isDirectory: true)
+        let outsideURL = fixture.root.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: assetsURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outsideURL, withIntermediateDirectories: true)
+        try Data("<!doctype html>".utf8).write(to: buildURL.appendingPathComponent("index.html"))
+        try Data("public".utf8).write(to: assetsURL.appendingPathComponent("payload.txt"))
+        try Data("dummy-private-data".utf8).write(to: outsideURL.appendingPathComponent("payload.txt"))
+
+        XCTAssertThrowsError(try WebsiteProjectBuilder.importDirectory(at: buildURL) { fileURL in
+            guard fileURL.lastPathComponent == "payload.txt" else { return }
+            try FileManager.default.moveItem(at: assetsURL, to: heldAssetsURL)
+            try FileManager.default.createSymbolicLink(at: assetsURL, withDestinationURL: outsideURL)
+        }) { error in
+            XCTAssertTrue(error.localizedDescription.contains("could not be read"))
+        }
+    }
+
     func testImportRejectsOversizedFileBeforeReadingIt() throws {
         let fixture = try makeFixture()
         defer { fixture.remove() }
