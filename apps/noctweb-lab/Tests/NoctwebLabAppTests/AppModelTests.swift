@@ -8,6 +8,131 @@ import XCTest
 
 @MainActor
 final class AppModelTests: XCTestCase {
+    func testWorkspaceLimitKeepsSavedWorkspacesReopenable() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let workspaces = (0..<32).map { _ in Workspace.liveStarter() }
+        try writeWorkspaces(workspaces, to: fixture.workspaceURL)
+        let model = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+        let selectedID = model.activeWorkspaceID
+
+        model.createWorkspace()
+
+        XCTAssertEqual(model.workspaces.count, 32)
+        XCTAssertEqual(model.activeWorkspaceID, selectedID)
+        XCTAssertTrue(model.operationError?.contains("32") == true)
+        XCTAssertEqual(try decodeWorkspaces(at: fixture.workspaceURL).count, 32)
+        let reopened = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+        XCTAssertNil(reopened.storageError)
+        XCTAssertEqual(reopened.workspaces.count, 32)
+    }
+
+    func testSiteLimitAppliesAcrossWorkspacesAndKeepsSavedStateReopenable() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let workspaces = (0..<2).map { _ in
+            var workspace = Workspace.starter()
+            let template = workspace.sites[0]
+            workspace.sites = (0..<128).map { number in
+                SiteProject(
+                    id: UUID(),
+                    address: "noct://site-\(number).fixture/",
+                    relayNamespaceID: template.relayNamespaceID,
+                    title: "Fixture", subtitle: "", body: "", accentHex: "#123456",
+                    revision: 0, publicationIdentity: .pending
+                )
+            }
+            return workspace
+        }
+        try writeWorkspaces(workspaces, to: fixture.workspaceURL)
+        let model = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+        let selectedID = model.selectedSiteID
+
+        model.createSite()
+
+        XCTAssertEqual(model.workspaces.reduce(0) { $0 + $1.sites.count }, 256)
+        XCTAssertEqual(model.selectedSiteID, selectedID)
+        XCTAssertTrue(model.operationError?.contains("256") == true)
+        let reopened = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+        XCTAssertNil(reopened.storageError)
+        XCTAssertEqual(reopened.workspaces.reduce(0) { $0 + $1.sites.count }, 256)
+    }
+
+    func testNewSiteSkipsExistingGeneratedLabelsAfterDeletion() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.starter()
+        let template = workspace.sites[0]
+        let suffix = try NoctwebAddress.parse(template.address).relaySuffix
+        workspace.sites = [1, 3].map { number in
+            SiteProject(
+                id: UUID(), address: "noct://untitled-\(number).\(suffix)/",
+                relayNamespaceID: template.relayNamespaceID,
+                title: "Fixture", subtitle: "", body: "", accentHex: "#123456",
+                revision: 0, publicationIdentity: .pending
+            )
+        }
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+        let model = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+
+        model.createSite()
+
+        let sites = try XCTUnwrap(model.activeWorkspace?.sites)
+        XCTAssertEqual(sites.count, 3)
+        XCTAssertEqual(Set(sites.map(\.address)).count, 3)
+        XCTAssertEqual(model.selectedSite?.address, "noct://untitled-4.\(suffix)/")
+    }
+
+    func testRuntimeNavigationAfterBackUsesCurrentHistoryPosition() throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        let model = AppModel(engine: fixture.engine, workspaceFileURL: fixture.workspaceURL)
+        let addresses = ["noct://one.fixture/", "noct://two.fixture/", "noct://three.fixture/"]
+        for address in addresses {
+            model.runtimeAddress = address
+            model.navigateRuntime()
+        }
+        model.goBack()
+        XCTAssertEqual(model.runtimeAddress, addresses[1])
+        model.runtimeAddress = addresses[2]
+        model.navigateRuntime()
+
+        XCTAssertEqual(model.runtimeHistory, addresses)
+        XCTAssertEqual(model.runtimeHistoryIndex, 2)
+        XCTAssertFalse(model.canGoForward)
+        model.goBack()
+        XCTAssertEqual(model.runtimeAddress, addresses[1])
+        // Submitting the currently displayed address must preserve Forward.
+        model.navigateRuntime()
+        XCTAssertEqual(model.runtimeHistory, addresses)
+        XCTAssertEqual(model.runtimeHistoryIndex, 1)
+        XCTAssertTrue(model.canGoForward)
+    }
+
+    func testRelayRemovalWaitsForInFlightPublication() async throws {
+        let fixture = try makeFixture()
+        defer { fixture.remove() }
+        var workspace = Workspace.liveStarter()
+        let relay = testHostRelay(endpoint: "file:///unused-fixture-host", routeDirective: .open)
+        workspace.relays = [relay]
+        workspace.sites = [shadowHostedSite(address: "noct://preview.fixture/")]
+        try writeWorkspaces([workspace], to: fixture.workspaceURL)
+        let model = AppModel(
+            engine: fixture.engine, workspaceFileURL: fixture.workspaceURL, useLiveRelay: true
+        )
+        model.publishSelectedSite()
+        XCTAssertTrue(model.publicationInFlight)
+
+        model.removeRelay(relay.id)
+
+        XCTAssertEqual(model.activeWorkspace?.relays.map(\.id), [relay.id])
+        XCTAssertTrue(model.operationError?.contains("publication") == true)
+        for _ in 0..<200 where model.publicationInFlight {
+            await Task.yield()
+        }
+        XCTAssertFalse(model.publicationInFlight)
+    }
+
     func testHostedPreviewRejectsKnownOrUnknownPassthroughBeforeHostClient() async throws {
         for (mode, federationMode, federationDirective, draftDirective) in [
             (RouteMode.passthrough, FederationMode.solo, RouteDirective.open, RouteDirective.open),

@@ -6,6 +6,46 @@ import XCTest
 
 final class NoctwebBrowserAppTests: XCTestCase {
     @MainActor
+    func testBackFromFirstPageRestoresBlankTabWithoutResolvingIt() async throws {
+        let suite = "NoctwebBrowserNavigationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let environment = try DeterministicNoctwebResolver.developmentEnvironment()
+        let model = BrowserAppModel(
+            persistenceStore: isolatedPersistenceStore(defaults: defaults, suite: suite),
+            useDevelopmentFixtures: true,
+            resolver: environment.resolver
+        )
+        model.addTab()
+        let blankAddress = model.selectedTab.address
+        model.navigate(to: DeterministicNoctwebResolver.welcomeURLString)
+        for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertNotNil(model.selectedSite)
+
+        model.goBack()
+        for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(model.selectedTab.address, blankAddress)
+        XCTAssertEqual(model.selectedTab.verificationState, .idle)
+        XCTAssertEqual(model.addressText, "")
+        XCTAssertNil(model.selectedError)
+        XCTAssertNil(model.selectedSite)
+        XCTAssertFalse(model.canGoBack)
+        XCTAssertTrue(model.canGoForward)
+
+        model.goForward()
+        for _ in 0..<200 where model.selectedTab.verificationState == .resolving {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertEqual(model.selectedTab.verificationState, .fixtureVerified)
+        XCTAssertEqual(model.selectedSite?.navigationURL.canonicalString,
+                       DeterministicNoctwebResolver.welcomeURLString)
+    }
+
+    @MainActor
     func testBrowserStateIsSealedAndTamperingFailsClosed() async throws {
         let suite = "NoctwebBrowserEncryptedTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

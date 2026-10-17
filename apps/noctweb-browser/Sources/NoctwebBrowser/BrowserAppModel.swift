@@ -371,6 +371,25 @@ final class BrowserAppModel: ObservableObject {
         }
 
         addressText = parsed.canonicalString
+        if parsed.canonicalString == Self.blankAddress {
+            resolutionTasksByTab[tabID]?.cancel()
+            resolutionTasksByTab[tabID] = nil
+            resolutionGenerationByTab[tabID] = nil
+            sitesByTab[tabID] = nil
+            errorsByTab[tabID] = nil
+            blockedNoticesByTab[tabID] = nil
+            reloadTokensByTab[tabID] = nil
+            try? session.updateTab(
+                id: tabID,
+                address: Self.blankAddress,
+                title: "New Tab",
+                state: .idle
+            )
+            addressText = ""
+            showsTrustInspector = false
+            persist()
+            return
+        }
         beginResolution(
             tabID: tabID,
             address: parsed.canonicalString,

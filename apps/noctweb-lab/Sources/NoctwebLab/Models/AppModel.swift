@@ -381,6 +381,10 @@ final class AppModel: ObservableObject {
 
     func createWorkspace() {
         guard !resetIsPending else { return }
+        guard workspaces.count < maximumPersistedWorkspaceCount else {
+            operationError = "The Lab supports up to \(maximumPersistedWorkspaceCount) workspaces. Remove a workspace before adding another."
+            return
+        }
         var workspace = usesLiveRelay
             ? Workspace.liveStarter()
             : Workspace.starter()
@@ -399,7 +403,10 @@ final class AppModel: ObservableObject {
             operationError = "Create or select a workspace before adding a site."
             return
         }
-        let number = workspaces[workspaceIndex].sites.count + 1
+        guard workspaces.reduce(0, { $0 + $1.sites.count }) < maximumPersistedSiteCount else {
+            operationError = "The Lab supports up to \(maximumPersistedSiteCount) sites across all workspaces. Remove a site before adding another."
+            return
+        }
         guard
             let namespaceRelay = workspaces[workspaceIndex].relays.first(
                 where: {
@@ -409,7 +416,22 @@ final class AppModel: ObservableObject {
                 }
             ),
             let relayNamespaceID = namespaceRelay.relayNamespaceID,
-            let namespaceSuffix = namespaceRelay.namespaceSuffix,
+            let namespaceSuffix = namespaceRelay.namespaceSuffix
+        else {
+            operationError =
+                "Configure at least one host relay namespace before creating a site."
+            return
+        }
+        let occupiedLabels = Set(workspaces.flatMap(\.sites).compactMap { site -> String? in
+            guard let address = try? NoctwebAddress.parse(site.address),
+                  address.relaySuffix == namespaceSuffix else { return nil }
+            return address.siteLabel
+        })
+        var number = workspaces[workspaceIndex].sites.count + 1
+        while occupiedLabels.contains("untitled-\(number)") {
+            number += 1
+        }
+        guard
             let address = try? NoctwebAddress(
                 siteLabel: "untitled-\(number)",
                 relaySuffix: namespaceSuffix
@@ -799,14 +821,20 @@ final class AppModel: ObservableObject {
             return
         }
 
-        if runtimeHistory.last != address {
-            if runtimeHistoryIndex < runtimeHistory.count - 1 {
-                runtimeHistory.removeSubrange((runtimeHistoryIndex + 1)...)
-            }
-            runtimeHistory.append(address)
-            runtimeHistoryIndex = runtimeHistory.count - 1
-        }
+        recordRuntimeNavigation(address)
         resolveRuntime(address)
+    }
+
+    private func recordRuntimeNavigation(_ address: String) {
+        if runtimeHistory.indices.contains(runtimeHistoryIndex),
+           runtimeHistory[runtimeHistoryIndex] == address {
+            return
+        }
+        if runtimeHistoryIndex < runtimeHistory.count - 1 {
+            runtimeHistory.removeSubrange((runtimeHistoryIndex + 1)...)
+        }
+        runtimeHistory.append(address)
+        runtimeHistoryIndex = runtimeHistory.count - 1
     }
 
     func reloadRuntime() {
@@ -897,6 +925,10 @@ final class AppModel: ObservableObject {
 
     func removeRelay(_ relayID: String) {
         guard usesLiveRelay, let workspaceIndex = activeWorkspaceIndex else {
+            return
+        }
+        guard !publicationInFlight else {
+            operationError = "Wait for the current publication to finish before removing a relay."
             return
         }
         workspaces[workspaceIndex].relays.removeAll { $0.id == relayID }
@@ -1597,10 +1629,7 @@ final class AppModel: ObservableObject {
                     ) ?? .passthrough,
                     relayName: relay.name
                 )
-                if runtimeHistory.last != runtimeAddress {
-                    runtimeHistory.append(runtimeAddress)
-                    runtimeHistoryIndex = runtimeHistory.count - 1
-                }
+                recordRuntimeNavigation(runtimeAddress)
             }
         } catch {
             failPublication(error.localizedDescription)
@@ -1738,10 +1767,7 @@ final class AppModel: ObservableObject {
                 resolution,
                 sourceSiteID: initialSite.id
             )
-            if runtimeHistory.last != runtimeAddress {
-                runtimeHistory.append(runtimeAddress)
-                runtimeHistoryIndex = runtimeHistory.count - 1
-            }
+            recordRuntimeNavigation(runtimeAddress)
         } catch {
             if
                 let location = siteLocation(
