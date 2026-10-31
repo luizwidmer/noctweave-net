@@ -1,7 +1,31 @@
+import CryptoKit
 import Foundation
 @preconcurrency import NoctweaveCore
 import NoctwebBrowserCore
 import NoctwebLabCore
+
+struct VerifiedPublicationHead: Sendable {
+    let profile: NoctwebNetworkProfile
+    let relaySuffix: String
+    let siteLabel: String
+    let namespaceEpoch: UInt64
+    let publisherID: String
+    let revision: UInt64
+    let headID: String
+    let objectID: String
+}
+
+struct VerifiedNamespaceObservation: Sendable {
+    let profile: NoctwebNetworkProfile
+    let relaySuffix: String
+    let epoch: UInt64
+    let issuedAt: Date
+    let recordSequence: UInt64?
+    let recordStatus: String
+    let recordBaseDigest: Data?
+    let recordDigest: Data?
+    let hasActiveIdentityClaim: Bool
+}
 
 /// Resolves `noct://site.suffix/` through an authenticated federation
 /// namespace, then asks the selected home relay to retrieve the signed name
@@ -10,13 +34,27 @@ actor FederatedNoctwebResolver: NoctwebResolving {
     typealias RequestSender = @Sendable (
         RelayEndpoint, RelayRequest
     ) async throws -> RelayResponse
+    typealias NamespaceCheckpoint = @Sendable (
+        VerifiedNamespaceObservation
+    ) async throws -> Void
+    typealias PublicationHeadCheckpoint = @Sendable (
+        VerifiedPublicationHead
+    ) async throws -> Void
 
     private let sendRequest: RequestSender
+    private let checkNamespace: NamespaceCheckpoint
+    private let checkPublicationHead: PublicationHeadCheckpoint
 
-    init(sendRequest: @escaping RequestSender = { endpoint, request in
-        try await RelayClient(endpoint: endpoint).send(request)
-    }) {
+    init(
+        sendRequest: @escaping RequestSender = { endpoint, request in
+            try await RelayClient(endpoint: endpoint).send(request)
+        },
+        checkNamespace: @escaping NamespaceCheckpoint,
+        checkPublicationHead: @escaping PublicationHeadCheckpoint
+    ) {
         self.sendRequest = sendRequest
+        self.checkNamespace = checkNamespace
+        self.checkPublicationHead = checkPublicationHead
     }
 
     func resolve(
@@ -111,6 +149,19 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             )
         }
 
+        // The relay may replay an older, internally valid signed name mapping
+        // and publisher envelope. Advance the local head floor before render.
+        try await checkPublicationHead(VerifiedPublicationHead(
+            profile: profile,
+            relaySuffix: suffix.rawValue,
+            siteLabel: navigationURL.siteLabel,
+            namespaceEpoch: namespace.epoch,
+            publisherID: publication.object.publisherID,
+            revision: publication.object.revision,
+            headID: publication.headID,
+            objectID: publication.head.claims.objectID
+        ))
+
         return VerifiedNoctwebSite(
             navigationURL: navigationURL,
             title: publication.object.title,
@@ -123,6 +174,8 @@ actor FederatedNoctwebResolver: NoctwebResolving {
                 routingTrustDomainID: profile.routingTrustDomainID,
                 consensusProfileID: profile.consensusProfileID,
                 epoch: namespace.epoch,
+                namespaceRecordSequence: namespace.recordSequence,
+                namespaceRecordDigest: namespace.recordDigest,
                 headID: publication.headID,
                 objectID: publication.head.claims.objectID,
                 route: route,
@@ -193,7 +246,9 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             return ResolvedNamespace(
                 identity: identity,
                 endpoint: endpoint,
-                epoch: 0
+                epoch: 0,
+                recordSequence: nil,
+                recordDigest: nil
             )
         }
         throw NoctwebBrowserError.unresolvedName(
@@ -223,11 +278,28 @@ actor FederatedNoctwebResolver: NoctwebResolving {
                       identity.claim.relayID == expectedRelayID,
                       identity.claim.signingPublicKey
                         == signer.signingPublicKey,
-                      identity.claim.noctwebSuffix == suffix,
                       info.protocolCapabilities?.supports(
                         module: "nw.net-host",
                         version: 1
                       ) == true else {
+                    continue
+                }
+                let ownsSuffix = identity.claim.noctwebSuffix == suffix
+                let claimDigest = Data(SHA256.hash(data:
+                    try NoctweaveCanonicalJSON.encode(identity)
+                ))
+                let observation = VerifiedNamespaceObservation(
+                    profile: profile, relaySuffix: suffix.rawValue,
+                    epoch: UInt64(max(1, identity.claim.sequence)),
+                    issuedAt: identity.claim.issuedAt,
+                    recordSequence: UInt64(identity.claim.sequence),
+                    recordStatus: ownsSuffix ? "active" : "absent",
+                    recordBaseDigest: nil,
+                    recordDigest: ownsSuffix ? claimDigest : nil,
+                    hasActiveIdentityClaim: ownsSuffix
+                )
+                try await checkNamespace(observation)
+                guard identity.claim.noctwebSuffix == suffix else {
                     continue
                 }
                 return ResolvedNamespace(
@@ -235,7 +307,9 @@ actor FederatedNoctwebResolver: NoctwebResolving {
                     endpoint: preferredHostEndpoint(
                         from: identity.claim.advertisedEndpoints
                     ) ?? endpoint,
-                    epoch: UInt64(max(1, identity.claim.sequence))
+                    epoch: observation.epoch,
+                    recordSequence: observation.recordSequence,
+                    recordDigest: observation.recordDigest
                 )
             } catch {
                 continue
@@ -306,11 +380,49 @@ actor FederatedNoctwebResolver: NoctwebResolving {
             .verifiedSnapshot(
                 from: candidates,
                 policy: policy
-            ),
-            let record = try snapshot.record(
-                for: suffix,
-                policy: policy
-            ),
+            ) else {
+            throw NoctwebBrowserError.unresolvedName(
+                "the federation has no verified namespace snapshot"
+            )
+        }
+        let record = try snapshot.record(for: suffix, policy: policy)
+        let recordDigest: Data?
+        let recordBaseDigest: Data?
+        if let record {
+            recordDigest = Data(SHA256.hash(data:
+                try NoctweaveCanonicalJSON.encode(record)
+            ))
+            let base = NoctwebNamespaceRecordV1(
+                suffix: record.suffix,
+                ownerRelayID: record.ownerRelayID,
+                ownerSigningPublicKey: record.ownerSigningPublicKey,
+                ownershipSequence: record.ownershipSequence,
+                status: record.status,
+                assignedAt: record.assignedAt,
+                updatedAt: record.updatedAt,
+                activeIdentityClaim: nil
+            )
+            recordBaseDigest = Data(SHA256.hash(data:
+                try NoctweaveCanonicalJSON.encode(base)
+            ))
+        } else {
+            recordDigest = nil
+            recordBaseDigest = nil
+        }
+        // Record signed absences and tombstones before deciding whether this
+        // suffix is routable; a prior still-valid snapshot may be replayed.
+        let observation = VerifiedNamespaceObservation(
+            profile: profile, relaySuffix: suffix.rawValue,
+            epoch: UInt64(snapshot.payload.epoch),
+            issuedAt: snapshot.payload.issuedAt,
+            recordSequence: record.map { UInt64($0.ownershipSequence) },
+            recordStatus: record?.status.rawValue ?? "absent",
+            recordBaseDigest: recordBaseDigest,
+            recordDigest: recordDigest,
+            hasActiveIdentityClaim: record?.activeIdentityClaim != nil
+        )
+        try await checkNamespace(observation)
+        guard let record,
             record.status == .active,
             let identity = record.activeIdentityClaim,
             try identity.verifyThrowing(),
@@ -326,7 +438,9 @@ actor FederatedNoctwebResolver: NoctwebResolving {
         return ResolvedNamespace(
             identity: identity,
             endpoint: endpoint,
-            epoch: UInt64(snapshot.payload.epoch)
+            epoch: observation.epoch,
+            recordSequence: observation.recordSequence,
+            recordDigest: observation.recordDigest
         )
     }
 
@@ -516,4 +630,6 @@ private struct ResolvedNamespace {
     let identity: SignedRelayIdentityClaimV1
     let endpoint: RelayEndpoint
     let epoch: UInt64
+    let recordSequence: UInt64?
+    let recordDigest: Data?
 }

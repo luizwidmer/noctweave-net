@@ -158,6 +158,26 @@ an effective federation or visitor passthrough requirement before contacting a
 relay. An unknown publisher policy cannot justify retrieving over an unsupported
 route to discover whether a higher-priority override exists.
 
+The Browser keeps encrypted, device-local continuity checkpoints for signed
+namespace snapshots and publisher heads. A namespace checkpoint binds the
+routing trust domain, consensus policy, suffix, snapshot epoch and issuance
+time, and the suffix's signed ownership sequence and record. The snapshot epoch
+is the maximum sequence across *all* suffixes, so a release or rotation can
+leave that epoch unchanged. A later signed tombstone or absence prevents an
+older still-valid active snapshot from restoring a former owner, including
+after Browser restarts. Conflicting active records in the same issuance window
+fail closed. For a site, an older publisher-signed revision or a conflicting
+head at the same revision cannot replace one already shown. A publisher change
+at the same namespace epoch also fails closed; a newer namespace epoch can
+establish a new publisher. When a completed lookup advances a checkpoint, the
+Browser clears already open hosted previews that no longer match it. These
+checkpoints establish continuity only after the first observation on this
+device. A fresh installation cannot know about an unseen later snapshot or
+publication, and a hosted preview still has no content-head finality proof.
+Changing or forgetting a relay profile retains these checkpoints for its trust
+domain. Explicit removal of all Browser data clears them and starts continuity
+from the next verified observation.
+
 The Lab's live hosted preview applies the same pre-request rule. It may use
 the signed publisher directive from a locally saved envelope when that
 envelope matches the exact hosted object ID. With no matching signed local

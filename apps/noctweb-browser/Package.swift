@@ -14,7 +14,7 @@ if let localPath = ProcessInfo.processInfo.environment[
 } else {
     noctweaveDependency = .package(
         url: "https://github.com/luizwidmer/Noctweave.git",
-        revision: "f8351b0412ec7f46c8fd18b4a5034d7a72f18d8f"
+        revision: "7f873747447ba7c7b11d57cb9ccde63e47f20fa9"
     )
     noctweavePackageIdentity = "Noctweave"
 }

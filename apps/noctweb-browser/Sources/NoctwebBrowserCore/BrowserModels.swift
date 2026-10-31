@@ -28,6 +28,10 @@ public struct NoctwebVerificationEvidence:
     public let routingTrustDomainID: String
     public let consensusProfileID: String
     public let epoch: UInt64
+    /// The suffix record selected from the authenticated namespace snapshot.
+    /// Nil is used by local fixtures that have no consensus namespace record.
+    public let namespaceRecordSequence: UInt64?
+    public let namespaceRecordDigest: Data?
     public let headID: String
     public let objectID: String
     public let route: RoutingDecision
@@ -38,6 +42,8 @@ public struct NoctwebVerificationEvidence:
         routingTrustDomainID: String,
         consensusProfileID: String,
         epoch: UInt64,
+        namespaceRecordSequence: UInt64? = nil,
+        namespaceRecordDigest: Data? = nil,
         headID: String,
         objectID: String,
         route: RoutingDecision,
@@ -47,6 +53,8 @@ public struct NoctwebVerificationEvidence:
         self.routingTrustDomainID = routingTrustDomainID
         self.consensusProfileID = consensusProfileID
         self.epoch = epoch
+        self.namespaceRecordSequence = namespaceRecordSequence
+        self.namespaceRecordDigest = namespaceRecordDigest
         self.headID = headID
         self.objectID = objectID
         self.route = route

@@ -40,6 +40,52 @@ private struct BrowserPersistentState: Codable {
     let relayProfile: NoctwebNetworkProfile?
 }
 
+private struct BrowserNamespaceEpochPin: Codable, Equatable {
+    let routingTrustDomainID: String
+    let consensusProfileID: String
+    let federationMode: String
+    let federationName: String?
+    let relaySuffix: String
+    var epoch: UInt64
+    var issuedAt: Date
+    var highestRecordSequence: UInt64?
+    var recordStatus: String
+    var recordBaseDigest: Data?
+    var recordDigest: Data?
+    var hasActiveIdentityClaim: Bool
+
+    func matches(_ observation: VerifiedNamespaceObservation) -> Bool {
+        routingTrustDomainID == observation.profile.routingTrustDomainID
+            && consensusProfileID == observation.profile.consensusProfileID
+            && federationMode == observation.profile.federationMode.rawValue
+            && federationName == observation.profile.namespaceFederationName
+            && relaySuffix == observation.relaySuffix
+    }
+}
+
+private struct BrowserPublicationHeadPin: Codable, Equatable {
+    let routingTrustDomainID: String
+    let consensusProfileID: String
+    let federationMode: String
+    let federationName: String?
+    let relaySuffix: String
+    let siteLabel: String
+    var namespaceEpoch: UInt64
+    var publisherID: String
+    var revision: UInt64
+    var headID: String
+    var objectID: String
+
+    func matches(_ checkpoint: VerifiedPublicationHead) -> Bool {
+        routingTrustDomainID == checkpoint.profile.routingTrustDomainID
+            && consensusProfileID == checkpoint.profile.consensusProfileID
+            && federationMode == checkpoint.profile.federationMode.rawValue
+            && federationName == checkpoint.profile.namespaceFederationName
+            && relaySuffix == checkpoint.relaySuffix
+            && siteLabel == checkpoint.siteLabel
+    }
+}
+
 enum BrowserRelayConnectionState: Equatable {
     case notConfigured
     case saved(String)
@@ -54,6 +100,8 @@ final class BrowserPersistenceStore {
 
     private let defaults: UserDefaults
     private let key = "net.noctweave.noctweb-browser.state.v1"
+    private let namespaceEpochKey = "net.noctweave.noctweb-browser.namespace-checkpoints.v1"
+    private let publicationHeadKey = "net.noctweave.noctweb-browser.publication-heads.v1"
     private let keyService: String
     private let keyProvider = NoctwebLocalKeyProvider()
 
@@ -104,6 +152,291 @@ final class BrowserPersistenceStore {
         defaults.set(stored, forKey: key)
     }
 
+    func checkAndAdvanceNamespace(_ observation: VerifiedNamespaceObservation) throws {
+        guard observation.epoch > 0,
+              observation.issuedAt.timeIntervalSince1970.isFinite,
+              observation.recordStatus == "active"
+                || observation.recordStatus == "tombstoned"
+                || observation.recordStatus == "absent" else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the namespace has no valid continuity checkpoint"
+            )
+        }
+        var pins: [BrowserNamespaceEpochPin] = try loadPins(
+            forKey: namespaceEpochKey,
+            context: "browser-namespace-checkpoints-v1"
+        )
+        guard pins.count <= 4_096, pins.allSatisfy({ $0.epoch > 0 }) else {
+            throw NoctwebEncryptedLocalDataError.malformed
+        }
+        var candidate = BrowserNamespaceEpochPin(
+            routingTrustDomainID: observation.profile.routingTrustDomainID,
+            consensusProfileID: observation.profile.consensusProfileID,
+            federationMode: observation.profile.federationMode.rawValue,
+            federationName: observation.profile.namespaceFederationName,
+            relaySuffix: observation.relaySuffix,
+            epoch: observation.epoch,
+            issuedAt: observation.issuedAt,
+            highestRecordSequence: observation.recordSequence,
+            recordStatus: observation.recordStatus,
+            recordBaseDigest: observation.recordBaseDigest,
+            recordDigest: observation.recordDigest,
+            hasActiveIdentityClaim: observation.hasActiveIdentityClaim
+        )
+        if let index = pins.firstIndex(where: { $0.matches(observation) }) {
+            let prior = pins[index]
+            guard candidate.epoch >= prior.epoch,
+                  candidate.epoch > prior.epoch
+                    || candidate.issuedAt >= prior.issuedAt else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay returned an older namespace snapshot"
+                )
+            }
+            if let priorSequence = prior.highestRecordSequence,
+               let sequence = observation.recordSequence,
+               sequence < priorSequence {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay returned an older suffix ownership sequence"
+                )
+            }
+            if prior.recordStatus == "tombstoned",
+               candidate.recordStatus != "tombstoned" {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay attempted to restore a released suffix"
+                )
+            }
+            if prior.recordStatus == "absent",
+               candidate.recordStatus == "active" {
+                let lacksNewOwnershipSequence = prior.highestRecordSequence.map { priorSequence in
+                    observation.recordSequence.map { $0 <= priorSequence } ?? true
+                } ?? false
+                let sameIssuance = candidate.epoch == prior.epoch
+                    && candidate.issuedAt == prior.issuedAt
+                guard !lacksNewOwnershipSequence && !sameIssuance else {
+                    throw NoctwebBrowserError.verificationFailed(
+                        "the relay returned conflicting suffix ownership"
+                    )
+                }
+            }
+            if prior.recordStatus == "active",
+               candidate.recordStatus == "active",
+               observation.recordSequence == prior.highestRecordSequence,
+               candidate.recordDigest != prior.recordDigest {
+                guard candidate.recordBaseDigest == prior.recordBaseDigest,
+                      prior.hasActiveIdentityClaim,
+                      !candidate.hasActiveIdentityClaim else {
+                    throw NoctwebBrowserError.verificationFailed(
+                        "the relay returned conflicting suffix ownership at one sequence"
+                    )
+                }
+            }
+            if prior.recordStatus == "active",
+               candidate.recordStatus == "tombstoned",
+               observation.recordSequence == prior.highestRecordSequence {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the release did not advance the suffix ownership sequence"
+                )
+            }
+            if prior.recordStatus == "tombstoned",
+               candidate.recordStatus == "tombstoned",
+               observation.recordSequence == prior.highestRecordSequence,
+               candidate.recordDigest != prior.recordDigest {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the relay returned conflicting releases at one sequence"
+                )
+            }
+            candidate.highestRecordSequence = [
+                prior.highestRecordSequence, observation.recordSequence
+            ].compactMap { $0 }.max()
+            candidate.issuedAt = max(prior.issuedAt, candidate.issuedAt)
+            if candidate == prior { return }
+            pins[index] = candidate
+        } else {
+            guard pins.count < 4_096 else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the namespace checkpoint limit has been reached"
+                )
+            }
+            pins.append(candidate)
+        }
+        try savePins(
+            pins,
+            forKey: namespaceEpochKey,
+            context: "browser-namespace-checkpoints-v1"
+        )
+    }
+
+    func checkAndAdvancePublicationHead(
+        _ checkpoint: VerifiedPublicationHead
+    ) throws {
+        guard checkpoint.revision > 0 else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the publication has no valid revision checkpoint"
+            )
+        }
+        var pins: [BrowserPublicationHeadPin] = try loadPins(
+            forKey: publicationHeadKey,
+            context: "browser-publication-heads-v1"
+        )
+        guard pins.count <= 4_096,
+              pins.allSatisfy({ $0.revision > 0 }) else {
+            throw NoctwebEncryptedLocalDataError.malformed
+        }
+        let candidate = BrowserPublicationHeadPin(
+            routingTrustDomainID: checkpoint.profile.routingTrustDomainID,
+            consensusProfileID: checkpoint.profile.consensusProfileID,
+            federationMode: checkpoint.profile.federationMode.rawValue,
+            federationName: checkpoint.profile.namespaceFederationName,
+            relaySuffix: checkpoint.relaySuffix,
+            siteLabel: checkpoint.siteLabel,
+            namespaceEpoch: checkpoint.namespaceEpoch,
+            publisherID: checkpoint.publisherID,
+            revision: checkpoint.revision,
+            headID: checkpoint.headID,
+            objectID: checkpoint.objectID
+        )
+        if let index = pins.firstIndex(where: { $0.matches(checkpoint) }) {
+            let prior = pins[index]
+            guard candidate.namespaceEpoch >= prior.namespaceEpoch else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the publication belongs to an older namespace epoch"
+                )
+            }
+            if candidate.namespaceEpoch == prior.namespaceEpoch,
+               candidate.publisherID != prior.publisherID {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the site publisher changed without a newer namespace epoch"
+                )
+            }
+            if candidate.publisherID == prior.publisherID {
+                guard candidate.revision >= prior.revision else {
+                    throw NoctwebBrowserError.verificationFailed(
+                        "the relay returned an older publication revision"
+                    )
+                }
+                if candidate.revision == prior.revision,
+                   (candidate.headID != prior.headID
+                       || candidate.objectID != prior.objectID) {
+                    throw NoctwebBrowserError.verificationFailed(
+                        "the publisher signed conflicting heads at one revision"
+                    )
+                }
+            }
+            if candidate == prior { return }
+            pins[index] = candidate
+        } else {
+            guard pins.count < 4_096 else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the publication checkpoint limit has been reached"
+                )
+            }
+            pins.append(candidate)
+        }
+        try savePins(
+            pins,
+            forKey: publicationHeadKey,
+            context: "browser-publication-heads-v1"
+        )
+    }
+
+    func requireCurrentCheckpoints(
+        for site: VerifiedNoctwebSite,
+        profile: NoctwebNetworkProfile
+    ) throws {
+        guard let suffix = NoctwebRelaySuffixV1(
+            rawValue: ".\(site.navigationURL.relaySuffix)"
+        ) else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the site has no valid namespace suffix"
+            )
+        }
+        if site.evidence.epoch > 0 {
+            let epochs: [BrowserNamespaceEpochPin] = try loadPins(
+                forKey: namespaceEpochKey,
+                context: "browser-namespace-checkpoints-v1"
+            )
+            guard let current = epochs.first(where: {
+                $0.routingTrustDomainID == profile.routingTrustDomainID
+                    && $0.consensusProfileID == profile.consensusProfileID
+                    && $0.federationMode == profile.federationMode.rawValue
+                    && $0.federationName == profile.namespaceFederationName
+                    && $0.relaySuffix == suffix.rawValue
+            }), current.epoch == site.evidence.epoch,
+                current.recordStatus == "active",
+                current.hasActiveIdentityClaim,
+                current.highestRecordSequence == site.evidence.namespaceRecordSequence,
+                current.recordDigest == site.evidence.namespaceRecordDigest else {
+                throw NoctwebBrowserError.verificationFailed(
+                    "the namespace advanced before this page could render"
+                )
+            }
+        }
+        let heads: [BrowserPublicationHeadPin] = try loadPins(
+            forKey: publicationHeadKey,
+            context: "browser-publication-heads-v1"
+        )
+        guard let current = heads.first(where: {
+            $0.routingTrustDomainID == profile.routingTrustDomainID
+                && $0.consensusProfileID == profile.consensusProfileID
+                && $0.federationMode == profile.federationMode.rawValue
+                && $0.federationName == profile.namespaceFederationName
+                && $0.relaySuffix == suffix.rawValue
+                && $0.siteLabel == site.navigationURL.siteLabel
+        }), current.namespaceEpoch == site.evidence.epoch,
+            current.publisherID == site.evidence.publisherID,
+            current.headID == site.evidence.headID,
+            current.objectID == site.evidence.objectID else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the publication advanced before this page could render"
+            )
+        }
+    }
+
+    private func loadPins<Pin: Decodable>(
+        forKey storageKey: String,
+        context: String
+    ) throws -> [Pin] {
+        guard let stored = defaults.data(forKey: storageKey) else { return [] }
+        guard stored.count <= 2 * 1_024 * 1_024 + NoctwebEncryptedLocalData.overheadBytes,
+              NoctwebEncryptedLocalData.isSealed(stored) else {
+            throw NoctwebEncryptedLocalDataError.malformed
+        }
+        var clear = try NoctwebEncryptedLocalData.open(
+            stored,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: keyProvider
+            ),
+            context: context
+        )
+        defer { clear.resetBytes(in: 0..<clear.count) }
+        return try JSONDecoder().decode([Pin].self, from: clear)
+    }
+
+    private func savePins<Pin: Encodable>(
+        _ pins: [Pin],
+        forKey storageKey: String,
+        context: String
+    ) throws {
+        var clear = try JSONEncoder().encode(pins)
+        defer { clear.resetBytes(in: 0..<clear.count) }
+        guard clear.count <= 2 * 1_024 * 1_024 else {
+            throw NoctwebSecureFileIOError.tooLarge
+        }
+        let sealed = try NoctwebEncryptedLocalData.seal(
+            clear,
+            using: NoctwebEncryptedLocalData.key(
+                service: keyService, provider: keyProvider
+            ),
+            context: context
+        )
+        defaults.set(sealed, forKey: storageKey)
+        guard defaults.synchronize() else {
+            throw NoctwebBrowserError.verificationFailed(
+                "the trust checkpoint could not be saved"
+            )
+        }
+    }
+
     private func sanitizingRestorationAddress(
         _ state: BrowserPersistentState
     ) -> BrowserPersistentState {
@@ -123,6 +456,8 @@ final class BrowserPersistenceStore {
             defaults.removePersistentDomain(forName: domain)
         } else {
             defaults.removeObject(forKey: key)
+            defaults.removeObject(forKey: namespaceEpochKey)
+            defaults.removeObject(forKey: publicationHeadKey)
         }
     }
 
@@ -191,7 +526,17 @@ final class BrowserAppModel: ObservableObject {
         let initialAddress: String
         if useDevelopmentFixtures {
             self.resolver = resolver ?? DevelopmentNoctwebResolver(
-                fixtureResolver: environment.resolver
+                fixtureResolver: environment.resolver,
+                checkNamespace: { observation in
+                    try await persistenceStore.checkAndAdvanceNamespace(
+                        observation
+                    )
+                },
+                checkPublicationHead: { checkpoint in
+                    try await persistenceStore.checkAndAdvancePublicationHead(
+                        checkpoint
+                    )
+                }
             )
             profile = environment.profile
             if let value = persisted?.lastAddress,
@@ -206,7 +551,18 @@ final class BrowserAppModel: ObservableObject {
                 environment.profile.displayName
             )
         } else {
-            self.resolver = resolver ?? FederatedNoctwebResolver()
+            self.resolver = resolver ?? FederatedNoctwebResolver(
+                checkNamespace: { observation in
+                    try await persistenceStore.checkAndAdvanceNamespace(
+                        observation
+                    )
+                },
+                checkPublicationHead: { checkpoint in
+                    try await persistenceStore.checkAndAdvancePublicationHead(
+                        checkpoint
+                    )
+                }
+            )
             profile = persisted?.relayProfile
                 ?? Self.unconfiguredProfile()
             let savedEndpoint = persisted?.relayEndpoint
@@ -606,6 +962,7 @@ final class BrowserAppModel: ObservableObject {
 
     func selectTab(_ id: UUID) {
         guard !isResetting else { return }
+        invalidateStaleHostedTabs()
         session.selectTab(id: id)
         addressText = session.selectedTab.address == Self.blankAddress
             ? ""
@@ -932,6 +1289,7 @@ final class BrowserAppModel: ObservableObject {
         let task = Task { [weak self] in
             do {
                 let site = try await operation()
+                self?.invalidateStaleHostedTabs()
                 guard !Task.isCancelled else { return }
                 self?.completeResolution(
                     site,
@@ -940,6 +1298,7 @@ final class BrowserAppModel: ObservableObject {
                     generation: generation
                 )
             } catch {
+                self?.invalidateStaleHostedTabs()
                 guard !Task.isCancelled else { return }
                 self?.completeFailure(
                     error,
@@ -962,6 +1321,29 @@ final class BrowserAppModel: ObservableObject {
               tab.profileID == profileID,
               let profile = session.profiles.first(where: { $0.id == profileID }),
               profile.routingTrustDomainID == site.evidence.routingTrustDomainID else { return }
+        if site.state == .hostedPreview,
+           !usesDevelopmentFixtures,
+           site.evidence.consensusProfileID != profile.consensusProfileID {
+            completeFailure(
+                NoctwebBrowserError.verificationFailed(
+                    "the namespace policy changed before this page could render"
+                ),
+                tabID: tabID,
+                generation: generation
+            )
+            return
+        }
+        if site.state == .hostedPreview,
+           site.evidence.consensusProfileID == profile.consensusProfileID {
+            do {
+                try persistenceStore.requireCurrentCheckpoints(
+                    for: site, profile: profile
+                )
+            } catch {
+                completeFailure(error, tabID: tabID, generation: generation)
+                return
+            }
+        }
         resolutionTasksByTab[tabID] = nil
         resolutionGenerationByTab[tabID] = nil
         sitesByTab[tabID] = site
@@ -977,6 +1359,7 @@ final class BrowserAppModel: ObservableObject {
         if session.selectedTabID == tabID {
             addressText = site.navigationURL.canonicalString
         }
+        invalidateStaleHostedTabs()
         persist()
     }
 
@@ -998,6 +1381,44 @@ final class BrowserAppModel: ObservableObject {
                 Self.blankAddress,
             title: "Unable to open",
             state: .failed
+        )
+        invalidateStaleHostedTabs()
+    }
+
+    private func invalidateStaleHostedTabs() {
+        for (tabID, site) in Array(sitesByTab) where site.state == .hostedPreview {
+            guard let tab = session.tabs.first(where: { $0.id == tabID }),
+                  let profile = session.profiles.first(where: { $0.id == tab.profileID }) else {
+                markHostedTabStale(tabID)
+                continue
+            }
+            if site.evidence.routingTrustDomainID != profile.routingTrustDomainID
+                || (!usesDevelopmentFixtures
+                    && site.evidence.consensusProfileID != profile.consensusProfileID) {
+                markHostedTabStale(tabID)
+                continue
+            }
+            guard site.evidence.consensusProfileID == profile.consensusProfileID else {
+                continue
+            }
+            do {
+                try persistenceStore.requireCurrentCheckpoints(for: site, profile: profile)
+            } catch {
+                markHostedTabStale(tabID)
+            }
+        }
+    }
+
+    private func markHostedTabStale(_ tabID: UUID) {
+        sitesByTab[tabID] = nil
+        reloadTokensByTab[tabID] = UUID()
+        errorsByTab[tabID] = "A newer signed namespace or publication has made this page stale."
+        try? session.updateTab(
+            id: tabID,
+            address: session.tabs.first(where: { $0.id == tabID })?.address
+                ?? Self.blankAddress,
+            title: "Stale page",
+            state: .stale
         )
     }
 

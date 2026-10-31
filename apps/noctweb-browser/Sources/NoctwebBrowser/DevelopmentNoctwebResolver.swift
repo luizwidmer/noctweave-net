@@ -11,7 +11,7 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     private static let maximumSiteCount = 256
 
     private let fixtureResolver: DeterministicNoctwebResolver
-    private let federationResolver = FederatedNoctwebResolver()
+    private let federationResolver: FederatedNoctwebResolver
     private let labWorkspaceURL: URL
     private let labWorkspaceKeyService: String
     private let localKeyProvider = NoctwebLocalKeyProvider()
@@ -19,9 +19,15 @@ actor DevelopmentNoctwebResolver: NoctwebResolving {
     init(
         fixtureResolver: DeterministicNoctwebResolver,
         labWorkspaceURL: URL? = nil,
-        labWorkspaceKeyService: String = "net.noctweave.noctweb-lab.local-data.v1"
+        labWorkspaceKeyService: String = "net.noctweave.noctweb-lab.local-data.v1",
+        checkNamespace: @escaping FederatedNoctwebResolver.NamespaceCheckpoint = { _ in },
+        checkPublicationHead: @escaping FederatedNoctwebResolver.PublicationHeadCheckpoint = { _ in }
     ) {
         self.fixtureResolver = fixtureResolver
+        federationResolver = FederatedNoctwebResolver(
+            checkNamespace: checkNamespace,
+            checkPublicationHead: checkPublicationHead
+        )
         self.labWorkspaceURL =
             labWorkspaceURL ?? Self.defaultLabWorkspaceURL()
         self.labWorkspaceKeyService = labWorkspaceKeyService
