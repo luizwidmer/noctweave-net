@@ -36,6 +36,9 @@ struct SitesView: View {
 
     @State private var destructiveAction: SiteDestructiveAction?
     @State private var showsRelayAuthorization = false
+    @State private var showsSiteList = false
+    @State private var siteSearch = ""
+    @FocusState private var siteSearchFocused: Bool
 
     var body: some View {
         GeometryReader { proxy in
@@ -92,6 +95,7 @@ struct SitesView: View {
         } message: { action in
             Text(action.message)
         }
+        .onChange(of: model.activeWorkspaceID) { showsSiteList = false }
     }
 
     @ViewBuilder
@@ -250,18 +254,9 @@ struct SitesView: View {
     }
 
     private func compactSitePicker(_ site: SiteProject) -> some View {
-        Menu {
-            ForEach(model.activeWorkspace?.sites ?? []) { candidate in
-                Button {
-                    selectSiteAfterInteraction(candidate.id)
-                } label: {
-                    if candidate.id == model.selectedSiteID {
-                        Label(candidate.title, systemImage: "checkmark")
-                    } else {
-                        Text(candidate.title)
-                    }
-                }
-            }
+        Button {
+            siteSearch = ""
+            showsSiteList.toggle()
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: "rectangle.stack")
@@ -284,8 +279,6 @@ struct SitesView: View {
             .frame(height: 40)
             .contentShape(Rectangle())
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
         .buttonStyle(.plain)
         .frame(minWidth: 180, maxWidth: 330, alignment: .leading)
         .background(
@@ -296,8 +289,66 @@ struct SitesView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.1))
         }
-        .accessibilityLabel("Site")
+        .help("Switch site")
+        .accessibilityLabel("Switch site")
         .accessibilityValue(site.title)
+        .popover(isPresented: $showsSiteList, arrowEdge: .bottom) { siteList }
+    }
+
+    private var siteList: some View {
+        let query = siteSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sites = (model.activeWorkspace?.sites ?? []).filter {
+            query.isEmpty || $0.title.localizedStandardContains(query) || $0.address.localizedStandardContains(query)
+        }
+        return VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").accessibilityHidden(true)
+                TextField("Find a site by title or address", text: $siteSearch)
+                    .textFieldStyle(.plain)
+                    .focused($siteSearchFocused)
+                if !siteSearch.isEmpty {
+                    Button("Clear site search", systemImage: "xmark.circle.fill") { siteSearch = "" }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.plain)
+                }
+            }
+            .padding(12)
+            Divider()
+            if sites.isEmpty {
+                ContentUnavailableView {
+                    Label("No matching sites", systemImage: "magnifyingglass")
+                } actions: {
+                    Button("Clear Search") { siteSearch = "" }
+                }
+            } else {
+                List(sites) { site in
+                    let isSelected = site.id == model.selectedSiteID
+                    Button {
+                        showsSiteList = false
+                        selectSiteAfterInteraction(site.id)
+                    } label: {
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(site.title).font(.callout.weight(.semibold))
+                                Text(site.address).font(.caption.monospaced()).foregroundStyle(.secondary)
+                            }
+                            .lineLimit(1)
+                            Spacer()
+                            if isSelected {
+                                Image(systemName: "checkmark").foregroundStyle(NoctwebTheme.accent)
+                            }
+                        }
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+                .listStyle(.plain)
+            }
+        }
+        .frame(width: 340, height: 330)
+        .task { siteSearchFocused = true }
     }
 
     private func publicationHeader(_ site: SiteProject, compact: Bool) -> some View {

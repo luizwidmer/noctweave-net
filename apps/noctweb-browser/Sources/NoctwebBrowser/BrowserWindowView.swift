@@ -81,6 +81,7 @@ struct BrowserWindowView: View {
                     }
                     .buttonStyle(.plain)
                     .help(verificationLabel)
+                    .accessibilityLabel(verificationLabel)
                     .popover(isPresented: $showsVerificationStatus, arrowEdge: .top) {
                         verificationPopover
                     }
@@ -92,6 +93,7 @@ struct BrowserWindowView: View {
                 )
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, design: .monospaced))
+                .accessibilityLabel("Noctweb address")
                 .focused($addressFieldIsFocused)
                 .onSubmit(model.navigateFromAddressBar)
 
@@ -250,6 +252,9 @@ struct BrowserWindowView: View {
                 )
             } actions: {
                 Button("Try Again", action: model.reload)
+                    .buttonStyle(.borderedProminent)
+                Button("Edit Address") { addressFieldIsFocused = true }
+                    .buttonStyle(.bordered)
             }
         default:
             if let site = model.selectedSite {
@@ -775,6 +780,8 @@ private struct BrowserTabButton: View {
 
 private struct BrowserSidebar: View {
     @EnvironmentObject private var model: BrowserAppModel
+    @State private var search = ""
+    @State private var confirmsClearHistory = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -789,6 +796,26 @@ private struct BrowserSidebar: View {
             .labelStyle(.titleAndIcon)
             .labelsHidden()
             .padding(10)
+
+            if model.sidebarSection == .bookmarks ? !model.session.bookmarks.isEmpty : !model.session.history.isEmpty {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass").accessibilityHidden(true)
+                    TextField(model.sidebarSection == .bookmarks ? "Find bookmarks" : "Find in history", text: $search)
+                        .textFieldStyle(.plain)
+                    if !search.isEmpty {
+                        Button("Clear library search", systemImage: "xmark.circle.fill") { search = "" }
+                            .labelStyle(.iconOnly)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .font(.callout)
+                .padding(8)
+                .background(NoctwebTheme.card, in: RoundedRectangle(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(NoctwebTheme.border) }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .help("Filter by title or address")
+            }
 
             Divider()
 
@@ -805,19 +832,33 @@ private struct BrowserSidebar: View {
         .frame(width: 230)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(NoctwebTheme.surface)
+        .onChange(of: model.sidebarSection) { search = "" }
+        .confirmationDialog("Clear browsing history?", isPresented: $confirmsClearHistory) {
+            Button("Clear History", role: .destructive, action: model.clearHistory)
+        } message: {
+            Text("This removes all saved visits from the browser’s history.")
+        }
+    }
+
+    private func matches(title: String, address: String) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || title.localizedStandardContains(query) || address.localizedStandardContains(query)
     }
 
     @ViewBuilder
     private var bookmarkList: some View {
+        let bookmarks = model.session.bookmarks.filter { matches(title: $0.title, address: $0.address) }
         if model.session.bookmarks.isEmpty {
             SidebarEmptyState(
                 title: "No bookmarks",
                 detail: "Verified sites you save appear here.",
                 systemImage: "bookmark"
             )
+        } else if bookmarks.isEmpty {
+            noMatches("No matching bookmarks")
         } else {
             List {
-                ForEach(model.session.bookmarks) { bookmark in
+                ForEach(bookmarks) { bookmark in
                     LibraryRow(
                         title: bookmark.title,
                         address: bookmark.address,
@@ -833,6 +874,7 @@ private struct BrowserSidebar: View {
 
     @ViewBuilder
     private var historyList: some View {
+        let history = model.session.history.filter { matches(title: $0.title, address: $0.address) }
         if model.session.history.isEmpty {
             SidebarEmptyState(
                 title: "No history",
@@ -846,31 +888,41 @@ private struct BrowserSidebar: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button("Clear", action: model.clearHistory)
+                    Button("Clear History…") { confirmsClearHistory = true }
                         .buttonStyle(.plain)
                         .font(.caption)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
                 Divider()
-                List {
-                    ForEach(model.session.history) { entry in
-                        LibraryRow(
-                            title: entry.title,
-                            address: entry.address,
-                            detail: entry.visitedAt.formatted(
-                                date: .omitted,
-                                time: .shortened
-                            ),
-                            systemImage: "clock",
-                            open: { model.openHistoryEntry(entry) },
-                            delete: { model.removeHistoryEntry(entry) }
-                        )
+                if history.isEmpty {
+                    noMatches("No matching visits")
+                } else {
+                    List {
+                        ForEach(history) { entry in
+                            let isToday = Calendar.current.isDateInToday(entry.visitedAt)
+                            LibraryRow(
+                                title: entry.title,
+                                address: entry.address,
+                                detail: entry.visitedAt.formatted(
+                                    date: isToday ? .omitted : .abbreviated,
+                                    time: isToday ? .shortened : .omitted
+                                ),
+                                systemImage: "clock",
+                                open: { model.openHistoryEntry(entry) },
+                                delete: { model.removeHistoryEntry(entry) }
+                            )
+                            .help(entry.visitedAt.formatted(date: .abbreviated, time: .shortened))
+                        }
                     }
+                    .listStyle(.sidebar)
                 }
-                .listStyle(.sidebar)
             }
         }
+    }
+
+    private func noMatches(_ title: String) -> some View {
+        SidebarEmptyState(title: title, detail: "Try another title or address.", systemImage: "magnifyingglass")
     }
 }
 
